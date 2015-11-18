@@ -1,0 +1,123 @@
+[Python标准库]string——文本常量和模板
+作用：包含处理文本的常量和类。
+Python 版本：1.4 及以后版本
+    string 模块可以追溯到最早的 Python 版本。到了 2.0 版本，原先仅在这个模块中实现的很多函数则被移植为 str 和 unicode 对象的方法。仍然在遗留代码中使用这些函数，不过如今这些函数已经废弃，在 Python 3.0 中完全去除。string 模块保留了很多有用的常量和类，用来处理 string 和 unicode 对象，这里就重点讨论这些常量和类。
+
+函数
+
+    还有两个函数未从 string 模块移出：capwords() 和 maketrans()。
+    capwords() 的作用是将一个字符串中所有单词的首字母大写。
+import string
+
+s = 'The quick brown fox jumped over the lazy dog.'
+
+print s
+print string.capwords(s)
+
+    其结果等同于先调用 split()，然后将结果列表中各个单词的首字母大写，然后调用 join() 合并结果。
+    maketrans() 函数将创建转换表，可以用来结合 translate() 方法将一组字符修改为另一组字符，这种做法比反复调用 replace() 更为高效。
+import string
+
+leet = string.maketrans('abegiloprstz', '463611092572')
+s = 'The quick brown fox jumped over the lazy dog.'
+
+print s
+print s.translate(leet)
+    在这个例子中，一些字母被替换为相应的数字。
+
+模板
+
+    字符串模块已经作为 PEP 292 的一部分增加到 Python 2.4 中，并得到扩展，成为替代内置拼接（interpolation）语法的一种候选方式。使用 string.Template 拼接时，可以在变量名前面加上前缀 $（如 $var）来标识变量，或者如果需要与两侧的文本相区分，还可以用大括号将变量括起（如 ${var}）。
+    下面的例子对一个简单的模板和一个使用 % 操作符的类似字符串拼接进行了比较。
+import string
+
+values = {'var':'foo'}
+
+t = string.Template("""
+Variable : $var
+Escape : $$
+Variable in text : ${var}iable
+""")
+
+print 'TEMPLATE:', t.substitute(values)
+s = """
+Variable : %(var)s
+Escape : %%
+Variable in text : %(var)siable
+"""
+
+print 'INTERPOLATION:', s % values
+
+    在这两种情况下，触发器字符（$ 或 %）都要写两次来完成转义。
+    模板与标准字符串拼接有一个重要区别，即模板不考虑参数类型。值会转换为字符串，再将字符串插入到结果中。这里没有提供格式化选项。例如，没有办法控制使用几位有效数字来表示一个浮点数值。不过也有一个好处：通过使用 safe_substitution() 方法，可以避免未能提供模板所需全部参数值时可能产生的异常。
+import string
+
+values = {'var':'foo'}
+
+t = string.Template("$var is here but $missing is not provided.")
+
+try:
+    print 'substitute() :', t.substitute(values)
+except KeyError, err:
+    print 'ERROR:', str(err)
+
+print 'safe_substitute() :', t.safe_substitute(values)
+
+    由于 values 字典没有对应的 missing 的值，因此 substitute() 会产生一个 KeyError，不过，safe_substitute() 不会抛出这个错误，它将捕获这个异常，并在文本中保留变量表达式。
+
+高级模板
+
+    可以修改 string.Template 的默认语法，为此要调整它在模板体中查找变量名所使用的正则表达式。一种简单的做法是修改 delimiter 和 idpattern 类属性。
+import string
+
+template_text = '''
+  Delimiter : %%
+  Replaced : %with_underscore
+  Ignored : %notunderscored
+'''
+
+d = {'with_underscore':'replaced', 'notunderscored':'not replaced',}
+
+class MyTemplate(string.Template):
+    delimiter = '%'
+    idpattern = '[a-z]+_[a-z]+'
+
+t = MyTemplate(template_text)
+print 'Modified ID pattern:'
+print t.safe_substitute(d)
+
+    在这个例子中，替换规则已经改变，定界符是 % 而不是 $，另外变量名必须包含下划线。模式 %underscored 未得到替换，因为其中不包含下划线字符。
+    要完成更复杂的修改，可以覆盖 pattern 属性，定义一个全新的正则表达式。所提供的模式必须包含4个命名组，分别对应转义定界符、命名变量、用大括号括住的变量名，以及不合法的定界符模式。
+import string
+
+t = string.Template('$var')
+print t.pattern.pattern
+    t.pattern 是一个已编译的正则表达式，不过可以通过其 pattern 属性得到原来的字符串表示。
+    \$(?:
+      (?P<escaped>\$) |   # Escape sequence of two delimiters
+      (?P<named>[_a-z][_a-z0-9]*)      |   # delimiter and a Python identifier
+      {(?P<braced>[_a-z][_a-z0-9]*)}   |   # delimiter and a braced identifier
+      (?P<invalid>)              # Other ill-formed delimiter exprs
+    )
+    下面的例子定义了一个新模式来创建一个新的模板类型：使用 {{var}} 作为变量语法。
+import re
+import string
+
+class MyTemplate(string.Template):
+    delimiter = '{{'
+    pattern = r'''
+    \{\{(?:
+    (?P<escaped>\{\{) |   # Escape sequence of two delimiters
+    (?P<named>[_a-z][_a-z0-9]*)\}\}      |   # delimiter and a Python identifier
+    {(?P<braced>[_a-z][_a-z0-9]*)} \}\}  |   # delimiter and a braced identifier
+    (?P<invalid>)              # Other ill-formed delimiter exprs
+    )
+    '''
+
+t = MyTemplate('''
+{{{{
+{{var}}
+''')
+print 'MATCHES:', t.pattern.findall(t.template)
+print 'SUBSTITUTED:', t.safe_substitute(var='replacement')
+    named 和 braced 模式必须单独提供，尽管它们实际上是一样的。
