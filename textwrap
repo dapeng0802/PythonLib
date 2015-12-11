@@ -1,7 +1,7 @@
 [Python标准库]textwrap——格式化文本段落
 作用：通过调整换行符在段落中出现的位置来格式化文本。
 Python 版本：2.5 及以后版本
-需要美观打印时，可以用 textwrap 模块来格式化要输出的文本。这个模块允许通过编程提供类似段落自动换行或填充特性等功能。
+    需要美观打印时，可以用 textwrap 模块来格式化要输出的文本。这个模块允许通过编程提供类似段落自动换行或填充特性等功能。
 示例数据
 
 sample_text = '''
@@ -12,7 +12,7 @@ sample_text = '''
 '''
 
 填充段落
-fill() 函数取文本作为输入，生成格式化的文本作为输出。
+    fill() 函数取文本作为输入，生成格式化的文本作为输出。
 
 import textwrap
 from textwrap_example import sample_text
@@ -21,7 +21,7 @@ print 'No dedent:\n'
 print textwrap.fill(sample_text, width=50)
 
 去除现有缩进
-在前面的例子中，输出里混合嵌入了制表符和额外的空格，所以格式不太美观。从示例文本删除所有行中都有的空白符前缀可以生成更好的结果，从而能直接使用 Python 代码中的 docstring 或嵌入的多行字符串，同时自动去除代码的格式化。示例字符串人为地引入了一级缩进，以便展示这个特性。
+    在前面的例子中，输出里混合嵌入了制表符和额外的空格，所以格式不太美观。从示例文本删除所有行中都有的空白符前缀可以生成更好的结果，从而能直接使用 Python 代码中的 docstring 或嵌入的多行字符串，同时自动去除代码的格式化。示例字符串人为地引入了一级缩进，以便展示这个特性。
 
 import textwrap
 from textwrap_example import sample_text
@@ -30,18 +30,18 @@ dedeted_text = textwrap.dedent(sample_text)
 print 'Dedented:'
 print dedented_text
 
-由于 dedent（去除缩进）与 indent（缩进）正好相反，因此这里的结果是得到一个文本块，而且删除了各行最前面都有的空白符。如果某一行比其他行缩进更多，则会有一些空白符未删除。
-以下输入：
+    由于 dedent（去除缩进）与 indent（缩进）正好相反，因此这里的结果是得到一个文本块，而且删除了各行最前面都有的空白符。如果某一行比其他行缩进更多，则会有一些空白符未删除。
+    以下输入：
  Line one.
    Line two.
  Line three.
-会变成：
+    会变成：
 Line one.
   Line two.
 Line three.
 
 结合 dedent 和 fill
-接下来，可以把去除缩进的文本传入 fill()，并提供一组不同的 width 值。
+    接下来，可以把去除缩进的文本传入 fill()，并提供一组不同的 width 值。
 
 import textwrap
 from textwrap_example import sample_text
@@ -52,9 +52,9 @@ for width in [ 45, 70 ]:
     print textwrap.fill(dedented_text, width=width)
     print
 
-这会生成指定宽度的输出。
+    这会生成指定宽度的输出。
 悬挂缩进
-不仅输出的宽度可以设置，还可以单独控制第一行的缩进，以区别后面各行。
+    不仅输出的宽度可以设置，还可以单独控制第一行的缩进，以区别后面各行。
 
 import textwrap
 from textwrap_example import sample_text
@@ -66,5 +66,5 @@ print textwrap.fill(dedented_text,
                     width=50，
                     )
 
-这样会生成一种悬挂缩进，即第一行的缩进小于其他行的缩进。
-缩进值还可以包含非空白字符。例如，悬挂缩进可以加前缀 × 来生成项目符号。
+    这样会生成一种悬挂缩进，即第一行的缩进小于其他行的缩进。
+    缩进值还可以包含非空白字符。例如，悬挂缩进可以加前缀 × 来生成项目符号。
