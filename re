@@ -234,3 +234,178 @@ test_patterns(
 	])
 
     这个例子中，匹配字符串开头和末尾单词的模式是不同的，因为字符串末尾的单词后面有一个结束句子的标点符号。模式 \w+$ 不能匹配，因为 “.” 并不是一个字母数字字符。
+限制搜索
+    如果提前已经知道只需搜索整个输入的一个子集，可以告诉 re 限制搜索范围，从而进一步约束正则表达式匹配。例如，如果模式必须出现在输入的最前面，那么使用 match() 而不是 search() 会锚定搜索，而不必在搜索模式中显式地包含一个锚。
+
+import re
+
+text = 'This is some text -- with punctuation.'
+pattern = 'is'
+print 'Text :', text
+print 'Pattern :', pattern
+
+m = re.match(pattern, text)
+print 'Match :', m
+s = re.search(pattern, text)
+print 'Search :', s
+
+    由于字面量文本 is 未出现在输入文本最前面，因此使用 match() 无法找到它。不过，这个序列在文本中另外出现了两次，所以 search() 可以找到它。
+    已编译正则表达式的 search() 方法还接受可选的 start 和 end 位置参数，将搜索限制在输入的一个子串中。
+
+import re
+
+text = 'This is some text -- with punctuation.'
+pattern = re.compile(r'\b\w*is\w*\b')
+
+print 'Text :', text
+print
+
+pos = 0
+while True:
+	match = pattern.search(text, pos)
+	if not match:
+		break
+	s = match.start()
+	e = match.end()
+	print '  %2d : %2d = "%s"' % (s, e-1, text[s:e])
+	# Move forward in text for the next search
+	pos = e
+
+    这个例子实现了 iterall() 的一种不太高效的形式，每次找到一个匹配时，该匹配的结束位置将用于下一次搜索。
+用组解析匹配
+    搜索模式匹配是正则表达式所提供强大功能的基础。为模式增加组（group）可以隔离匹配文本的各个部分，进一步扩展这些功能来创建一个解析工具。通过将模式包围在小括号中（即 “(” 和 “)”）来分组。
+
+from re_test_patterns import test_patterns
+
+test_patterns(
+	'abbaaabbbbaaaaa',
+	[ ('a(ab)', 'a followed by literal ab'),
+	  ('a(a*b*)', 'a followed by 0-n a and 0-n b'),
+	  ('a(ab)*', 'a followed by 0-n ab'),
+	  ('a(ab)+', 'a followed by 1-n ab'),
+	  ])
+
+    任何完整的正则表达式都可以转换为组，并嵌套在一个更大的表达式中。所有重复修饰符可以应用到整个组作为一个整体，这就要求重复整个组模式。
+    要访问一个模式中单个组匹配的子串，可以使用 Match 对象的 groups() 方法。
+
+import re
+
+text = 'This is some text -- with punctuation.'
+
+print text
+print
+
+patterns = [
+    (r'^(\w+)', 'word at start of string'),
+    (r'(\w+)\S*$', 'word at end, with optional punctuation'),
+    (r'(\bt\w+)\W+(\w+)', 'word starting with t, another word'),
+    (r'(\w+t)\b', 'word ending with t'),
+    ]
+
+for pattern, desc in patterns:
+	regex = re.compile(pattern)
+	match = regex.search(text)
+	print 'Pattern %r (%s)\n' % (pattern, desc)
+	print '  ', match.groups()
+	print
+
+    Match.groups() 会按表达式中与字符串匹配的组的顺序返回一个字符串序列。
+    使用 group() 可以得到某个组的匹配，如果使用分组来查找字符串的各部分，不过结果中并不需要某些与组匹配的部分，此时 group() 会很有用。
+
+import re
+
+text = 'This is some text -- with punctuation.'
+
+print 'Input text :', text
+
+# word starting with 't' then another word
+regex = re.compile(r'(\bt\w+)\W+(\w+)')
+print 'Pattern                :', regex.pattern
+
+match = regex.search(text)
+print 'Entire match           :', match.group(0)
+print 'Word starting with "t" :', match.group(1)
+print 'Word after "t" word    :', match.group(2)
+
+    第 0 组表示与整个表达式匹配的字符串，子组按其左小括号在表达式中出现的顺序从 1 开始标号。
+    Python 对基本分组语法做了扩展，增加了命名组（named group）。通过使用名字来指示组，这样以后就可以更容易地修改模式，而不必同时修改使用了匹配结果的代码。要设置一个组的名字，可以使用以下语法：(?P<name>pattern)。
+
+import re
+
+text = 'This is some text -- with punctuation.'
+
+print text
+print
+
+for pattern in [ r'(?P<first_word>\w+)',
+                 r'(?P<last_word>\w+)\S*$',
+                 r'(?P<t_word>\bt\w+)\W+(?P<other_word>\w+)',
+                 r'(?P<ends_with_t>\w+t)\b',
+                 ]:
+    regex = re.compile(pattern)
+    match = regex.search(text)
+    print 'Matching "%s"' % pattern
+    print '  ', match.groups()
+    print '  ', match.groupdict()
+    print
+
+    使用 groupdict() 可以获取一个字典，它将组名映射到匹配的子串，groups() 返回的有序序列还包含命名模式。
+    以下是更新后的 test_patterns()，它会显示与一个模式匹配的编号组和命名组，使后面的例子更容易理解。
+
+# re_test_patterns_groups.py
+
+import re
+
+def test_patterns(text, patterns=[]):
+	"""Given source text and a list of patterns, look for 
+	matches for each pattern within the taxt and print
+	them to stdout.
+	"""
+
+	# Look for each pattern in the text and print the results
+	for pattern, desc in patterns:
+		print 'Pattern %r (%s)\n' % (pattern, desc)
+		print '  %r' % text
+		for match in re.finditer(pattern, text):
+			s = match.start()
+			e = match.end()
+			prefix = ' ' * (s)
+			print '  %s%r%s ' % (prefix, text[s:e], ' '*(len(text)-e)),
+			print match.groups()
+			if match.groupdict():
+				print '%s%s' % (' ' * (len(text)-s), match.groupdict())
+		print
+	return
+
+    因为组本身也是一个完整的正则表达式，所以组可以嵌套在其他组中，够成更复杂的表达式。
+
+from re_test_patterns_groups import test_patterns
+
+test_patterns(
+	'abbaabbba',
+	[ (r'a((a*)(b*))', 'a followed by 0-n a and 0-n b'),
+	 ])
+
+    在这个例子中，组 (a*) 会匹配一个空串，所以 groups() 的返回值包括这个空串作为匹配值。
+    组对于指定候选模式也很有用。可以使用管道符号 (|) 指示应该匹配某一个或另一个模式。不过，要仔细考虑管道符号的放置。下面这个例子中的第一个表达式会匹配一个 a 序列后面跟有一个完全由某一个字母 （a 或 b）构成的序列。第二个模式会匹配一个 a 后面跟有一个可能包含 a 或 b 的序列。这两个模式很相似，不过得到的匹配结果完全不同。
+
+from re_test_patterns_groups import test_patterns
+
+test_patterns(
+	'abbaabbba',
+	[ (r'a((a+)|(b+))', 'a then seq. of a or seq. of b'),
+	  (r'a((a|b)+)', 'a then seq. of [ab]'),
+	 ])
+
+    如果候选组不匹配，但是整个模式确实匹配，groups() 的返回值会在序列中本应出现候选组的位置上包含一个 None 值。
+    如果匹配子模式的字符串并不是从整个文本抽取的一部分，此时定义一个包含子模式的组也很有用。这些组称为“非捕获组”（noncapturing）。非捕获组可以用来描述重复模式或候选模式，而不在返回值中区分字符串的匹配部分。要创造一个非捕获组，可以使用语法 (?:pattern)。
+    对于一个模式，尽管其捕获和非捕获形式会匹配相同的结果，但是会返回不同的组，下面来加以比较。
+
+from re_test_patterns_groups import test_patterns
+
+test_patterns(
+	'abbaabbba',
+	[ (r'a((a+)|(b+))', 'capturing form'),
+	  (r'a((?:a+)|(?:b+))', 'noncapturing'),
+	 ])
+
