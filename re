@@ -409,3 +409,206 @@ test_patterns(
 	  (r'a((?:a+)|(?:b+))', 'noncapturing'),
 	 ])
 
+搜索选项
+    利用选项标志可以改变匹配引擎处理表达式的方式。可以使用位或（OR）操作结合这些标志，然后传递至 compile()、search()、match() 以及其他接受匹配模式完成搜索的函数。
+    1. 不区分大小写的匹配
+    IGNORECASE 使模式的字面量字符和字符区间与大小写字符都匹配。
+
+import re
+
+text = 'This is some text -- with punctuation.'
+pattern = r'\bT\w+'
+with_case = re.compile(pattern)
+without_case = re.compile(pattern, re.IGNORECASE)
+
+print 'Text:\n  %r' % text
+print 'Pattern:\n  %s' % pattern
+print 'Case-sensitive:'
+for match in with_case.findall(text):
+	print '  %r' % match
+print 'Case-insensitive:'
+for match in without_case.findall(text):
+	print '  %r' % match
+
+    由于这个模式包含字面量字符 T，但没有设置 IGNORECASE，因此只有一个匹配，即单词 This。如果忽略大小写，那么 text 也能匹配。
+    2. 多行输入
+    有两个标志会影响如何在多行输入中进行搜索：MULTILINE 和 DOTALL。MULTILINE 标志会控制模式匹配代码如何对包含换行符的文本处理锁定指令。当打开多行模式时，除了整个字符串外，还要在每一行的开头和结尾应用 ^ 和 $ 的锚定规则。
+
+import re
+
+text = 'This is some text -- with punctuation.\nA second line.'
+pattern = r'(^\w+)|(\w+\S*$)'
+single_line = re.compile(pattern)
+multiline = re.compile(pattern, re.MULTILINE)
+
+print 'Text:\n  %r' % text
+print 'Pattern:\n  %s' % pattern
+print 'Single Line:'
+for match in single_line.findall(text):
+	print '  %r' % (match,)
+print 'Multiline  :'
+for match in multiline.findall(text):
+	print '  %r' % (match,)
+
+    这个例子中的模式会匹配输入的第一个或最后一个单词。它会匹配字符串末尾的 line，尽管并没有换行符。
+    DOTALL 也是一个与多行文本有关的标志。正常情况下，点字符 （.）可以与输入文本中除了换行符之外的所有其他字符匹配。这个标志则允许点字符还可以匹配换行符。
+
+import re
+
+text = 'This is some text -- with punctuation.\nA second line.'
+pattern = r'.+'
+no_newlines = re.compile(pattern)
+dotall = re.compile(pattern, re.DOTALL)
+
+print 'Text:\n  %r' % text
+print 'Pattern:\n  %s' % pattern
+print 'No newlines:'
+for match in no_newlines.findall(text):
+	print '  %r' % match
+print 'Dotall     :'
+for match in dotall.findall(text):
+	print '  %r' % match
+
+    如果没有这个标志，输入文本的各行会与模式单独匹配。增加了这个标志后，则会利用整个字符串。
+    3. Unicode
+    在 Python 2 中，str 对象使用的是 ASCII 字符集，而且正则表达式处理会假设模式和输入文本都是 ASCII 字符。先前描述的转义码就默认使用 ASCII 来定义。要在 Python 2 中启用 Unicode 匹配，需要在编译模式时或者调用模块级函数 search() 和 match() 时增加 Unicode 标志。
+
+#coding:utf-8
+import re
+import codecs
+import sys
+
+# Set standard output encoding to UTF-8
+sys.stdout = codecs.getwriter('UTF-8')(sys.stdout)
+
+text = u'Français zloty Österreich'
+pattern = ur'\w+'
+ascii_pattern = re.compile(pattern)
+unicode_pattern = re.compile(pattern, re.UNICODE)
+
+print 'Text:\n  %r' % text
+print 'Pattern:\n  %s' % pattern
+print 'ASCII  :', u', '.join(ascii_pattern.findall(text))
+print 'Unicode:', u', '.join(unicode_pattern.findall(text))
+
+    对于 Unicode 文本，其他转义序列（\W、\b、\B、\d、\D、\s 和 \S）也会做不同的处理。正则表达式引擎不再假设字符集成员由转义序列标识，而会查看 Unicode 数据库来查找各个字符的属性。
+    注意：Python 3 对所有字符串都默认使用 Unicode，所以这个标志已经不再需要。
+    4. 详细表达式语法
+    随着表达式变得越来越复杂，紧凑格式的正则表达式语法可能会成为障碍。随着表达式中组数的增加，需要做更多的工作来明确为什么需要各个元素以及表达式的各部分究竟如何交互。使用命名组有助于缓解这些问题，不过一种更好的解决方案是使用详细模式表达式（verbose mode expression），它允许在模式中嵌入注释和额外的空白符。
+    可以用一个验证 Email 地址的模式来说明采用详细模式能够更容易地处理正则表达式。第一个版本会识别以 3 个顶级域之一（.com、.org 和 .edu）结尾的地址。
+
+import re
+
+address = re.compile('[\w\d.+-]+@([\w\d.]+\.)+(com|org|edu)', re.UNICODE)
+
+candidates = [
+    u'first.last@example.com',
+    u'first.last+category@gmail.com',
+    u'valid-address@mail.example.com',
+    u'not-valid@example.foo',
+    ]
+
+for candidate in candidates:
+	match = address.search(candidate)
+	print '%-30s  %s' % (candidate, 'Matches' if match else 'No match')
+
+    这个表达式已经很复杂了，其中有多个字符类、组和重复表达式。将这个表达式转换为一种更详细的格式，使之更容易扩展。
+
+import re
+
+address = re.compile(
+	'''
+	[\w\d.+-]+        # username
+	@
+	([\w\d.]+\.)+     # domain name prefix
+	(com|org|edu)     # TODO: support more top-level domains
+	''', 
+	re.UNICODE | re.VERBOSE)
+
+candidates = [
+    u'first.last@example.com',
+    u'first.last+category@gmail.com',
+    u'valid-address@mail.example.com',
+    u'not-valid@example.foo',
+    ]
+
+for candidate in candidates:
+	match = address.search(candidate)
+	print '%-30s  %s' % (candidate, 'Matches' if match else 'No match')
+
+    这个表达式会匹配同样的输入，不过采用这种扩展格式将更易读。注释还有助于标识模式中的不同部分，从而能扩展来匹配更多输入。
+    这个扩展的版本会解析包含人名和 Email 地址的输入（这很可能在 Email 首部出现）。首先是单独的人名，然后是 Email 地址，用尖括号包围（“<” 和 “>”）。
+
+import re
+
+address = re.compile(
+	'''
+
+	# A name is made up of letters, and may include "."
+	# for title abbreviations and middle initials.
+	((?P<name>
+	   ([\w.,]+\s+)*[\w.,]+)
+       \s*
+       # Email addresses are wrapped in angle
+       # brackets: < > but only if a name is
+       # found, so keep the start bracket in this
+       # group.
+       <
+    )? # the entire name is optional
+
+    # The address itself: username@domain.tld
+    (?P<email>
+      [\w\d.+-]+       # username
+      @
+      ([\w\d.]+\.)+    # domain name prefix
+      (com|org|edu)    # TODO: support more top-level domains
+    )
+
+    >? # optional closing angle bracket
+    ''',
+    re.UNICODE | re.VERBOSE)
+
+candidates = [
+    u'first.last@example.com',
+    u'first.last+category@gmail.com',
+    u'valid-address@mail.example.com',
+    u'not-valid@example.foo',
+    u'First Last <first.last@example.com>',
+    u'No Brackets first.last@example.com',
+    u'First Last',
+    u'First Middle Last <first.last@example.com>',
+    u'First M. Last <first.last@example.com>',
+    u'<first.last@example.com>',
+    ]
+
+for candidate in candidates:
+	print 'Candidate:', candidate
+	match = address.search(candidate)
+	if match:
+		print '  Name :', match.groupdict()['name']
+		print '  Email:', match.groupdict()['email']
+	else:
+		print '  No match'
+
+    类似于其他编程语言，能够在详细正则表达式中插入注释将有助于增强其可维护性。最后这个版本包含为将来的维护人员提供的实现说明，另外还包括一些空白符将各个组分开，并突出其嵌套层次。
+    5. 在模式中嵌入标志
+    如果编译表达式时不能增加标志，如将模式作为参数传入一个将在以后编译该模式的库函数时，可以把标志嵌入到表达式字符串本身。例如，要启用不区分大小写的匹配，可以在表达式开头增加 (?i)。
+
+import re
+
+text = 'This is some text -- with punctuation.'
+pattern = r'(?i)\bT\w+'
+regex = re.compile(pattern)
+
+print 'Text      :', text
+print 'Pattern   :', pattern
+print 'Matches   :', regex.findall(text)
+
+    因为这些选项控制了如何计算或解析整个表达式，所以它们总要放在表达式最前面。
+    以下列出了所有标志的缩写：
+    IGNORECASE -> i
+    MULTILINE -> m
+    DOTALL -> s
+    UNICODE -> u
+    VERBOSE -> x
+    可以把嵌入标志放在同一个组中结合使用。例如，(?imu) 会打开相应选项，支持多行 Unicode 字符串不区分大小写的匹配。
