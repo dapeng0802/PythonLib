@@ -612,3 +612,311 @@ print 'Matches   :', regex.findall(text)
     UNICODE -> u
     VERBOSE -> x
     可以把嵌入标志放在同一个组中结合使用。例如，(?imu) 会打开相应选项，支持多行 Unicode 字符串不区分大小写的匹配。
+前向或后向
+    很多情况下，仅当模式中另外某个部分也匹配时才匹配模式的某一部分，这可能很有用。例如，在 Email 解析表达式中，两个尖括号分别标志为可选。不过，实际上尖括号必须成对，只有当两个尖括号都出现或都不出现时表达式才能匹配。修改后的表达式使用了一个肯定前向（positive look-ahead）断言来匹配尖括号对。前向断言语法为 (?=pattern)
+
+import re
+
+address = re.compile(
+	'''
+
+	# A name is made up of letters, and may include "."
+	# for title abbreviations and middle initials.
+	((?P<name>
+	   ([\w.,]+\s+)*[\w.,]+
+	 )
+     \s+
+    ) # name is no longer optional
+
+    # LOOKAHEAD
+    # Email addresses are wrapped in angle brackets, but only
+    # if they are both present or neither is.
+    (?= (<.*>$)       # remainder wrapped in angle brackets
+    	|
+    	([^<].*[^>]$) # remainder *not* wrapped in angle brackets
+     )
+
+    <? # optional opening angle bracket
+
+    # The address itself: username@domain.tld
+    (?P<email>
+      [\w\d.+-]+       # username
+      @
+      ([\w\d.]+\.)+    # domain name prefix
+      (com|org|edu)    # TODO: support more top-level domains
+    )
+
+    >? # optional closing angle bracket
+    ''',
+    re.UNICODE | re.VERBOSE)
+
+candidates = [
+    u'First Last <first.last@example.com>',
+    u'No Brackets first.last@example.com',
+    u'Open Bracket <first.last@example.com',
+    u'Close Bracket first.last@example.com>',
+    ]
+
+for candidate in candidates:
+	print 'Candidate:', candidate
+	match = address.search(candidate)
+	if match:
+		print '  Name :', match.groupdict()['name']
+		print '  Email:', match.groupdict()['email']
+	else:
+		print '  No match'
+
+    这个版本的表达式中出现了很多重要的变化。首先，name 部分不再是可选的。这说明单独的地址将不能匹配，还能避免匹配那些格式不正确的“名/地址”组合。“name” 组后面的肯定前向规则断言字符串的余下部分要么包围在一对尖括号中，要么不存在不匹配的尖括号：也就是尖括号要么都出现，要么都不出现。这个前向规则表述为一个组，不过前向组的匹配并不利用任何输入文本。这个模式的其余部分会从前向匹配之后的位置取字符。
+    否定前向（negative look-ahead）断言（(?!pattern)）要求模式不匹配当前位置后面的文本。例如，Email 识别模式可以修改为忽略自动系统常用的 noreply 邮件地址。
+
+import re
+
+address = re.compile(
+	'''
+	^
+	# An address: username@domain.tld
+
+	# Ignore noreply address
+	(?!noreply@.*$)
+	
+    [\w\d.+-]+       # username
+    @
+    ([\w\d.]+\.)+    # domain name prefix
+    (com|org|edu)    # limit the allowed top-level domains
+    
+    $
+    ''',
+    re.UNICODE | re.VERBOSE)
+
+candidates = [
+    u'first.last@example.com',
+    u'noreply@example.com',
+    ]
+
+for candidate in candidates:
+	print 'Candidate:', candidate
+	match = address.search(candidate)
+	if match:
+		print '  Match:', candidate[match.start():match.end()]
+	else:
+		print '  No match'
+
+    以 noreply 开头的地址与这个模式不匹配，因为前向断言失败。
+    不用前向检查 Email 地址 username 部分中的 noreply，还可以使用语法 (?<!pattern) 改写这个模式，写为在匹配 username 之后使用一个否定后向断言（negative look-behind assertion）。
+
+import re
+
+address = re.compile(
+	'''
+	^
+	# An address: username@domain.tld
+
+	[\w\d.+-]+       # username
+
+	# Ignore noreply address
+	(?<!noreply)
+	
+    @
+    ([\w\d.]+\.)+    # domain name prefix
+    (com|org|edu)    # limit the allowed top-level domains
+    
+    $
+    ''',
+    re.UNICODE | re.VERBOSE)
+
+candidates = [
+    u'first.last@example.com',
+    u'noreply@example.com',
+    ]
+
+for candidate in candidates:
+	print 'Candidate:', candidate
+	match = address.search(candidate)
+	if match:
+		print '  Match:', candidate[match.start():match.end()]
+	else:
+		print '  No match'
+
+    后向与前向匹配的做法稍有不同，表达式必须使用一个定长模式。只要字符数固定（没有通配符或区间），后向匹配也与允许重复。
+    可以借助语法 (?<=pattern) 用肯定后向（positive look-behind）断言查找符合某个模式的文本。例如，以下表达式可以查找 Twitter handles。
+
+import re
+
+twitter = re.compile(
+	'''
+	# A twitter handle: @username
+	(?<=@)
+	([\w\d_]+)       # username
+    ''',
+    re.UNICODE | re.VERBOSE)
+
+text = '''This text includes two Twitter handles.
+one for @ThePSF, and one for the author, @doughellmann.
+'''
+
+print text
+for match in twitter.findall(text):
+	print 'Handle:', match
+
+    这个模式会匹配能构成一个 Twitter 句柄的字符序列，只要字符序列前面有一个 @。
+自引用表达式
+    匹配的值还可以用在表达式后面的部分中。例如，前面的 Email 例子可以更新为只匹配由人名和姓组成的地址，为此要包含这些组的反向引用（back-reference）。要达到这个目的，最容易的办法就是使用 \num 按 id 编号引用先前匹配的组。
+
+import re
+
+address = re.compile(
+	r'''
+
+	# The regular name
+	(\w+)               # first name
+	\s+
+	(([\w.]+)\s+)?      # optional middle name or initial
+	(\w+)               # last name
+
+	\s+
+
+	<
+
+	# The address: first_name.last_name@domain.tld
+	(?P<email>
+	  \1                # first name
+	  \.
+	  \4                # last name
+	  @
+	  ([\w\d.]+\.)+     # domain name prefix
+	  (com|org|edu)     # limit the allowed top-level domains
+	)
+
+    >
+    ''',
+    re.UNICODE | re.VERBOSE | re.IGNORECASE)
+
+candidates = [
+    u'First Last <first.last@example.com>',
+    u'Different Name <first.last@example.com>',
+    u'First Middle Last <first.last@example.com>',
+    u'First M. Last <first.last@example.com>',
+    ]
+
+for candidate in candidates:
+	print 'Candidate:', candidate
+	match = address.search(candidate)
+	if match:
+		print '  Match name:', match.group(1), match.group(4)
+		print '  Match email:', match.group(5)
+	else:
+		print '  No match'
+
+    尽管这个语法很简单，不过按照数字 id 创建反向引用有两个缺点。从实用角度讲，当表达式改变时，这些组就必须重新编号，每一个引用可能都需要更新。另一个缺点是，采用这种方法只能创建 99 个引用，因为如果 id 编号有 3 位，就会解释为一个八进制字符值而不是一个组引用。另一方面，如果一个表达式有超过 99 个组，问题就不只是无法引用表达式中的某些组那么简单了，还会产生一些更严重的维护问题。
+    Python 的表达式解析器包括一个扩展，可以使用 (?P=name) 指示表达式中先前匹配的一个命名组的值。
+
+import re
+
+address = re.compile(
+	'''
+
+	# The regular name
+	(?P<first_name>\w+)               # first name
+	\s+
+	(([\w.]+)\s+)?      # optional middle name or initial
+	(?P<last_name>\w+)               # last name
+
+	\s+
+
+	<
+
+	# The address: first_name.last_name@domain.tld
+	(?P<email>
+	  (?P=first_name)                # first name
+	  \.
+	  (?P=last_name)                # last name
+	  @
+	  ([\w\d.]+\.)+     # domain name prefix
+	  (com|org|edu)     # limit the allowed top-level domains
+	)
+
+    >
+    ''',
+    re.UNICODE | re.VERBOSE | re.IGNORECASE)
+
+candidates = [
+    u'First Last <first.last@example.com>',
+    u'Different Name <first.last@example.com>',
+    u'First Middle Last <first.last@example.com>',
+    u'First M. Last <first.last@example.com>',
+    ]
+
+for candidate in candidates:
+	print 'Candidate:', candidate
+	match = address.search(candidate)
+	if match:
+		print '  Match name:', match.groupdict()['first_name'],
+		print match.groupdict()['last_name']
+		print '  Match email:', match.groupdict()['email']
+	else:
+		print '  No match'
+
+    编译地址表达式时打开了 IGNORECASE 标志，因为尽管正确的名字通常首字母会大写，但 Email 地址往往不会大写首字母。
+    在表达式中使用反向引用还有一种机制，即根据前一个组是否匹配来选择不同的模式。可以修正这个 Email 模式，使得如果出现名字就需要有尖括号，不过如果只有 Email 地址本身就不需要尖括号。查看一个组是否匹配的语法是 (?(id)yes-expression|no-expression)，这里 id 是组名或编号，yes-expression 是组有值时使用的模式，no-expression 则是组没有值时使用的模式。
+
+import re
+
+address = re.compile(
+	'''
+
+	# A name is made up of letters, and may include "."
+	# for title abbreviations and middle initials.
+	(?P<name>
+	   ([\w.]+\s+)*[\w.]+
+	 )?
+	\s*
+
+	# Email addresses are wrapped in angle brackets, but
+	# only if a name is found.
+	(?(name)
+	  # remainder wrapped in angle brackets because
+	  # there is a name
+	  (?P<brackets>(?=(<.*>$)))
+	  |
+	  # remainder does not include angle brackets without name
+	  (?=([^<].*[^>]$))
+	 )
+
+    # Only look for a bracket if the look-ahead assertion
+    # found both of them.
+    (?(brackets)<|\s*)
+
+    # The address itself: username@domain.tld
+    (?P<email>
+      [\w\d.+-]+       # username
+      @
+      ([\w\d.]+\.)+    # domain name prefix
+	  (com|org|edu)    # limit the allowed top-level domains
+	 )
+    
+    # Only look for a bracket if the look-ahead assertion
+    # found both of them.
+    (?(brackets)>|\s*)
+
+    $
+    ''',
+    re.UNICODE | re.VERBOSE)
+
+candidates = [
+    u'First Last <first.last@example.com>',
+    u'No Brackets first.last@example.com',
+    u'Open Bracket <first.last@example.com',
+    u'Close Bracket first.last@example.com>',
+    u'no.brackets@example.com',
+    ]
+
+for candidate in candidates:
+	print 'Candidate:', candidate
+	match = address.search(candidate)
+	if match:
+		print '  Match name:', match.groupdict()['name']
+		print '  Match email:', match.groupdict()['email']
+	else:
+		print '  No match'
+
+    这个版本的 Email 地址解析器使用了两个测试。如果 name 组匹配，则前向断言要求两个尖括号都出现，并建立 brackets 组。如果 name 组不匹配，这个断言则要求余下的文本不能用尖括号括起来。接下来，如果设置了 brackets 组，具体的模式匹配代码会借组字面量模式利用输入中的尖括号；否则，它会利用所有空格。
