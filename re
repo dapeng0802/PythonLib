@@ -920,3 +920,119 @@ for candidate in candidates:
 		print '  No match'
 
     这个版本的 Email 地址解析器使用了两个测试。如果 name 组匹配，则前向断言要求两个尖括号都出现，并建立 brackets 组。如果 name 组不匹配，这个断言则要求余下的文本不能用尖括号括起来。接下来，如果设置了 brackets 组，具体的模式匹配代码会借组字面量模式利用输入中的尖括号；否则，它会利用所有空格。
+用模式修改字符串
+    除了搜索文本外，re 还支持使用正则表达式作为搜索机制来修改文本，而且替换可以引用正则表达式中的匹配组作为替换文本的一部分。使用 sub() 可以将一个模式的所有出现替换为另一个字符串。
+
+import re
+
+bold = re.compile(r'\*{2}(.*?)\*{2}')
+
+text = 'Make this **bold**. This **too**.'
+
+print 'Text:', text
+print 'Bold:', bold.sub(r'<b>\1</b>', text)
+
+    可以使用向后引用的 \num 语法插入与模式匹配的文本的引用。
+    要在替换中使用命名组，可以使用语法 \g<name>。
+
+import re
+
+bold = re.compile(r'\*{2}(?P<bold_text>.*?)\*{2}', re.UNICODE)
+
+text = 'Make this **bold**. This **too**.'
+
+print 'Text:', text
+print 'Bold:', bold.sub(r'<b>\g<bold_text></b>', text)
+
+    \g<name> 语法还适用于编号引用，使用这个语法可以消除组编号和两侧字面量数字之间的多义性。
+    向 count 传入一个值可以限制完成的替换数。
+
+import re
+
+bold = re.compile(r'\*{2}(.*?)\*{2}', re.UNICODE)
+
+text = 'Make this **bold**. This **too**.'
+
+print 'Text:', text
+print 'Bold:', bold.sub(r'<b>\1</b>', text, count=1)
+
+    由于 count 为 1，因此只能完成了第一个替换。
+    subn() 的工作原理与 sub() 很相似，只是它会同时返回修改后的字符串和完成的替换次数。
+
+import re
+
+bold = re.compile(r'\*{2}(.*?)\*{2}', re.UNICODE)
+
+text = 'Make this **bold**. This **too**.'
+
+print 'Text:', text
+print 'Bold:', bold.subn(r'<b>\1</b>', text)
+
+    在这个例子中搜索模式有两次匹配。
+利用模式拆分
+    str.split() 是分解字符串来完成解析的最常用方法之一。不过，它只支持使用字面值作为分隔符。有时，如果输入没有一致的格式，就需要有一个正则表达式。例如，很多纯文本标记语言都把段落分隔符定义为两个或多个换行符（\n）。在这种情况下，就不能使用 str.split()，因为这个定义中提到了“或多个”。
+    使用 findall() 标识段落有一种策略：使用类似 (.+?)\n{2,} 的模式。
+
+import re
+
+text = '''Paragraph one
+on two lines.
+
+Paragraph two.
+
+
+Paragraph three.'''
+
+for num, para in enumerate(re.findall(r'(.+?)\n{2,}', 
+	                                  text, 
+	                                  flags=re.DOTALL)
+                           ):
+	print num, repr(para)
+	print
+
+    对于输入文本末尾的段落，这个模式会失败，原因在于 “Paragraph three.” 不是输入的一部分。
+    可以扩展这个模式，指出段落以两个或更多个换行符结束或者以输入末尾作为结束，就能修正这个问题，但是会让模式更为复杂。可以转向使用 re.split() 而不是 re.findall()，这就能自动地处理边界条件，并保证模式更简单。
+
+import re
+
+text = '''Paragraph one
+on two lines.
+
+Paragraph two.
+
+
+Paragraph three.'''
+
+print 'With findall:'
+for num, para in enumerate(re.findall(r'(.+?)(\n{2,}|$)', 
+	                                  text, 
+	                                  flags=re.DOTALL)
+                           ):
+	print num, repr(para)
+	print
+
+print
+print 'With split:'
+for num, para in enumerate(re.split(r'\n{2,}', text)):
+	print num, repr(para)
+	print
+
+    split() 的模式参数更准确地表述了标志规范：由两个或多个换行符标志输入字符串中段落之间的分隔点。
+    可以将表达式包围在小括号里来定义一个组，这使得 split() 的工作方式更类似于 str.partition()，因此它会返回分隔符值以及字符串的其他部分。
+
+import re
+
+text = '''Paragraph one
+on two lines.
+
+Paragraph two.
+
+
+Paragraph three.'''
+
+print 'With split:'
+for num, para in enumerate(re.split(r'(\n{2,})', text)):
+	print num, repr(para)
+	print
+
+    现在输出包括了各个段落，以及分隔这些段落的换行符序列。
