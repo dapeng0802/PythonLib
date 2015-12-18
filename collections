@@ -1,0 +1,126 @@
+[Python标准库]collections——容器数据类型
+    作用：容器数据类型
+    Python 版本：2.4 及以后版本
+    collections 模块包含除内置类型 list、dict 和 tuple 以外的其他容器数据类型。
+Counter
+    Counter 作为一个容器，可以跟踪相同的值增加了多少次。这个类可以用来实现其他语言中常用包（bag）或多集合（multiset）数据结构来实现的算法。
+    1. 初始化
+    Counter 支持 3 种形式的初始化。调用 Counter 的构造函数时可以提供一个元素序列或者一个包含键和计数的字典，还可以使用关键字参数将字符串名映射到计数。
+
+import collections
+
+print collections.Counter(['a', 'b', 'c', 'a', 'b', 'b'])
+print collections.Counter({'a':2, 'b':3, 'c':1})
+print collections.Counter(a=2, b=3, c=1)
+
+    这 3 种形式的初始化结果都是一样的。
+
+Counter({'b': 3, 'a': 2, 'c': 1})
+Counter({'b': 3, 'a': 2, 'c': 1})
+Counter({'b': 3, 'a': 2, 'c': 1})
+
+    如果不提供任何参数，可以构造一个空 Counter，然后通过 update() 方法填充。
+
+import collections
+
+c = collections.Counter()
+print 'Initial :', c
+
+c.update('abcdaab')
+print 'Sequence:', c
+
+c.update({'a':1, 'd':5})
+print 'Dict    :', c
+
+    计数值将根据新数据增加，替换数据不会改变计数。在下面的例子中，a 的计数会从 3 增加到 4。
+
+Initial : Counter()
+Sequence: Counter({'a': 3, 'b': 2, 'c': 1, 'd': 1})
+Dict    : Counter({'d': 6, 'a': 4, 'b': 2, 'c': 1})
+
+    2. 访问计数
+    一旦填充了 Counter，可以使用字典 API 获取它的值。
+
+import collections
+
+c = collections.Counter('abcdaab')
+
+for letter in 'abcde':
+	print '%s : %d' % (letter, c[letter])
+
+    对于未知的元素，Counter 不会产生 KeyError。如果在输入中没有找到某个值（如此例中的 e），其计数为 0。
+
+a : 3
+b : 2
+c : 1
+d : 1
+e : 0
+
+    elements() 方法返回一个迭代器，将生成 Counter 知道的所有元素。
+
+import collections
+
+c = collections.Counter('extremely')
+c['z'] = 0
+print c
+print list(c.elements())
+
+    不能保证元素的顺序不变，另外计数小于或等于 0 的元素不包含在内。
+
+Counter({'e': 3, 'm': 1, 'l': 1, 'r': 1, 't': 1, 'y': 1, 'x': 1, 'z': 0})
+['e', 'e', 'e', 'm', 'l', 'r', 't', 'y', 'x']
+
+    使用 most_common() 可以生成一个序列，其中包含 n 个最常遇到的输入值及其相应计数。
+
+import collections
+
+c = collections.Counter()
+with open('/usr/share/dict/words', 'rt') as f:
+	for line in f:
+		c.update(line.rstrip().lower())
+
+print 'Most common:'
+for letter, count in c.most_common(3):
+	print '%s: %7d' % (letter, count)
+
+    这个例子要统计系统字典的所有单词中出现的字母，来生成一个频度分布，然后打印 3 个最常见的字母。如果不向 most_common() 提供参数，会生成由所有元素构成的一个列表，按频度排序。
+    3. 算术操作
+    Counter 实例支持算术和集合操作来完成结果的聚集。
+
+import collections
+
+c1 = collections.Counter(['a', 'b', 'c', 'a', 'b', 'b'])
+c2 = collections.Counter('alphabet')
+
+print 'C1:', c1
+print 'C2:', c2
+
+print '\nCombined counts:'
+print c1 + c2
+
+print '\nSubtraction:'
+print c1 - c2
+
+print '\nIntersection (taking positive minimums):'
+print c1 & c2
+
+print '\nUnion (taking maximums):'
+print c1 | c2
+
+    每次通过一个操作生成一个新的 Counter 时，计数为 0 或负数的元素都会被删除。在 c1 和 c2 中 a 的计数相同，所以减法操作后它的计数为 0.
+defaultdict
+    标准字典包括一个方法 setdefault() 来获取一个值，如果这个值不存在则建立一个默认值。与之相反，defaultdict 初始化容器时会让调用者提前指定默认值。
+
+import collections
+
+def default_factory():
+	return 'default value'
+
+d = collections.defaultdict(default_factory, foo='bar')
+print 'd:', d
+print 'foo =>', d['foo']
+print 'bar =>', d['bar']
+
+    只要所有键都有相同的默认值并无不妥，就可以使用这个方法。如果默认值是一种用于聚集累加值的类型，如 list、set 或者甚至是 int，这个方法尤其有用。标准库文档提供了很多采用这种方法使用 defaultdict 的例子。
+
+
