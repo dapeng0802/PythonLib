@@ -122,5 +122,227 @@ print 'foo =>', d['foo']
 print 'bar =>', d['bar']
 
     只要所有键都有相同的默认值并无不妥，就可以使用这个方法。如果默认值是一种用于聚集累加值的类型，如 list、set 或者甚至是 int，这个方法尤其有用。标准库文档提供了很多采用这种方法使用 defaultdict 的例子。
+deque
+    deque（双端队列）支持从任意一端增加和删除元素。更为常用的两种结构，即栈和队列，就是双端队列的退化形式，其输入和输出限制在一端。
 
+import collections
+
+    d = collections.deque('abcdefg')
+    print 'Deque:', d
+    print 'Length:', len(d)
+    print 'Left end:' d[0]
+    print 'Right end:', d[-1]
+
+    d.remove('c')
+    print 'remove(c):', d
+
+
+    由于 deque 是一种序列容器，因此同样支持 list 的一些操作，如用 __getitem__() 检查内容、确定长度，以及通过匹配标识从序列中间删除元素。
+    1. 填充
+    deque 可以从任意一端填充，在 Python 实现中称为“左端”和“右端”。
+
+import collections
+
+# Add to the right
+d1 = collections.deque()
+d1.extend('abcdefg')
+print 'extend    :', d1
+d1.append('h')
+print 'append    :', d1
+
+# Add to the left
+d2 = collections.deque()
+d2.extendleft(xrange(6))
+print 'extendleft:', d2
+d2.appendleft(6)
+print 'appendleft:', d2
+
+    extendleft() 函数迭代处理其输入，对各个元素完成与 appendleft() 同样的处理。最终结果是 deque 将包含逆序的输入序列。
+    2. 利用
+    类似地，可以从两端或任意一端利用 deque 的元素，这取决于所应用的算法。
+
+import collections
+
+print 'From the right:'
+d = collections.deque('abcdefg')
+while True:
+    try:
+        print d.pop()
+    ecxept IndexError:
+        break
+print
+
+print '\nFrom the left:'
+d = collections.deque(xrange(6))
+while True:
+    try:
+        print d.popleft()
+    except IndexError:
+        break
+print
+
+    使用 pop() 可以从 deque 的右端删除一个元素，使用 popleft() 可以从 deque 的左端删除一个元素。
+    由于双端队列是线程安全的，所以甚至可以在不同线程中同时从两端利用队列的内容。
+
+import collections
+import threading
+import time
+
+candle = collections.duque(xrange(5))
+
+def burn(direction, nextSource):
+    while True:
+        try:
+            next = nextSource()
+        except IndexError:
+            break
+        else:
+            print '%8s: %s' % (direction, next)
+            time.sleep(0.1)
+    print '%8s done' % direction
+    return
+
+left = threading.Thread(target=burn, args=('Left', candle.popleft))
+right = threading.Thread(target=burn, args=('Right', candle.pop))
+
+left.start()
+right.start()
+
+left.join()
+right.join()
+
+    这个例子中的线程交替处理两端，删除元素，直至这个 deque 为空。
+    3. 旋转
+    deque 的另一个很有用的功能是可以按任意一个方向旋转，而跳过一些元素。
+
+import collections
+
+d = collections.deque(xrange(10))
+print 'Normal        :', d
+
+d = collections.deque(xrange(10))
+d.rotate(2)
+print 'Right rotation:', d
+
+d = collections.deque(xrange(10))
+d.rotate(-2)
+print 'Left rotation :', d
+
+    将 deque 向右旋转（使用一个正旋转值），会从右端取元素，把它们移到左端。向左旋转（使用一个负旋转值）则从左端将元素移至右端。可以形象地把 deque 中的元素看作刻在拨号盘上，这对于理解双端队列很有帮助。
+namedtuple
+    标准 tuple 使用数值索引来访问其成员。
+
+bob = ('Bob', 30, 'male')
+print 'Representation:' bob
+
+jane = ('Jane', 29, 'female')
+print '\nField by index:', jane[0]
+
+print '\nFields by index:'
+for p in [ bob, jane ]:
+    print '%s is a %d year old %s' % p
+
+    因此对于简单用途来说，tuple 是很方便的容器。
+    另一方面，使用 tuple 时需要记住对应各个值要使用哪个索引，这可能会导致错误，特别是当 tuple 有大量字段，而且元组的构造和使用相距很远时。对于各个成员，namedtuple 除了指定数值索引外，还会指定名字。
+    1. 定义
+    namedtuple 实例与常规元组在内存使用方面同样高效，因为它们没有各实例的字典。各种 namedtuple 都由其自己的类表示，使用 namedtuple() 工厂函数来创建。参数就是新类名和一个包含元素名的字符串。
+
+import collections
+
+Person = collections.namedtuple('Person', 'name age gender')
+
+print 'Type of Person:' type(Person)
+
+bob = Person(name='Bob', age=30, gender='male')
+print '\nRepresentation:' bob
+jane = Person(name='Jane', age=29, gender='female')
+print '\nField by name:', jane.name
+
+print '\nFields by index:'
+for p in [ bob, jane ]:
+    print '%s is a %d year old %s' % p
+
+    如这个例子所示，除了使用标准元组的位置索引外，还可以使用点记法（obj.attr）按名字访问 namedtuple 的字段。
+    2. 非法字段名
+    如果字段名重复或与 Python 关键字冲突，就是非法字段名。
+
+import collections
+
+try:
+    collections.namedtuple('Person', 'name class age gender')
+except ValueError, err:
+    print err
+
+try:
+    collections.namedtuple('Person', 'name age gender age')
+except ValueError, err:
+    print err
+
+    如果创建一个 namedtuple 时要基于在程序控制之外的值（如表示一个数据库查询返回的记录行，而且数据库模式事先并不知道），要将 rename 选项设置为 True，从而对非法字段重命名。
+
+import collections
+
+with_class = collections.namedtuple('Person', 'name class age gender', rename=True)
+print with_class.__fields
+
+two_ages = collections.namedtuple('Person', 'name age gender age', rename=True)
+print two_ages.__fields
+
+    重命名的字段的新名字取决于它在 tuple 中的索引，所以名为 class 的字段会变成 _1，重复的 age 字段则变成 _3。
+OrderedDict
+    OrderedDict 是一个字典子类，可以记住其内容增加的顺序。
+
+import collections
+
+print 'Regular dictionary:'
+d = {}
+d['a'] = 'A'
+d['b'] = 'B'
+d['c'] = 'C'
+
+for k, v in d.items():
+    print k, v
+
+print '\nOrderedDict:'
+d = collections.OrderedDict()
+d['a'] = 'A'
+d['b'] = 'B'
+d['c'] = 'C'
+
+for k, v in d.items():
+    print k, v
+
+    常规 dict 并不跟踪插入顺序，迭代处理时会根据键在散列中存储的顺序来生成值。在 OrderedDict 中则相反，它会记住元素插入的顺序，并在创建迭代器时使用这个顺序。
+    1. 相等性
+    常规的 dict 在检查相等性时会查看其内容。OrderedDict 还会考虑元素增加的顺序。
+
+import collections
+
+print 'dict'
+d1 = {}
+d1['a'] = 'A'
+d1['b'] = 'B'
+d1['c'] = 'C'
+
+d2 = {}
+d2['c'] = 'C'
+d2['b'] = 'B'
+d2['a'] = 'A'
+
+print d1 == d2
+
+print 'OrderedDict:',
+
+d1 = collections.OrderedDict()
+d1['a'] = 'A'
+d1['b'] = 'B'
+d1['c'] = 'C'
+d2 = collections.OrderedDict()
+d2['c'] = 'C'
+d2['b'] = 'B'
+d2['a'] = 'A'
+
+print d1 == d2
+
+    在这个例子中，由于两个有序字典由不同顺序的值创建，所以认为这两个有序字典是不同的。
 
