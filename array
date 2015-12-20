@@ -1,1 +1,88 @@
 [Pythong标准库]array——固定类型数据序列
+    作用：高效管理固定类型数值数据的序列。
+    Python 版本：1.4 及以后版本
+    array 模块定义了一个序列数据结构，看起来与 list 非常相似，只不过所有成员都必须是相同的基本类型。可以参考 array 的标准库文档全面了解目前支持的所有类型。
+初始化
+    array 实例化时还可以提供一个参数来描述允许哪种数据类型，还可以有一个初始的数据序列存储在数组中。
+
+import array
+import binascii
+
+s = 'This is the array.'
+a = 'array.array('c', s)
+
+print 'As string:', s
+print 'As array :', a
+print 'As hex    :', binascii.hexlify(a)
+
+    在这个例子中，数组配置为包含一个字节序列，用一个简单的字符串初始化。
+处理数组
+    类似于其他的 Python 序列，可以采用同样的方式扩展和处理 array。
+
+import  array
+import pprint
+
+a = array.array('i', xrange(3))
+print 'Initial:', a
+
+a.extend(xrange(3))
+print 'Extended:', a
+
+print 'Slice:', a[2:5]
+
+print 'Iterator:'
+print list(enumerate(a))
+
+    目前支持的操作包括分片、迭代以及向末尾增加元素。
+数组与文件
+    可以使用高效读/写文件的专用内置方法将数组的内容写人文件或从文件读入数组。
+
+import array
+import binascii
+import tempfile
+
+a = array.array('i', xrange(5))
+print 'A1:', a
+
+# Write the array of numbers to a temporary file
+output = tempfile.NamedTemporaryFile()
+a.tofile(output.file) # must pass an *actual* file
+output.flush()
+
+# Read the raw data
+with open(output.name, 'rb') as input:
+    raw_data = input.read()
+    print 'Raw Contents:', binascii.hexlify(raw_data)
+
+    # Read the data into an array
+    input.seek(0)
+    a2 = array.array('i')
+    a2.fromfile(input, len(a))
+    print 'A2:', a2
+
+    这个例子展示了直接从二进制文件读取原始数据，将它读入一个新的数组，并把字节转换为适当的类型。
+候选字节顺序
+    如果数组中的数据没有采用固有的字节顺序，或者在发送到一个采用不同字节顺序的系统（或在网络上发送）之前需要交换顺序，可以由 Python 转换整个数组而无须迭代处理每一个元素。
+
+import array
+import binascii
+
+def to_hex(a):
+    chars_per_item = a.itemsize * 2 # 2 hex digits
+    hex_version = binascii.hexlify(a)
+    num_chunks = len(hex_version) / chars_per_item
+    for i in xrange(num_chunks):
+        start = i * chars_per_item
+        end = start + chars_per_item
+        yield hex_version[start:end]
+
+a1 = array.array('i', xrange(5))
+a2 = array.array('i', xrange(5))
+a2.byteswap()
+fmt = '%10s %10s %10s %10s'
+print fmt % ('A1 hex', 'A1', 'A2 hex', 'A2')
+print fmt % (('-' * 10,) * 4)
+for values in zip(to_hex(a1), a1, to_hex(a2), a2):
+    print fmt % values
+
+    byteswap() 方法会交换 C 数组中元素的字节顺序，比在 Python 中循环处理数据高效得多。
