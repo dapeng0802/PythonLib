@@ -127,15 +127,14 @@ deque
 
 import collections
 
-    d = collections.deque('abcdefg')
-    print 'Deque:', d
-    print 'Length:', len(d)
-    print 'Left end:' d[0]
-    print 'Right end:', d[-1]
+d = collections.deque('abcdefg')
+print 'Deque:', d
+print 'Length:', len(d)
+print 'Left end:', d[0]
+print 'Right end:', d[-1]
 
-    d.remove('c')
-    print 'remove(c):', d
-
+d.remove('c')
+print 'remove(c):', d
 
     由于 deque 是一种序列容器，因此同样支持 list 的一些操作，如用 __getitem__() 检查内容、确定长度，以及通过匹配标识从序列中间删除元素。
     1. 填充
@@ -168,7 +167,7 @@ d = collections.deque('abcdefg')
 while True:
     try:
         print d.pop()
-    ecxept IndexError:
+    except IndexError:
         break
 print
 
@@ -188,7 +187,7 @@ import collections
 import threading
 import time
 
-candle = collections.duque(xrange(5))
+candle = collections.deque(xrange(5))
 
 def burn(direction, nextSource):
     while True:
@@ -233,7 +232,7 @@ namedtuple
     标准 tuple 使用数值索引来访问其成员。
 
 bob = ('Bob', 30, 'male')
-print 'Representation:' bob
+print 'Representation:', bob
 
 jane = ('Jane', 29, 'female')
 print '\nField by index:', jane[0]
@@ -251,10 +250,10 @@ import collections
 
 Person = collections.namedtuple('Person', 'name age gender')
 
-print 'Type of Person:' type(Person)
+print 'Type of Person:', type(Person)
 
 bob = Person(name='Bob', age=30, gender='male')
-print '\nRepresentation:' bob
+print '\nRepresentation:', bob
 jane = Person(name='Jane', age=29, gender='female')
 print '\nField by name:', jane.name
 
@@ -283,10 +282,10 @@ except ValueError, err:
 import collections
 
 with_class = collections.namedtuple('Person', 'name class age gender', rename=True)
-print with_class.__fields
+print with_class._fields
 
 two_ages = collections.namedtuple('Person', 'name age gender age', rename=True)
-print two_ages.__fields
+print two_ages._fields
 
     重命名的字段的新名字取决于它在 tuple 中的索引，所以名为 class 的字段会变成 _1，重复的 age 字段则变成 _3。
 OrderedDict
@@ -318,7 +317,7 @@ for k, v in d.items():
 
 import collections
 
-print 'dict'
+print 'dict:',
 d1 = {}
 d1['a'] = 'A'
 d1['b'] = 'B'
