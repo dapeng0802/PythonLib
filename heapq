@@ -3,3 +3,112 @@
     Python 版本：2.3 版本中新增，并在 2.5 版本中做了补充
     堆（heap）是一个树形数据结构，其中子节点与父节点是一种有序关系。二叉堆（Binary heap）可以使用如下方式组织的列表或数组表示，即元素 N 的子元素位于 2*N+1 和 2*N+2（索引从 0 开始）。这种布局允许原地重新组织堆，从而不必在增加或删除元素时分配大量内存。
     最大堆（max-heap）确保父节点大于或等于其两个子节点。最小堆（min-heap）要求父节点小于或等于其子节点。Python 的 heapq 模块实现了一个最小堆。
+示例数据
+    示例将使用 heapq_heapdata.py 中的数据。
+
+# This data was generated with the random module.
+
+data = [19, 9, 4, 10, 11]
+
+    堆输出使用 heapq_showtree.py 打印。
+
+import math
+from cStringIO import StringIO
+
+def show_tree(tree, total_width=36, fill=' '):
+    """Pretty-print a tree."""
+    output = StringIO()
+    last_row = -1
+    for i, n in enumerate(tree):
+        if i:
+            row = int(math.floor(math.log(i+1, 2)))
+        else:
+            row = 0
+        if row != last_row:
+            output.write('\n')
+        columns = 2**row
+        col_width = int(math.floor((total_width * 1.0) / columns))
+        output.write(str(n).center(col_width, fill))
+        last_row = row
+    print output.getvalue()
+    print '-' * total_width
+    print
+    return
+
+创建堆
+    创建堆有两种基本方式：heappush() 和 heapify()。
+
+import heapq
+from heapq_showtree import show_tree
+from heapq_heapdata import data
+
+heap = []
+print 'random :', data
+print
+
+for n in data:
+    print 'add %3d:' % n
+    heapq.heappush(heap, n)
+    show_tree(heap)
+
+    使用 heappush() 时，从数据源增加新元素时会保持元素的堆顺序。
+    如果数据已经在内存中，使用 heapify() 原地重新组织列表中的元素会更高效。
+
+import heapq
+from heapq_showtree import show_tree
+from heapq_heapdata import data
+
+print 'random    :', data
+heapq.heapify(data)
+print 'heapified :'
+show_tree(data)
+
+
+    如果按堆排序一次一个元素地构建列表，其结果与构建一个无序列表再调用 heapify() 是一样的。
+访问堆的内容
+    一旦堆已正确组织，就可以使用 heappop() 删除有最小值的元素。
+
+import heapq
+from heapq_showtree import show_tree
+from heapq_heapdata import data
+
+print 'random    :', data
+heapq.heapify(data)
+print 'heapified :'
+show_tree(data)
+print
+
+for i in xrange(2):
+    smallest = heapq.heappop(data)
+    print 'pop    %3d:' % smallest
+    show_tree(data)
+
+    如果希望在一个操作中删除现有元素并替换为新值，可以使用 heapreplace()。
+
+import heapq
+from heapq_showtree import show_tree
+from heapq_heapdata import data
+
+heapq.heapify(data)
+print 'start:'
+show_tree(data)
+
+for n in [0, 13]:
+    smallest = heapq.heapreplace(data, n)
+    print 'replace %2d with %2d:' % (smallest, n)
+    show_tree(data)
+
+    通过原地替换元素，这样可以维持一个固定大小的堆，如按优先级排序的作业队列。
+堆的数据极值
+    heapq 还包括两个检查可迭代对象的函数，查找其中包含的最大值或最小值的范围。
+
+import heapq
+from heapq_heapdata import data
+
+print 'all       :', data
+print '3 largest :', heapq.nlargest(3, data)
+print 'from sort :', list(reversed(sorted(data)[-3:]))
+print '3 smallest:', heapq.nsmallest(3, data)
+print 'from sort :', sorted(data)[:3]
+
+    只有当 n 值（n>1）相对小时使用 nlargest() 和 nsmallest() 才算高效，不过有些情况下这两个函数会很方便。
