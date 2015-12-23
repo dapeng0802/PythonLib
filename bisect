@@ -1,0 +1,52 @@
+[Python标准库]bisect——维护有序列表
+    作用：维护有序列表，而不必在每次向列表增加一个元素时都调用 sort 排序。
+    Python版本：1.4 及以后版本。
+    bisect 模块实现了一个算法用于向列表中插入元素，同时仍保持列表有序。有些情况下，这比反复对一个列表排序更高效，另外也比构建一个大列表之后再显示地对其排序更为高效。
+有序插入
+    下面给出一个简单的例子，这里使用 insort() 按有序顺序向一个列表中插入元素。
+
+import bisect
+import random
+
+# Use a constant seed to ensure that
+# the same pseudo-random numbers
+# are used each time the loop is run.
+random.seed(1)
+
+print 'New  Pos  Contents'
+print '---  ---  --------'
+
+# Generate random numbers and
+# insert them into a list in sorted
+# order.
+l = []
+for i in  range(1, 15):
+    r = random.randint(1, 100)
+    position = bisect.bisect(l, r)
+    bisect.insort(l, r)
+    print '%3d  %3d' % (r, position), l
+
+    输出的第一列显示了新随机数，第二列显示了这个数将插入到列表的哪个位置。每一行余下的部分则是当前的有序列表。
+    这是一个简单的例子，对于此例所处理的数据量来说，如果直接构建列表然后完成一次排序可能速度更快。不过对于长列表而言，使用类似这样的一个插入排序算法可以大大节省时间和内存。
+处理重复
+    之前显示的结果包含了一个重复的值 77。bisect 模块提供了两种方法来处理重复。新值可以插入到现有值得左边或右边。insort() 函数实际上是 insort_right() 的别名，这个函数会在现有值之后插入新值。相应的函数 insort_left() 则在现有值之前插入新值。
+
+import bisect
+import random
+
+# Reset the seed
+random.seed(1)
+
+print 'New  Pos  Contents'
+print '---  ---  --------'
+
+# Use bisect_left and insort_left
+l = []
+for i in  range(1, 15):
+    r = random.randint(1, 100)
+    position = bisect.bisect_left(l, r)
+    bisect.insort_left(l, r)
+    print '%3d  %3d' % (r, position), l
+
+    使用 bisect_left() 和 insort_left() 处理同样的数据时，结果会得到相同的有序列表，不过重复值插入的位置有所不同。
+    处理 Python 实现外，还有一个速度更快的 C 实现。如果有 C 版本，导入 bisect 时，这个实现会自动地覆盖纯 Python 实现。
