@@ -1,0 +1,238 @@
+[Python标准库]weakref——对象的非永久引用
+    作用：引用一个“昂贵”的对象，不过如果不再有其他非弱引用，则允许垃圾回收器回收其内存。
+    Python 版本：2.1 及以后版本
+    weakref 模块支持对象的弱引用。正常的引用会增加对象的引用计数，避免它被垃圾回收。但并不总希望如此，比如有时可能会出现一个循环引用，或者有时可能要构建一个对象缓存，需要内存时则要删除这个缓存。弱引用（weak reference）是避免对象被自动清除的一个对象句柄。
+引用
+    对象的弱引用通过 ref 类管理。要获取原对象，可以调用引用对象。
+
+import weakref
+
+class ExpensiveObject(object):
+    def __del__(self):
+        print '(Deleting %s)' % self
+
+obj = ExpensiveObject()
+r = weakref.ref(obj)
+
+print 'obj:', obj
+print 'ref:', r
+print 'r():', r()
+
+print 'deleting obj'
+del obj
+print 'r():', r()
+
+    在这里，由于 obj 在第二次调用引用之前已经删除，所以 ref 返回 None。
+引用回调
+    ref 构造函数接受一个可选的回调函数，删除所引用的对象是会调用这个函数。
+
+import weakref
+
+class ExpensiveObject(object):
+    def __del__(self):
+        print '(Deleting %s)' % self
+
+def callback(reference):
+    """Invoked when referenced object is deleted"""
+    print 'callback(', reference, ')'
+
+obj = ExpensiveObject()
+r = weakref.ref(obj, callback)
+
+print 'obj:', obj
+print 'ref:', r
+print 'r():', r()
+
+print 'deleting obj'
+del obj
+print 'r():', r()
+
+    引用已经“死亡”不再引用原对象时，这个回调会接受引用对象作为参数。这个特性的一种用法就是从缓存删除弱引用对象。
+代理
+    有时使用代理比使用弱引用更为方便。使用代理时可以像使用原对象一样，而且不要求访问对象之前先调用代理。这说明，可以将代理传递到一个库，而这个库并不知道它接收的是一个引用而不是真正的对象。
+
+import weakref
+
+class ExpensiveObject(object):
+    def __init__(self, name):
+        self.name = name
+    def __del__(self):
+        print '(Deleting %s)' % self
+
+obj = ExpensiveObject('My Object')
+r = weakref.ref(obj)
+p = weakref.proxy(obj)
+
+print 'via obj:', obj.name
+print 'via ref:', r().name
+print 'via proxy:', p.name
+del obj
+print 'via proxy:', p.name
+
+    如果引用对象删除后再访问代理，会产生一个 ReferenceError 异常。
+循环引用
+    弱引用有一种用法，即在不阻止垃圾回收时允许循环引用。下面的例子展示了图中包含一个循环时使用常规对象和使用代理的区别。
+    weakref_graph.py 中的 Graph 类接受给定的任意对象作为序列中的“下一个”节点。为简洁起见，这个实现支持从各节点有一个“传出”（outgoing）引用，通常这样做用途很有限，不过可以很容易为这些例子创建循环。函数 demo() 是一个工具函数，通过创建一个循环然后删除各个引用来尝试使用 Graph 类。
+
+import gc
+from pprint import pprint
+import weakref
+
+class Graph(object):
+    def __init__(self, name):
+        self.name = name
+        self.other = None
+    def set_next(self, other):
+        print '%s.set_next(%r)' % (self.name, other)
+        self.other = other
+    def all_nodes(self):
+        "Generate the nodes in the graph sequence."
+        yield self
+        n = self.other
+        while n and n.name != self.name:
+            yield n
+            n = n.other
+        if n is self:
+            yield n
+        return
+    def __str__(self):
+        return '->'.join(n.name for n in self.all_nodes())
+    def __repr__(self):
+        return '<%s at 0x%x name=%s>' % (self.__class__.__name__, id(self), self.name)
+    def __del__(self):
+        print '(Deleting %s)' % self.name
+        self.set_next(None)
+
+def collect_and_show_garbage():
+    "Show what garbage is present."
+    print 'Collecting...'
+    n = gc.collect()
+    print 'Unreachable objects:', n
+    print 'Garbage:',
+    pprint(gc.garbage)
+def demo(graph_factory):
+    print 'Set up graph:'
+    one = graph_factory('one')
+    two = graph_factory('two')
+    three = graph_factory('three')
+    one.set_next(two)
+    two.set_next(three)
+    three.set_next(one)
+
+    print
+    print 'Graph:'
+    print str(one)
+    collect_and_show_garbage()
+
+    print
+    three = None
+    two = None
+    print 'After 2 references removed:'
+    print str(one)
+    collect_and_show_garbage()
+
+    print
+    print 'Removing last reference:'
+    one = None
+    collect_and_show_garbage()
+
+    这个例子使用 gc 模块帮助调试内存泄露。DEBUG_LEAK 标志会使 gc 打印那些无法看到的对象的有关信息，而不是通过垃圾回收器中这些对象的引用。
+
+import gc
+from pprint import pprint
+import weakref
+
+from weakref_graph import Graph, demo, collect_and_show_garbage
+
+gc.set_debug(gc.DEBUG_LEAK)
+
+print 'Setting up the cycle'
+print
+demo(Graph)
+print
+print 'Breaking the cycle and cleaning up garbage'
+print
+gc.garbage[0].set_next(None)
+while gc.garbage:
+    del gc.garbage[0]
+print
+collect_and_show_garbage()
+
+    即使在 demo() 中删除了 Graph 实例的本地引用，图仍然显示在垃圾列表中，不能回收。而且垃圾列表中还会找到多个字典。它们是来自 Graph 实例的 __dict__ 值，包含了这些对象的属性。可以强制删除这些图，因为程序知道它们是什么。向解释器传入 -u 选项，启用非缓冲 I/O，从而确保这个示例程序中 print 语句的输出（写至标准输出）和 gc 的调试输出（写至标准错误输出）正确的隔行显示。
+    下一步是创建一个更智能的 WeakGraph 类，它知道如何在检测到一个循环时使用弱引用来避免建立常规引用循环。
+
+import gc
+from pprint import pprint
+import weakref
+
+from weakref_graph import Graph, demo, collect_and_show_garbage
+
+class WeakGraph(Graph):
+    def set_next(self, other):
+        if other is not None:
+            # See if we should replace the reference
+            # to other with a weakref.
+            if self in other.all_nodes():
+                other = weakref.proxy(other)
+        super(WeakGraph, self).set_next(other)
+        return
+
+demo (WeakGraph)
+
+    由于 WeakGraph 实例使用代理来指示已看到的对象，随着 demo() 删除了对象的所有本地引用，循环会断开，这样垃圾回收器就可以将这些对象删除。
+缓存对象
+    ref 和 proxy 类可以认为是“底层”实现。尽管它们对于维护单个对象的弱引用很有用。并允许将循环垃圾回收，但 WeakKeyDictionary 和 WeakValueDictionary 提供了一个更合适的 API 来创建多个对象的缓存。
+    WeakValueDictionary 使用其中保存的值的弱引用，当其他代码不再实际使用这些值时允许将其垃圾回收。通过使用垃圾回收器的显示调用，由此说明了使用常规字典和 WeakValueDictionary 完成内存处理的差别。
+
+import gc
+from pprint import pprint
+import weakref
+
+gc.set_debug(gc.DEBUG_LEAK)
+
+class ExpensiveObject(object):
+    def __init__(self, name):
+        self.name = name
+    def __repr__(self):
+        return 'ExpensiveObject(%s)' % self.name
+    def __del__(self):
+        print '    (Deleting %s)' % self
+
+def demo(cache_factory):
+    # hold objects so any weak references
+    # are not removed immediately
+    all_refs = {}
+    # create the cache using the factory
+    print 'CACHE TYPE:', cache_factory
+    cache = cache_factory()
+    for name in [ 'one', 'two', 'three' ]:
+        o = ExpensiveObject(name)
+        cache[name] = o
+        all_refs[name] = o
+        del o # decref
+
+    print '  all_refs =',
+    pprint(all_refs)
+    print '\n  Before, cache contains:', cache.keys()
+    for name, value in cache.items():
+        print '    %s = %s' % (name, value)
+        del value # decref
+
+    # Remove all references to the objects except the cache
+    print '\n  Cleanup:'
+    del all_refs
+    gc.collect()
+
+    print '\n  After, cache contains', cache.keys()
+    for name, value in cache.items():
+        print '    %s = %s' % (name, value)
+    print '  demo returning'
+    return
+
+demo(dict)
+print
+
+demo(weakref.WeakValueDictionary)
+
+    如果循环变量指示缓存的值，这些循环变量必须显示清除，从而使对象的引用计数减少。否则，垃圾回收器不会删除这些对象，它们仍会保留在缓存中。类似地，all_refs 变量用来维护引用，避免它们过早地被垃圾回收。
+    WeakKeyDictionary 的工作原理与此类似，不过它使用字典中键的弱引用，而不是字典中的值。
