@@ -1,0 +1,120 @@
+[Python标准库]copy——复制对象
+    作用：提供一些函数，可以使用浅副本或深副本语义复制对象。
+    Python 版本：1.4 及以后版本
+    copy 模块包括两个函数 copy() 和 deepcopy()，用于复制现有的对象。
+浅副本
+    copy() 创建的浅副本（shallow copy）是一个新容器，其中填充原对象内容的引用。建立 list 对象的一个浅副本时，会构造一个新的 list，并将原对象的元素追加到这个 list。
+
+import copy
+
+class MyClass:
+    def __init__(self, name):
+        self.name = name
+    def __cmp__(self, other):
+        return cmp(self.name, other.name)
+
+a = MyClass('a')
+my_list = [ a ]
+dup = copy.copy(my_list)
+
+print '             my_list:', my_list
+print '                 dup:', dup
+print '      dup is my_list:', (dup is my_list)
+print '      dup == my_list:', (dup == my_list)
+print 'dup[0] is my_list[0]:', (dup[0] is my_list[0])
+print 'dup[0] == my_list[0]:', (dup[0] == my_list[0])
+
+    对于一个浅副本，不会复制 MyClass 实例，所以 dup 列表中的引用会指向 my_list 中相同的对象。
+深副本
+    deepcopy() 创建的深副本是一个新容器，其中填充原对象内容的副本。要建立一个 list 的深副本，会构造一个新的 list，复制原列表的元素，然后将这些副本追加到新列表。
+    将前例中的 copy() 调用替换为 deepcopy()，可以清楚地看到输出的不同。
+
+import copy
+
+class MyClass:
+    def __init__(self, name):
+        self.name = name
+    def __cmp__(self, other):
+        return cmp(self.name, other.name)
+
+a = MyClass('a')
+my_list = [ a ]
+dup = copy.deepcopy(my_list)
+
+print '             my_list:', my_list
+print '                 dup:', dup
+print '      dup is my_list:', (dup is my_list)
+print '      dup == my_list:', (dup == my_list)
+print 'dup[0] is my_list[0]:', (dup[0] is my_list[0])
+print 'dup[0] == my_list[0]:', (dup[0] == my_list[0])
+
+定制复制行为
+    可以使用特殊方法 __copy__() 和 __deepcopy__() 来控制如何建立副本。
+    调用 __copy__() 而不提供任何参数，这会返回对象的一个浅副本。
+    调用 __deepcopy__()，并提供一个备忘字典，这会返回对象的一个深副本。所有需要深复制的成员属性都要连同备忘字典传递到 copy.deepcopy() 来控制递归。
+    下面这个例子展示了如何调用这些方法。
+
+import copy
+
+class MyClass:
+    def __init__(self, name):
+        self.name = name
+    def __cmp__(self, other):
+        return cmp(self.name, other.name)
+    def __copy__(self):
+        print '__copy__()'
+        return MyClass(self.name)
+    def __deepcopy__(self, memo):
+        print '__deepcopy__(%s)' % str(memo)
+        return MyClass(copy.deepcopy(self.name, memo))
+
+a = MyClass('a')
+
+sc = copy.copy(a)
+dc = copy.deepcopy(a)
+
+深副本中的递归
+    为了避免复制递归数据结构可能带来的问题，deepcopy() 使用了一个字典来跟踪已复制的对象。将这个字典传入 __deepcopy__() 方法，从而在该方法中也可以进行检查。
+    下面的例子显示了一个互连的数据结构（如一个有向图）可以通过实现 __deepcopy__() 方法帮助防止递归。
+
+import copy
+import pprint
+
+class Graph:
+    
+    def __init__(self, name, connections):
+        self.name = name
+        self.connections = connections
+        
+    def add_connection(self, other):
+        self.connections.append(other)
+        
+    def __repr__(self):
+        return 'Graph(name=%s, id=%s)' % (self.name, id(self))
+    
+    def __deepcopy__(self, memo):
+        print '\nCalling __deepcopy__ for %r' % self
+        if self in memo:
+            existing = memo.get(self)
+            print '  Already copied to %r' % existing
+            return existing
+        print '  Memo dictionary:'
+        pprint.pprint(memo, indent=4, width=40)
+        dup = Graph(copy.deepcopy(self.name, memo), [])
+        print '  Copying to new object %s' % dup
+        memo[self] = dup
+        for c in self.connections:
+            dup.add_connection(copy.deepcopy(c, memo))
+        return dup
+
+root = Graph('root', [])
+a = Graph('a', [root])
+b = Graph('b', [a, root])
+root.add_connection(a)
+root.add_connection(b)
+
+dup = copy.deepcopy(root)
+
+    Graph 类包含一些基本的有向图方法。基于一个名和已连接的现有节点的一个列表可以初始化一个 Graph 实例。add_connection() 方法用于建立双向连接。deepcopy 也用到了这个方法。
+    __deepcopy__() 方法将打印消息来显示它如何得到调用，并根据需要管理备忘字典内容。它不是复制整个连接列表，而是创建一个新列表，把各个连接的副本追加到这个列表。这样可以确保复制各个新节点时会更新备忘字典，以避免递归问题或多余的节点副本。与前面一样，完成时会返回复制的对象。
+    上例中存在几个环，不过利用备忘字典处理递归就可以避免遍历导致栈溢出错误。复制根节点 root ，第二次遇到 root 节点时，此时正在复制 a 节点，__deepcopy__() 检测到递归，会重用备忘字典中现有的值，而不是创建一个新对象。
