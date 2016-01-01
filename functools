@@ -49,3 +49,39 @@ print 'Insufficient arguments:'
 p1()
 
     在这个例子的最后，调用了之前创建的第一个 partial，但没有为 a 传入一个值，这就导致一个异常。
+    2. 获取函数属性
+    默认情况下，partial 对象没有 __name__ 或 __doc__ 属性，如果没有这些属性，修饰的函数将更难调试。使用 update_wrapper() 可以从原函数将属性复制或添加到 partial 对象。
+    
+import functools
+
+def myfunc(a, b=2):
+    """Docstring for myfunc()."""
+    print '  called myfunc with:', (a, b)
+    return
+    
+def show_details(name, f):
+    """Show details of a callable object."""
+    print '%s:" % name
+    print '  object:', f
+    print ' __name__:',
+    try:
+        print f.__name__
+    except AttributeError:
+        print '(no __name__)'
+    print '  __doc__', repr(f.__doc__)
+    print
+    return
+    
+show_details('myfunc', myfunc)
+
+p1 = functools.partial(myfunc, b=4)
+show_details('raw wrapper', p1)
+
+print 'Updating wrapper:'
+print '  assign:', functools.WRAPPER_ASSIGNMENTS
+print '  update:', functools.WRAPPER_UPDATES
+
+functools.update_wrapper(p1, myfunc)
+show_details('updated wrapper', p1)
+
+    添加到包装器的属性在 WRAPPER_ASSIGNMENTS 中定义，而 WRAPPER_UPDATES 列出了要修改的值。
