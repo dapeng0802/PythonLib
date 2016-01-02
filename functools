@@ -85,3 +85,62 @@ functools.update_wrapper(p1, myfunc)
 show_details('updated wrapper', p1)
 
     添加到包装器的属性在 WRAPPER_ASSIGNMENTS 中定义，而 WRAPPER_UPDATES 列出了要修改的值。
+    3. 其他可回调对象
+    Partial 适用于任何可回调对象，而不只是单独的函数。
+
+import functools
+
+class MyClass(object):
+    """Demonstration class for functools"""
+    
+    def method1(self, a, b=2):
+        """Docstring for method1()."""
+        print '  called method1 with:', (self, a, b)
+        return
+    
+    def method2(self, c, d=5):
+        """Docstring for method2"""
+        print '  called method2 with:', (self, c, d)
+        return
+    wrapped_method2 = functools.partial(method2, 'wrapped c')
+    functools.update_wrapper(wrapped_method2, method2)
+    
+    def show_details(name, f):
+        """Show details of a callable object."""
+        print '%s:' % name
+        print '  object:', f
+        print '  __name__:',
+        try:
+            print f.__name__
+        except AttributeError:
+            print '(no __name__)'
+        print '  __doc__', repr(f.__doc__)
+        return
+    
+    o = MyClass()
+    
+    show_details('method1 straight', o.method1)
+    o.method1('no default for a', b=3)
+    print
+    
+    p1 = functools.partial(o.method1, b=4)
+    functools.update_wrapper(p1, o.method1)
+    show_details('method1 wrapper', p1)
+    print
+    
+    show_details('method2', o.method2)
+    o.method2('no default for c', d=6)
+    print
+    
+    show_details('wrapped method2', o.wrapped_method2)
+    o.wrapped_method2('no default for c', d=6)
+    print
+    
+    show_details('instance', o)
+    o('no default for e')
+    print
+    p2 = functools.partial(o, f=7)
+    show_details('instance wrapper', p2)
+    p2('e goes here')
+
+    这个例子由一个实例以及实例的方法来创建部分对象。
