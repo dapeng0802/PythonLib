@@ -200,3 +200,7 @@ decorated_myfunc()
 decorated_myfunc('args to decorated', 4)
 
     functools 提供了一个修饰符 wraps()，它会对所修饰的函数应用 update_wrapper()。
+比较
+    在 Python 2 中，类可以定义一个 __cmp__() 方法，后者会根据这个对象小于、等于还是大于所比较的元素返回 -1、0 或 1。Python 2.1 引入了富比较（rich comparison）方法 API（__lt__()、__le__()、__eq__()、__ne__()、__gt__() 和 __ge__()），可以完成一个比较操作并返回一个 Boolean 值。Python 3 则废弃了 __cmp__() 而代之以这些新方法，所以 functools 提供了一些工具，以便于编写 Python 2 类而且同时符合 Python 3 中新的比较需求。
+    1. 富比较
+    设计富比较 API 是为了支持涉及复杂比较的类，从而以最高效的方式实现各个测试。不过，对于比较相对简单的类，手动地创建各个富比较方法就没有必要了。total_ordering() 类修饰符取一个提供了部分方法的类，并添加其余的方法。
