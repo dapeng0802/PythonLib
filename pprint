@@ -1,17 +1,17 @@
-[Python��׼��]pprint�������۴�ӡ���ݽṹ
-    ���ã����۴�ӡ���ݽṹ��
-    Python �汾��1.4 ���Ժ�汾
-    pprint ����һ�������۴�ӡ������pretty printer���������������ݽṹ��һ��������ͼ����ʽ�����߻��������ݽṹ��һЩ��ʾ�����������ɽ�������ȷ�ؽ��������ұ��������Ķ�����������ܷ���һ���ϣ��ֽ�Ϊ����ʱ����Ҫ������
-    ��һ�ڵ����Ӷ��õ��� pprint_data.py�����а����������ݡ�
+[Python标准库]pprint——美观打印数据结构
+    作用：美观打印数据结构。
+    Python 版本：1.4 及以后版本
+    pprint 包含一个“美观打印机”（pretty printer），用于生成数据结构的一个美观视图。格式化工具会生成数据结构的一些表示，不仅可以由解释器正确地解析，而且便于人类阅读。输出尽可能放在一行上，分解为多行时则需要缩进。
+    这一节的例子都用到了 pprint_data.py，其中包含以下数据。
 
 data = [ (1, { 'a':'A', 'b':'B', 'c':'C', 'd':'D' }),
          (2, { 'e':'E', 'f':'F', 'g':'G', 'h':'H',
-	       'i':'I', 'j':'J', 'k':'K', 'l':'L',
-	       }),
+           'i':'I', 'j':'J', 'k':'K', 'l':'L',
+           }),
          ]
 
-��ӡ
-    Ҫʹ�����ģ�飬��򵥵ķ����������� pprint() ������
+打印
+    要使用这个模块，最简单的方法就是利用 pprint() 函数。
 
 from pprint import pprint
 
@@ -23,9 +23,9 @@ print
 print 'PPRINT:'
 pprint(data)
 
-    pprint() ��ʽ��һ�����󣬲�����д��һ���������������������Ϊ�������ˣ�������Ĭ�ϵ� sys.stdout��.
-��ʽ��
-    Ҫ��ʽ��һ�����ݽṹ��������ֱ��д��һ����������������־��¼��������ʹ�� pformat() ������һ���ַ�����ʾ��
+    pprint() 格式化一个对象，并把它写至一个数据流，这个数据流作为参数传人（或者是默认的 sys.stdout）.
+格式化
+    要格式化一个数据结构而不把它直接写至一个流（例如用于日志记录），可以使用 pformat() 来构造一个字符串表示。
 
 import logging
 from pprint import pformat
@@ -33,37 +33,37 @@ from pprint_data import data
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(levelname)-8s %(message)s',
-		    )
+            )
 
 logging.debug('Logging pformatted data')
 formatted = pformat(data)
 for line in formatted.splitlines():
     logging.debug(line.rstrip())
 
-    Ȼ����Ե����ش�ӡ��ʽ�����ַ������߼�����־��
-������
-    ��������ඨ����һ�� __repr__() ������pprint() ʹ�õ� PrettyPrinter �໹���Դ�����Щ�����ࡣ
+    然后可以单独地打印格式化的字符串或者记入日志。
+任意类
+    如果定制类定义了一个 __repr__() 方法，pprint() 使用的 PrettyPrinter 类还可以处理这些定制类。
 
 from pprint import pprint
 
 class node(object):
     def __init__(self, name, contents=[]):
         self.name = name
-	self.contents = contents[:]
+    self.contents = contents[:]
     def __repr__(self):
         return ( 'node(' + repr(self.name) + ', ' +
-	         repr(self.contents) + ')'
-		 )
+             repr(self.contents) + ')'
+         )
 
 trees = [ node('node-1'),
           node('node-2', [ node('node-2-1')]),
-	  node('node-3', [ node('node-3-1')]),
-	  ]
+      node('node-3', [ node('node-3-1')]),
+      ]
 pprint(trees)
 
-    �� PrettyPrinter ���Ƕ�׶���ı�ʾ���Ӷ������������ַ�����ʾ��
-�ݹ�
-    �ݹ����ݽṹ��ָ������Դ����������ʾ����ʽΪ <Recursion on typename with id=number>��
+    由 PrettyPrinter 组合嵌套对象的表示，从而返回完整的字符串表示。
+递归
+    递归数据结构由指向数据源的引用来表示，形式为 <Recursion on typename with id=number>。
 
 from pprint import pprint
 
@@ -73,9 +73,9 @@ local_data.append(local_data)
 print 'id(local_data) =>', id(local_data)
 pprint(local_data)
 
-    ����������У��б� local_data ���ӵ�����������ᴴ��һ���ݹ����á�
-����Ƕ�����
-    ���ڷǳ�������ݽṹ�����ܲ�Ҫ������������е�ϸ�ڡ��п�������û���ʵ��ظ�ʽ����Ҳ���ܸ�ʽ���ı�������޷�����������ĳЩ�����Ƕ���ġ�
+    在这个例子中，列表 local_data 增加到其自身，这会创建一个递归引用。
+限制嵌套输出
+    对于非常深的数据结构，可能不要求输出包含所有的细节。有可能数据没有适当地格式化，也可能格式化文本过大而无法管理，或者某些数据是多余的。
 
 from pprint import pprint
 
@@ -83,9 +83,9 @@ from pprint_data import data
 
 pprint(data, depth=1)
 
-    ʹ�� depth �������Կ������۴�ӡ���ݹ鴦��Ƕ�����ݽṹ����ȡ������δ�����Ĳ����һ��ʡ�Ժű�ʾ��
-�����������
-    ��ʽ���ı���Ĭ���������Ϊ 80 �С�Ҫ����������ȣ������� pprint() ��ʹ�ò��� width��
+    使用 depth 参数可以控制美观打印机递归处理嵌套数据结构的深度。输出中未包含的层次由一个省略号表示。
+控制输出宽度
+    格式化文本的默认输出宽度为 80 列。要调整这个宽度，可以在 pprint() 中使用参数 width。
 
 from pprint import pprint
 from pprint_data import data
@@ -95,4 +95,4 @@ for width in [ 80, 5 ]:
     pprint(data, width=width)
     print
 
-    ����̫С������Ӧ��ʽ�����ݽṹʱ������ضϻ��л�����Ƿ����﷨���Ͳ�����нضϻ�ת�С�
+    宽度太小不能适应格式化数据结构时，如果截断或换行会引入非法的语法，就不会进行截断或转行。
