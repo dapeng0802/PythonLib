@@ -204,3 +204,63 @@ decorated_myfunc('args to decorated', 4)
     在 Python 2 中，类可以定义一个 __cmp__() 方法，后者会根据这个对象小于、等于还是大于所比较的元素返回 -1、0 或 1。Python 2.1 引入了富比较（rich comparison）方法 API（__lt__()、__le__()、__eq__()、__ne__()、__gt__() 和 __ge__()），可以完成一个比较操作并返回一个 Boolean 值。Python 3 则废弃了 __cmp__() 而代之以这些新方法，所以 functools 提供了一些工具，以便于编写 Python 2 类而且同时符合 Python 3 中新的比较需求。
     1. 富比较
     设计富比较 API 是为了支持涉及复杂比较的类，从而以最高效的方式实现各个测试。不过，对于比较相对简单的类，手动地创建各个富比较方法就没有必要了。total_ordering() 类修饰符取一个提供了部分方法的类，并添加其余的方法。
+
+import functools
+import inspect
+from pprint import pprint
+
+@functools.total_ordering
+class MyObject(object):
+    def __init__(self, val):
+        self.val = val
+    def __eq__(self, other):
+        print '  testing __eq__(%s, %s)' % (self.val, other.val)
+        return self.val == other.val
+    def __gt__(self, other):
+        print '  testing __gt__(%s, %s)' % (self.val, other.val)
+        return self.val > other.val
+
+print 'Methods:\n'
+pprint(inspect.getmembers(MyObject, inspect.ismethod))
+
+a = MyObject(1)
+b = MyObject(2)
+
+print '\nComparisons:'
+for expr in [ 'a < b', 'a <= b', 'a == b', 'a >= b', 'a > b' ]:
+    print '\n%-6s:' % expr
+    result = eval(expr)
+    print '  result of %s: %s' % (expr, result)
+
+    这个类必须提供 __eq__() 和另外一个富比较方法的实现。修饰符会增加其余方法的实现，它们要利用类提供的比较来完成工作。
+    2. 比对序
+    由于 Python 3 中废弃了老式比较函数，因此 sort() 之类的函数中也不再支持 cmp 参数。对于使用了比较函数的 Python 2 程序，可以用 cmp_to_key() 将它们转换为一个返回比对键（collation key）的函数，这个键用于确定元素在最终序列中的位置。
+
+import functools
+
+class MyObject(object):
+    def __init__(self, val):
+        self.val = val
+    def __str__(self):
+        return 'MyObject(%s)' % self.val
+
+def compare_obj(a, b):
+    """Old-style comparison function."""
+    print 'comparing %s and %s' % (a, b)
+    return cmp(a.val, b.val)
+
+# Make a key function using cmp_to_key()
+get_key = functools.cmp_to_key(compare_obj)
+
+def get_key_wrapper(o):
+    """Wrapper function for get_key to allow for print statements."""
+    new_key = get_key(o)
+    print 'key_wrapper(%s) -> %s' % (o, new_key)
+    return new_key
+objs = [ MyObject(x) for x in xrange(5, 0, -1) ]
+
+for o in sorted(objs, key=get_key_wrapper):
+    print o
+
+    正常情况下，可以直接使用 cmp_to_key()，不过这个例子中引入了一个额外的包装器函数，从而在调用 key 函数时可以输出更多的信息。
+    如输出所示，sorted() 首先对序列中的每一个元素调用 get_key_wrapper() 来生成一个键。cmp_to_key() 返回的键是 functools 中定义的一个类的实例，这个类使用所传入的老式比较函数来实现富比较 API。所有键都创建之后，将通过比较这些键对序列排序。
