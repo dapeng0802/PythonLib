@@ -23,7 +23,7 @@ print
 print 'PPRINT:'
 pprint(data)
 
-    pprint() 格式化一个对象，并把它写至一个数据流，这个数据流作为参数传人（或者是默认的 sys.stdout）.
+    pprint() 格式化一个对象，并把它写至一个数据流，这个数据流作为参数传入（或者是默认的 sys.stdout）.
 格式化
     要格式化一个数据结构而不把它直接写至一个流（例如用于日志记录），可以使用 pformat() 来构造一个字符串表示。
 
@@ -49,7 +49,7 @@ from pprint import pprint
 class node(object):
     def __init__(self, name, contents=[]):
         self.name = name
-    self.contents = contents[:]
+        self.contents = contents[:]
     def __repr__(self):
         return ( 'node(' + repr(self.name) + ', ' +
              repr(self.contents) + ')'

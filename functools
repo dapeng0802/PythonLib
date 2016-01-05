@@ -26,7 +26,7 @@ def show_details(name, f, is_partial=False):
         print '  keywords:', f.keywords
     return
     
-show_datails('myfunc', myfunc)
+show_details('myfunc', myfunc)
 myfunc('a', 3)
 print
 
@@ -61,14 +61,14 @@ def myfunc(a, b=2):
     
 def show_details(name, f):
     """Show details of a callable object."""
-    print '%s:" % name
+    print '%s:' % name
     print '  object:', f
-    print ' __name__:',
+    print '  __name__:',
     try:
         print f.__name__
     except AttributeError:
         print '(no __name__)'
-    print '  __doc__', repr(f.__doc__)
+    print '  __doc__:', repr(f.__doc__)
     print
     return
     
@@ -104,44 +104,49 @@ class MyClass(object):
         return
     wrapped_method2 = functools.partial(method2, 'wrapped c')
     functools.update_wrapper(wrapped_method2, method2)
-    
-    def show_details(name, f):
-        """Show details of a callable object."""
-        print '%s:' % name
-        print '  object:', f
-        print '  __name__:',
-        try:
-            print f.__name__
-        except AttributeError:
-            print '(no __name__)'
-        print '  __doc__', repr(f.__doc__)
+
+    def __call__(self, e, f=6):
+        """Docstring for MyClass.__call__"""
+        print '  called object with:', (self, e, f)
         return
     
-    o = MyClass()
+def show_details(name, f):
+    """Show details of a callable object."""
+    print '%s:' % name
+    print '  object:', f
+    print '  __name__:',
+    try:
+        print f.__name__
+    except AttributeError:
+        print '(no __name__)'
+    print '  __doc__:', repr(f.__doc__)
+    return
     
-    show_details('method1 straight', o.method1)
-    o.method1('no default for a', b=3)
-    print
+o = MyClass()
     
-    p1 = functools.partial(o.method1, b=4)
-    functools.update_wrapper(p1, o.method1)
-    show_details('method1 wrapper', p1)
-    print
+show_details('method1 straight', o.method1)
+o.method1('no default for a', b=3)
+print
     
-    show_details('method2', o.method2)
-    o.method2('no default for c', d=6)
-    print
-    
-    show_details('wrapped method2', o.wrapped_method2)
-    o.wrapped_method2('no default for c', d=6)
-    print
-    
-    show_details('instance', o)
-    o('no default for e')
-    print
-    p2 = functools.partial(o, f=7)
-    show_details('instance wrapper', p2)
-    p2('e goes here')
+p1 = functools.partial(o.method1, b=4)
+functools.update_wrapper(p1, o.method1)
+show_details('method1 wrapper', p1)
+print
+
+show_details('method2', o.method2)
+o.method2('no default for c', d=6)
+print
+
+show_details('wrapped method2', o.wrapped_method2)
+o.wrapped_method2('no default for c', d=6)
+print
+
+show_details('instance', o)
+o('no default for e')
+print
+p2 = functools.partial(o, f=7)
+show_details('instance wrapper', p2)
+p2('e goes here')
 
     这个例子由一个实例以及实例的方法来创建部分对象。
     4. 为修饰符获取函数属性
@@ -158,7 +163,7 @@ def show_details(name, f):
         print f.__name__
     except AttributeError:
         print '(no __name__)'
-    print '  __doc__', repr(f.__doc__)
+    print '  __doc__:', repr(f.__doc__)
     print
     return
 
@@ -173,7 +178,7 @@ def simple_decorator(f):
 
 def myfunc(a, b=2):
     "myfunc() is not complicated"
-    print '  myfunc:', (a,b)
+    print '  myfunc:', (a, b)
     return
 
 # The raw function
