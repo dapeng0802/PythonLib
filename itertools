@@ -1,0 +1,230 @@
+[Python标准库]itertools——迭代器函数
+    作用：itertools 模块包含一组函数用于处理序列数据集。
+    Python 版本：2.3 及以后版本
+    itertools 提供的函数是受函数式编程语言（如 Clojure 和 Haskell）中类似特性的启发。其目的是保证快速，并且高效地使用内存，而且可以联结在一起表述更为复杂的基于迭代的算法。
+    与使用列表的代码相比，基于迭代器的算法可以提供更好的内存使用特性。在真正需要数据之前，并不从迭代器生成数据，由于这个原因，不需要将所有数据都同时存储在内存中。这种“懒”处理模型可以减少内存使用，相应地还可以减少交换以及大数据集的其他副作用，从而改善性能。
+合并和分解迭代器
+    chain() 函数取多个迭代器作为参数，最后返回一个迭代器，它能生成所有输入迭代器的内容，就好像这些内容来自一个迭代器一样。
+
+from itertools import *
+
+for i in chain([1, 2, 3], ['a', 'b', 'c']):
+    print i,
+print
+
+    利用 chain()，可以轻松地处理多个序列而不必构造一个大的列表。
+    izip() 返回一个迭代器，它会把多个迭代器的元素结合到一个元组中。
+
+from itertools import *
+
+for i in izip([1, 2, 3], ['a', 'b', 'c']):
+    print i
+
+    这个函数的工作方式类似于内置函数 zip()，只不过它会返回一个迭代器而不是列表。
+    islice() 函数返回一个迭代器，它按索引返回由输入迭代器所选的元素。
+
+from itertools import *
+
+print 'Stop at 5:'
+for i in islice(count(), 5):
+    print i,
+print '\n'
+
+print 'Start at 5, Stop at 10:'
+for i in islice(count(), 5, 10):
+    print i,
+print '\n'
+
+print 'By tens to 100:'
+for i in islice(count(), 0, 100, 10):
+    print i,
+print '\n'
+
+    islice() 与列表的 slice 操作符参数相同，同样包括开始位置（start）、结束位置（stop）和步长（step）。start 和 step 参数是可选的。
+    tee() 函数根据一个原输入迭代器返回多个独立的迭代器（默认为两个）。
+
+from itertools import *
+
+r = islice(count(), 5)
+i1, i2 = tee(r)
+
+print 'i1:', list(i1)
+print 'i2:', list(i2)
+
+    tee() 的语义类似于 UNIX tee 工具，它会重复从输入读到的值，并把它们写至一个命名文件和标准输出。tee() 返回的迭代器可以用来为将并行处理的多个算法提供相同的数据集。
+    tee() 创建的新迭代器共享其输入迭代器，所以一旦创建了新迭代器，就不应再使用原迭代器。
+
+from itertools import *
+
+r = islice(count(), 5)
+i1, i2 = tee(r)
+
+print 'r:',
+for i in r:
+    print i,
+    if i > 1:
+        break
+print
+
+print 'i1:', list(i1)    
+print 'i2:', list(i2)
+
+    如果原输入迭代器的值已经利用，新迭代器就不会再生成这些值。
+转换输入
+    imap() 函数会返回一个迭代器，它对输入迭代器中的值调用一个函数并返回结果。impa() 函数的工作方式类似于内置函数 map()，只不过只要有某个输入迭代器中的元素全部用完，imap() 函数都会停止（而不是插入 None 值来完全利用所有输入）。
+
+from itertools import *
+
+print 'Doubles:'
+for i in imap(lambda x:2*x, xrange(5)):
+    print i
+
+print 'Multiples:'
+for i in imap(lambda x,y:(x, y, x*y), xrange(5), xrange(5, 10)):
+    print '%d * %d = %d' % i
+
+    在第一个例子中，lambda 函数将输入值乘以 2。在第二个例子中，lambda 函数将两个参数相乘（这两个参数分别来自不同的迭代器），并返回一个 tuple，其中包含原参数和计算得到的值。
+    starmap() 函数类似于 imap()，不过并不是由多个迭代器构建一个 tuple，它使用 * 语法分解一个迭代器中的元素作为映射函数的参数。
+
+from itertools import *
+
+values = [(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)]
+for i in starmap(lambda x,y:(x, y, x*y), values):
+    print '%d * %d = %d' % i
+
+    imap() 的映射函数名为 f(i1, i2)，而传入 starmap() 的映射函数名为 f(*i)。
+生成新值
+    count() 函数返回一个迭代器，能够无限地生成连续整数。第一个数可以作为参数传入（默认为 0）。这里没有上界参数。
+
+from itertools import *
+
+for i in izip(count(1), ['a', 'b', 'c']):
+    print i
+
+    这个例子会停止，因为 list 参数已经利用过。
+    cycle() 函数返回一个迭代器，它会无限地重复给定参数的内容。由于必须记住输入迭代器的全部内容，因此如果这个迭代器很长，可能会耗费大量内存。
+
+from itertools import *
+
+for i, item in izip(xrange(7), cycle(['a', 'b', 'c'])):
+    print (i, item)
+
+    这个例子中使用了一个计数器变量，在数个周期后会跳出循环。
+    repeat() 函数返回一个迭代器，每次访问时会生成相同的值。
+
+from itertools import *
+
+for i in repeat('over-and-over', 5):
+    print i
+
+    reprat() 返回的迭代器会一直返回数据，除非提供了可选的 times 参数来限制次数。
+    如果既要包含来自其他迭代器的值，还要包含一些不变的值，那么将 repeat() 与 izip() 或 imap() 结合使用会很有用。
+
+from itertools import *
+
+for i, s in izip(count(), repeat('over-and-over', 5)):
+    print i, s
+
+    这个例子中就结合了一个计数器值和 repeat() 返回的常量。
+    下面这个例子使用 imap() 将 0 ~ 4 区间中的数乘以 2。
+
+from itertools import *
+
+for i in imap(lambda x,y:(x, y, x*y), repeat(2), xrange(5)):
+    print '%d * %d = %d' % i
+
+    repeat() 迭代器不需要显式限制，因为任何一个输入结束时 imap() 就会停止处理，而 xrange() 只返回 5 个元素。
+过滤
+    dropwhile() 函数返回一个迭代器，它会生成输入迭代器中条件第一次为 false 之后的元素。
+
+from itertools import *
+
+def should_drop(x):
+    print 'Testing:', x
+    return (x<1)
+
+for i in dropwhile(should_drop, [ -1, 0, 1, 2, -2 ]):
+    print 'Yielding:', i
+
+    dropwhile() 并不会过滤输入的每一个元素；第一次条件为 false 之后，输入中所有的余下的元素都会返回。
+    takewhile() 与 dropwhile() 正好相反。它也返回一个迭代器，这个迭代器将返回输入迭代器中保证测试条件为 true 的元素。
+
+from itertools import *
+
+def should_take(x):
+    print 'Testing:', x
+    return (x<2)
+
+for i in takewhile(should_take, [ -1, 0, 1, 2, -2 ]):
+    print 'Yielding:', i
+
+    一旦 should_take() 返回 false，takewhile() 就会停止处理输入。
+    ifilter() 返回一个迭代器，它的工作方式与内置 filter() 处理列表的做法类似，其中只包含测试条件返回 true 时的相应元素。
+
+from itertools import *
+
+def check_item(x):
+    print 'Testing:', x
+    return (x<1)
+
+for i in ifilter(check_item, [ -1, 0, 1, 2, -2 ]):
+    print 'Yielding:', i
+
+    ifilter() 与 dropwhile() 不同，在返回之前对每一个元素都会进行测试。
+    ifilterfalse() 返回一个迭代器，其中只包含测试条件返回 false 时的相应元素。
+
+from itertools import *
+
+def check_item(x):
+    print 'Testing:', x
+    return (x<1)
+
+for i in ifilterfalse(check_item, [ -1, 0, 1, 2, -2 ]):
+    print 'Yielding:', i
+
+    check_item() 中的测试表达式与前面相同，所以在这个使用 ifilterfalse() 的例子中，其结果与上一个例子的结果正好相反。
+数据分组
+    groupby() 函数返回一个迭代器，它会生成按一个公共键组织的值集。下面这个例子展示了如何根据一个属性对相关的值分组。
+
+from itertools import *
+import operator
+import pprint
+
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    def __repr__(self):
+        return '(%s, %s)' % (self.x, self.y)
+    def __cmp__(self, other):
+        return cmp((self.x, self.y), (other.x, other.y))
+
+# Create a dataset of Point instances
+data = list(imap(Point,
+                 cycle(islice(count(), 3)),
+                 islice(count(), 7),
+                 )
+            )
+print 'Data:'
+pprint.pprint(data, width=69)
+print
+
+# Try to group the unsorted data based on X values
+print 'Grouped, unsorted:'
+for k, g in groupby(data, operator.attrgetter('x')):
+    print k, list(g)
+print
+
+# Sort the data
+data.sort()
+print 'Sorted:'
+pprint.pprint(data, width=69)
+print
+
+# Group the sorted data based on X values
+print 'Grouped, sorted:'
+for k, g in groupby(data, operator.attrgetter('x')):
+    print k, list(g)
+print
+
+    输入序列要根据键值排序，以保证得到预期的分组。
