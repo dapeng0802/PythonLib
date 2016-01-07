@@ -1,0 +1,79 @@
+[Python标准库]operator——内置操作符的函数接口
+    作用：内置操作符的函数接口。
+    Python 版本：1.4 及以后版本
+    使用迭代器编程时，有时需要为简单的表达式创建小函数。有些情况下，这些确实可以实现为 lambda 函数，不过对于某些操作根本不需要新函数。operator 模块定义了一些对应算术和比较内置操作的函数。
+逻辑操作
+    有一些函数可以用来确定一个值的相应 Boolean 值，将其取反来创建相反的 Boolean 值，以及比较对象查看它们是否相等。
+
+from operator import *
+
+a = -1
+b = 5
+
+print 'a =', a
+print 'b =', b
+print
+
+print 'not_(a)     :', not_(a)
+print 'truth(a)    :', truth(a)
+print 'is_(a, b)   :', is_(a, b)
+print 'is_not(a, b):', is_not(a, b)
+
+    not_() 后面有下划线，因为 not 是一个 Python 关键字。truth() 会应用 if 语句中测试一个表达式时所用的同样的逻辑。is_() 实现了 is 关键字使用的相同检查，is_not() 完成同样的测试，但返回相反的答案。
+比较操作符
+    所有富比较操作符都得到支持。
+
+from operator import *
+
+a = 1
+b = 5.0
+print 'a =', a
+print 'b =', b
+for func in (lt, le, eq, ne, ge, gt):
+    print '%s(a, b):' % func.__name__, func(a, b)
+
+    这些函数等价于使用 <、<=、==、>= 和 > 的表达式语法。
+算术操作符
+    处理数字值的算术操作符也得到支持。
+
+from operator import *
+
+a = -1
+b = 5.0
+c = 2
+d = 6
+
+print 'a =', a
+print 'b =', b
+print 'c =', c
+print 'd =', d
+
+print '\nPositive/Negative:'
+print 'abs(a):', abs(a)
+print 'neg(a):', neg(a)
+print 'neg(b):', neg(b)
+print 'pos(a):', pos(a)
+print 'pos(b):', pos(b)
+
+print '\nArithmetic:'
+print 'add(a, b)     :', add(a, b)
+print 'div(a, b)     :', div(a, b)
+print 'div(d, c)     :', div(d, c)
+print 'floordiv(a, b):', floordiv(a, b)
+print 'floordiv(d, c):', floordiv(d, c)
+print 'mod(a, b)     :', mod(a, b)
+print 'mul(a, b)     :', mul(a, b)
+print 'pow(c, d)     :', pow(c, d)
+print 'sub(b, a)     :', sub(b, a)
+print 'truediv(a, b) :', truediv(a, b)
+print 'truediv(d, c) :', truediv(d, c)
+
+print '\nBitwise:'
+print 'and_(c, d)  :', and_(c, d)
+print 'invert(c)   :', invert(c)
+print 'lshift(c, d):', lshift(c, d)
+print 'or_(c, d)   :', or_(c, d)
+print 'rshift(d, c):', rshift(d, c)
+print 'xor(c, d)   :', xor(c, d)
+
+    有两个不同的除法操作符：floordiv()（Python 3.0 版本之前实现的整数除法）和 truediv()（浮点数除法）。
