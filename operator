@@ -77,3 +77,61 @@ print 'rshift(d, c):', rshift(d, c)
 print 'xor(c, d)   :', xor(c, d)
 
     有两个不同的除法操作符：floordiv()（Python 3.0 版本之前实现的整数除法）和 truediv()（浮点数除法）。
+序列操作符
+    处理序列的操作符可以划分为 4 组：建立序列、搜索元素、访问内容和从序列删除元素。
+
+from operator import *
+
+a = [ 1, 2, 3 ]
+b = [ 'a', 'b', 'c' ]
+
+print 'a =', a
+print 'b =', b
+
+print '\nConstructive:'
+print '  concat(a, b):', concat(a, b)
+print '  repeat(a, 3):', repeat(a, 3)
+
+print '\nSearching:'
+print '  contains(a, 1)  :', contains(a, 1)
+print '  contains(b, "d"):', contains(b, "d")
+print '  countOf(a, 1)   :', countOf(a, 1)
+print '  countOf(b, "d") :', countOf(b, "d")
+print '  indexOf(a, 5)   :', indexOf(a, 1)
+
+print '\nAccess Items:'
+print '  getitem(b, 1)            :', getitem(b, 1)
+print '  getslice(a, 1, 3)        :', getslice(a, 1, 3)
+print '  setitem(b, 1, "d")       :', setitem(b, 1, "d"),
+print ', after b =', b
+print '  setslice(a, 1, 3, [4, 5]):', setslice(a, 1, 3, [4, 5]),
+print ', after a =', a
+
+print '\nDestructive:'
+print '  delitem(b, 1)    :', delitem(b, 1), ', after b =', b
+print '  delslice(a, 1, 3):', delslice(a, 1, 3), ', after a=', a
+
+    其中一些操作（如 setitem() 和 delitem()）会原地修改序列，而不返回任何值。
+原地操作符
+    除了标准操作符外，很多对象类型还通过一些特殊操作符（如 +=）支持“原地”修改。这些原地修改也有相应的等价函数。
+
+from operator import *
+
+a = -1
+b = 5.0
+c = [ 1, 2, 3]
+d = [ 'a', 'b', 'c' ]
+print 'a =', a
+print 'b =', b
+print 'c =', c
+print 'd =', d
+print
+
+a = iadd(a, b)
+print 'a = iadd(a, b) =>', a
+print
+
+c = iconcat(c, d)
+print 'c = oconcat(c, d) =>', c
+
+    这些例子只展示了部分函数。
