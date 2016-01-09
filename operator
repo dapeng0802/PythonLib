@@ -135,3 +135,104 @@ c = iconcat(c, d)
 print 'c = oconcat(c, d) =>', c
 
     这些例子只展示了部分函数。
+属性和元素“获取方法”
+    operator 模块最特别的特性之一是获取方法（getter）的概念。获取方法是运行时构造的一些可回调对象，用来获取对象的属性或序列的内容。获取方法在处理迭代器或生成器序列时特别有用，它们引入的开销会大大低于 lambda 或 Python 函数的开销。
+
+from operator import *
+
+class MyObj(object):
+    """example class for attrgetter"""
+    def __init__(self, arg):
+        super(MyObj, self).__init__()
+        self.arg = arg
+    def __repr__(self):
+        return 'MyObj(%s)' % self.arg
+
+l = [ MyObj(i) for i in xrange(5) ]
+print 'objects   :', l
+
+# Extract thr 'arg' value from each object
+g = attrgetter('arg')
+vals = [ g(i) for i in l ]
+print 'arg values:', vals
+
+# Sort using arg
+l.reverse()
+print 'reversed  :', l
+print 'sorted    :', sorted(l, key=g)
+
+    属性获取方法的工作类似于 lambda x, n='attrname':getattr(x, n);
+    元素获取方法的工作类似于 lambda x, y=5: x[y];
+
+from operator import *
+
+l = [ dict(val=-1 * i) for i in xrange(4) ]
+print 'Dictionaries:', l
+g = itemgetter('val')
+vals = [ g(i) for i in l ]
+print '      values:', vals
+print '      sorted:', sorted(l, key=g)
+print
+l = [ (i, i*-2) for i in xrange(4) ]
+print 'Tuples      :', l
+g = itemgetter(1)
+vals = [ g(i) for i in l ]
+print '      values:', vals
+print '      sorted:', sorted(l, key=g)
+
+    除了序列外，元素获取方法还适用于映射。
+结合操作符和定制类
+    operator 模块中的函数通过相应操作的标准 Python 接口完成工作，所以它们不仅适用于内置类型，还适用于用户定义的类。
+
+from operator import *
+
+class MyObj(object):
+    """example class for attrgetter"""
+    def __init__(self, val):
+        super(MyObj, self).__init__()
+        self.val = val
+        return
+    def __str__(self):
+        return 'MyObj(%s)' % self.val
+    def __lt__(self, other):
+        """compare for less-than"""
+        print 'Testing %s < %s' % (self, other)
+        return self.val < other.val
+    def __add__(self, other):
+        """add values"""
+        print 'Adding %s + %s' % (self, other)
+        return MyObj(self.val + other.val)
+a = MyObj(1)
+b = MyObj(2)
+
+print 'Comparison:'
+print lt(a, b)
+
+print '\nArithmetic:'
+print add(a, b)
+
+类型检查
+    operator 模块还包含一些函数来测试映射、数字和序列的 API 兼容性。
+
+from operator import *
+
+class NoType(object):
+    """Supports none of the type APIs"""
+
+class MultiType(object):
+    """Supports multiple type APIs"""
+    def __len__(slef):
+        return 0
+    def __getitem__(slef, name):
+        return 'mapping'
+    def __int__(self):
+        return 0
+
+o = NoType()
+t = MultiType()
+
+for func in (isMappingType, isNumberType, isSequenceType):
+    print '%s(o):' % func.__name__, func(o)
+    print '%s(t):' % func.__name__, func(t)
+
+    这些测试并不完善，因为接口没有严格定义，不过通过这些测试，确实能让我们对支持哪些功能有所了解。
