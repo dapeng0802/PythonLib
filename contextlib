@@ -1,0 +1,156 @@
+[Python标准库]contextlib——上下文管理器工具
+    作用：创建和处理上下文管理器的工具。
+    Python 版本：2.5 及以后版本
+    contextlib 模块包含一些工具，用于处理上下文管理器和 with 语句。
+上下文管理器 API
+    上下文管理器（context manager）要负责一个代码块中的资源，可能在进入代码块时创建资源，然后在退出代码块时清理这个资源。例如，文件支持上下文管理器 API，可以很容易地确保完成文件读写后关闭文件。
+
+with open('/tmp/pymotw.txt', 'wt') as f:
+    f.write('contents go here')
+# file is automatically closed
+
+    上下文管理器由 with 语句启用，这个 API 包括两个方法。当执行流进入 with 中的代码块时会运行 __enter__() 方法。它会返回一个对象，在这个上下文中使用。当执行流离开 with 块时，则调用这个上下文管理器的 __exit__() 方法来清理所使用的资源。
+
+class Context(object):
+    def __init__(self):
+        print '__init__()'
+    def __enter__(self):
+        print '__enter__()'
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print '__exit__()'
+
+with Context():
+    print 'Doing work in the context'
+
+    结合上下文管理器与 with 语句是 try:finally 块的一种更紧凑的写法，因为上下文管理器的 __exit__() 方法总会调用，即使在产生异常的情况下也是如此。
+    如果在 with 语句的 as 子句中指定了名称，__enter__() 方法可以返回与这个名称相关联的任何对象。在这个例子中，Context 会返回使用了上下文的对象。
+
+class WithinContext(object):
+    def __init__(self, context):
+        print 'WithinContext.__init__(%s)' % context
+    def do_something(self):
+        print 'WithinContext.do_something()'
+    def __del__(self):
+        print 'WithinContext.__del__'
+
+class Context(object):
+    def __init__(self):
+        print 'Context.__init__()'
+    def __enter__(self):
+        print 'Context.__enter__()'
+        return WithinContext(self)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print 'Context.__exit__()'
+
+with Context() as c:
+    c.do_something()
+
+    与变量 c 关联的值是 __enter__() 返回的对象，这不一定是 with 语句中创建的 Context 实例。
+    __exit__() 方法接收一些参数，其中包含 with 块中产生的异常的详细信息。
+
+class Context(object):
+    def __init__(self, handle_error):
+        print '__init__(%s)' % handle_error
+        self.handle_error = handle_error
+    def __enter__(self):
+        print '__enter__()'
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print '__exit__()'
+        print '  exc_type =', exc_type
+        print '  exc_val  =', exc_val
+        print '  exc_tb   =', exc_tb
+        return self.handle_error
+
+with Context(True):
+    raise RuntimeError('error message handled')
+
+print
+
+with Context(False):
+    raise RuntimeError('error message propagated')
+
+    如果上下文管理器可以处理这个异常，__exit__() 应当返回一个 true 值来指示不需要传播这个异常。如果返回 false，就会导致 __exit__() 返回后重新抛出这个异常。
+从生成器到上下文管理器
+    采用传统方式创建上下文管理器，即编写一个包含 __enter__() 和 __exit__() 方法的类，这并不难。不过有些时候，对于很少的上下文来说，完全编写所有代码会是额外的负担。在这些情况下，可以使用 contextmanager() 修饰符将一个生成器函数转换为上下文管理器。
+
+import contextlib
+
+@contextlib.contextmanager
+def make_context():
+    print '  entering'
+    try:
+        yield()
+    except RuntimeError, err:
+        print '  ERROR:',err
+    finally:
+        print '  exiting'
+
+print 'Normal:'
+with make_context() as value:
+    print '  inside with statement:', value
+
+print '\nHandled error:'
+with make_context() as value:
+    raise RuntimeError('showing examle of handling an error')
+
+print '\nUnhandled error:'
+with make_context() as value:
+    raise ValueError('this exception is not handled')
+
+    生成器要初始化上下文，用 yield 生成一次值，然后清理上下文。所生成的值（如果有）会绑定到 with 语句 as 子句中的变量。with 块中的异常会在生成器中重新抛出，使之在生成器中得到处理。
+嵌套上下文
+    有些情况下，必须同时管理多个上下文（例如在输入和输出文件句柄之间复制数据）。为此可以嵌套 with 语句，不过，如果外部上下文并不需要单独的块，嵌套 with 语句就只会增加缩进层次而不会提供任何实际的好处。使用 nested() 可以利用一条 with 语句实现上下文嵌套。
+
+import contextlib
+
+@contextlib.contextmanager
+def make_context(name):
+    print 'entering:', name
+    yield name
+    print 'exiting :', name
+
+with contextlib.nested(make_context('A'),
+                               make_context('B')) as (A, B):
+    print 'inside with statement:', A, B
+
+    程序执行时会按其进入上下文的逆序离开上下文。
+    在 Python 2.7 及以后版本中废弃了 nested()，因为在这些版本中的 with 语句直接支持嵌套。
+
+import contextlib
+
+@contextlib.contextmanager
+def make_context(name):
+    print 'entering:', name
+    yield name
+    print 'exiting :', name
+
+with make_context('A') as A, make_context('B') as B:
+    print 'inside with statement:', A, B
+
+    每个上下文管理器与 as 子句（可选）之间用一个逗号（,）分隔。其效果类似于使用 nested()，不过避免了 nested() 不能正确实现的有关错误处理的一些边界情况。
+关闭打开的句柄
+    file 类直接支持上下文管理器 API，不过表示打开句柄的另外一些对象并不支持这个 API。contextlib 的标准库文档中给出的例子是一个由 urllib.urlopen() 返回的对象。还有另外一些遗留类，它们使用 close() 方法而不支持上下文管理器 API。为了确保关闭句柄，需要使用 closing() 为它创建一个上下文管理器。
+
+import contextlib
+
+class Door(object):
+    def __init__(self):
+        print '  __init__()'
+    def close(self):
+        print '  close()'
+
+print 'Normal Example:'
+with contextlib.closing(Door()) as door:
+    print '  inside with statement'
+
+print '\nError handling example:'
+try:
+    with contextlib.closing(Door()) as door:
+        print '  raising from inside with statement'
+        raise RuntimeError('error message')
+except Exception, err:
+    print '  Had an error:', err
+
+    不论 with 块中是否有一个错误，这个句柄都会关闭。
