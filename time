@@ -1,0 +1,124 @@
+[Python标准库]time——时钟时间
+    作用：管理时钟时间的函数。
+    Python 版本：1.4 及以后版本
+    time 模块提供了一些用于管理日期和时间的 C 库函数。由于它绑定到底层 C 实现，一些细节（如纪元开始时间和支持的最大日期值）会特定于具体的平台。
+壁挂钟时间
+    time 模块的核心函数之一是 time()，它会把从纪元开始以来的秒数作为一个浮点值返回。
+
+import time
+
+print 'The time is:', time.time()
+
+    尽管这个值总是一个浮点数，但具体的精度依赖于具体的平台。
+    浮点数表示对于存储或比较日期很有用，但是对于生成人类可读的表示就有些差强人意了。要记录或打印时间，ctime() 可能更有用。
+
+import time
+
+print 'The time is      :', time.ctime()
+later = time.time() + 15
+print '15 secs from now :', time.ctime(later)
+
+    这个例子中的第二个 print 语句显示了如何使用 ctime() 来格式化当前时间以外的另一个时间值。
+处理器时钟时间
+    time() 返回的是一个壁挂钟时间，而 clock() 会返回处理器时钟时间。clock() 返回的值应当用于性能测试、基准测试等，因为它们反映了程序的实际时间，可能比 time() 返回的值更精确。
+
+import hashlib
+import time
+
+# Data to use to calculate md5 checksums
+data = open(__file__, 'rt').read()
+
+for i in range(5):
+    h = hashlib.sha1()
+    print time.ctime(), ': %0.3f %0.3f' % (time.time(), time.clock())
+    for i in range(300000):
+        h.update(data)
+    cksum = h.digest()
+
+    在这个例子中，每次循环迭代时会打印格式化的 ctime() 时间，以及 time() 和 clock() 返回的浮点数值。
+    一般的，如果程序什么也没有做，处理器时钟不会“滴答”（tick）。
+
+import time
+
+for i in range(6, 1, -1):
+    print '%s %0.2f %0.2f' % (time.ctime(), time.time(), time.clock())
+    print 'Sleeping', i
+    time.sleep(i)
+
+    在这个例子中，循环几乎不做什么工作，每次迭代后都会睡眠。即使应用睡眠，time() 值也会增加，但是 clock() 值不会增加。
+    调用 sleep() 会从当前线程交出控制，要求它等待系统将其再次唤醒。如果程序只有一个线程，这实际上就会阻塞应用，什么也不做。
+时间组成
+    有些情况下需要将时间存储为过去了多少秒（秒数），但是还有一些情况，程序需要访问一个日期的各个字段（年、月等）。time 模块定义了 struct_time 来维护日期和时间值，其中分开存储各个组成部分，以便于访问。很多函数都要处理 struct_time 值而不是浮点值。
+
+import time
+
+def show_struct(s):
+    print '  tm_year :', s.tm_year
+    print '  tm_mon  :', s.tm_mon
+    print '  tm_mday :', s.tm_mday
+    print '  tm_hour :', s.tm_hour
+    print '  tm_min  :', s.tm_min
+    print '  tm_sec  :', s.tm_sec
+    print '  tm_wday :', s.tm_wday
+    print '  tm_yday :', s.tm_yday
+    print '  tm_isdst:', s.tm_isdst
+print 'gmtime:'
+show_struct(time.gmtime())
+print '\nlocaltime:'
+show_struct(time.localtime())
+print '\nmktime:', time.mktime(time.localtime())
+
+    gmtime() 函数以 UTC 格式返回当前时间。localtime() 会返回应用了当前时区的当前时间。mktime() 取一个 struct_time 实例，将它转换为浮点数表示。
+处理时区
+    确定当前时间的函数有一个前提，即已经设置了时区，这可能由程序设置，也可以使用系统的默认时区。修改时区不会改变具体的时间，只是会改变表示时间的方式。
+    要改变时区，需要设置环境变量 TZ，然后调用 tzset()。设置时区时可以指定很多细节，甚至细致到日光节省时间的开始和结束时间。不过，通常更容易的做法是使用时区名，并由底层库推导出其他信息。
+    下面这个示例程序将修改时区值，并说明这些改变对 time 模块中的其他设置有什么影响。
+
+import time
+import os
+
+def show_zone_info():
+    print ' .TZ    :', os.environ.get('TZ', '(not set)')
+    print '  tzname:', time.tzname
+    print '  Zone  : %d (%d)' % (time.timezone, (time.timezone / 3600))
+    print '  DST   :', time.daylight
+    print '  Time  :', time.ctime()
+    print
+
+print 'Default :'
+show_zone_info()
+
+ZONES = [ 'GMT', 'Europe/Amsterdam', ]
+
+for zone in ZONES:
+    os.environ['TZ'] = zone
+    time.tzset()
+    print zone, ':'
+    show_zone_info()
+
+解析和格式化时间
+    time 模块提供了两个函数 strptime() 和 strftime()，可以在 struct_time 和时间值字符串表示之间转换。模块提供了大量格式化指令来支持以不同方式输入和输出。所有这些格式化指令的完整列表参见 time 模块的库文档。
+    下面的这个例子将当前时间从一个字符串转换为一个 struct_time 实例，然后再转换回一个字符串。
+
+import time
+
+def show_struct(s):
+    print '  tm_year :', s.tm_year
+    print '  tm_mon  :', s.tm_mon
+    print '  tm_mday :', s.tm_mday
+    print '  tm_hour :', s.tm_hour
+    print '  tm_min  :', s.tm_min
+    print '  tm_sec  :', s.tm_sec
+    print '  tm_wday :', s.tm_wday
+    print '  tm_yday :', s.tm_yday
+    print '  tm_isdst:', s.tm_isdst
+    
+now = time.ctime()
+print 'Now:', now
+parsed = time.strptime(now)
+print '\nParsed:'
+show_struct(parsed)
+
+print '\nFormatted:', time.strftime("%a %b %d %H:%M:%S %Y", parsed)
+
+输出字符串与输入字符串并不完全相同，比如，若日期为一位数字，则日期前面加了一个前缀 0（如由“4”变为“04”）。
