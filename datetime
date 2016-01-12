@@ -1,0 +1,216 @@
+[Python标准库]datetime——日期和时间值管理
+    作用：datetime 模块包含一些函数和类，用于完成日期和时间解析、格式化和算术运算。
+    Python 版本：2.3 及以后版本
+    datetime 包含一些用于处理日期和时间的函数和类，这些函数和类可以单独使用，也可以结合使用。
+时间
+    时间值用 time 类表示。time 实例包含 hour、minute、second 和 microsecond 属性，还可以包含时区信息。
+
+import datetime
+
+t = datetime.time(1, 2, 3)
+print t
+print 'hour       :', t.hour
+print 'minute     :', t.minute
+print 'second     :', t.second
+print 'microsecond:', t.microsecond
+print 'tzinfo     :', t.tzinfo
+
+    初始化 time 实例的参数是可选的，不过默认值 0 往往不会是正确的设置。
+    time 实例只包含时间值，而不包含与时间关联的日期值。
+
+import datetime
+
+print 'Earliest  :', datetime.time.min
+print 'Lastest   :', datetime.time.max
+print 'Resolution:', datetime.time.resolution
+
+    min 和 max类属性可以反映一天中的合法时间范围。
+    time 的分辨率限制为整毫秒值。
+
+import datetime
+
+for m in [ 1, 0, 0.1, 0.6 ]:
+    try:
+        print '%02.1f:' % m, datetime.time(0, 0, 0, microsecond=m)
+    except TypeError, err:
+        print 'ERROR:', err
+
+    处理浮点数值得方式取决于 Python 的版本。版本 2.7 会产生一个 TypeError，而更早的版本会生成一个 DeprecationWarning，并把浮点数转换为一个整数。
+日期
+    日历日期值用 date 类表示。date 实例包含 year、month 和 day 属性。使用 today() 类方法很容易创建一个表示当前日期的日期实例。
+
+import datetime
+
+today = datetime.date.today()
+print today
+print 'ctime  :', today.ctime()
+tt = today.timetuple()
+print 'tuple  : tm_year  =', tt.tm_year
+print '         tm_mon   =', tt.tm_mon
+print '         tm_mday  =', tt.tm_mday
+print '         tm_hour  =', tt.tm_hour
+print '         tm_min   =', tt.tm_min
+print '         tm_sec   =', tt.tm_sec
+print '         tm_wday  =', tt.tm_wday
+print '         tm_yday  =', tt.tm_yday
+print '         tm_isdst =', tt.tm_isdst
+print 'ordinal:', today.toordinal()
+print 'Year   :', today.year
+print 'Mon    :', today.month
+print 'Day    :', today.day
+
+    上面这个例子采用多种不同格式打印当前日期。
+    还有一些类方法可以由 POSIX 时间戳或表示 Gregorian 日历中日期值的整数（第 1 年的 1 月 1 日对应的整数为 1，以后每天对应的值相应增 1）来创建 date 实例。
+
+import datetime
+import time
+
+o = 733114
+print 'o               :', o
+print 'fromordinal(o)  :', datetime.date.fromordinal(o)
+
+t = time.time()
+print 't               :', t
+print 'fromtimestamp(t):', datetime.date.fromtimestamp(t)
+
+    这个例子表明 fromordinal() 和 fromtimestamp() 使用了不同的值类型。
+    与 time 类似，可以使用 min 和 max 属性确定所支持的日期值范围。
+
+import datetime
+
+print 'Earliest  :', datetime.date.min
+print 'Lastest   :', datetime.date.max
+print 'Resolution:', datetime.date.resolution
+
+    日期的分辨率为整天。
+    创建新的 date 实例还有一种方法，可以使用一个现有 date 的 replace() 方法来创建。
+
+import datetime
+
+d1 = datetime.date(2008, 4, 29)
+print 'd1:', d1.ctime()
+d2 = d1.replace(year=2009)
+print 'd2:', d2.ctime()
+
+    上面这个例子会改变年，但日和月保持不变。
+timedelta
+    通过对两个 datetime 对象使用算术运算，或者结合使用一个 datetime 和一个 timedelta，可以计算出将来和过去的一些日期。将两个日期相减可以生成一个 timedelta，还可以对某个日期增加或减去一个 timedelta 来生成另一个日期。timedelta 的内部值按日、秒和毫秒存储。
+
+import datetime
+
+print "microseconds:", datetime.timedelta(microseconds=1)
+print "milliseconds:", datetime.timedelta(milliseconds=1)
+print "seconds     :", datetime.timedelta(seconds=1)
+print "minutes     :", datetime.timedelta(minutes=1)
+print "hours       :", datetime.timedelta(hours=1)
+print "days        :", datetime.timedelta(days=1)
+print "weeks       :", datetime.timedelta(weeks=1)
+
+    传入构造函数的中间值会转换为日、秒和毫秒。
+    一个 timedelta 的完整时间段可以使用 total_seconds() 得到，作为一个秒数返回。
+
+import datetime
+
+for delta in [datetime.timedelta(microseconds=1),
+              datetime.timedelta(milliseconds=1),
+              datetime.timedelta(seconds=1),
+              datetime.timedelta(minutes=1),
+              datetime.timedelta(hours=1),
+              datetime.timedelta(days=1),
+              datetime.timedelta(weeks=1),
+              ]:
+    print '%15s = %s seconds' % (delta, delta.total_seconds())
+
+    返回值是一个浮点数，因为有些时间段不到 1 秒。
+日期算术运算
+    日期算术运算使用标准算术操作符来完成。
+
+import datetime
+
+today = datetime.date.today()
+print 'Today    :', today
+one_day = datetime.timedelta(days=1)
+print 'One day  :', one_day
+
+yesterday = today - one_day
+print 'Yesterday:', yesterday
+tomorrow = today + one_day
+print 'Tomorrow :', tomorrow
+
+print
+print 'tomorrow - yesterday:', tomorrow - yesterday
+print 'yesterday - tomorrow:', yesterday - tomorrow
+
+    这个处理日期对象的例子展示了使用 timedelta 对象来计算新日期，以及将日期实例相减来生成 timedelta（包括一个负差异值）。
+比较值
+    日期和时间值都可以使用标准比较操作符来比较，确定哪一个在前或在后。
+
+import datetime
+import time
+
+print 'Times:'
+t1 = datetime.time(12, 55, 0)
+print '  t1:', t1
+t2 = datetime.time(13, 5, 0)
+print '  t2:', t2
+print '  t1 < t2:', t1 < t2
+
+print
+print 'Dates:'
+d1 = datetime.date.today()
+print '  d1:', d1
+d2 = datetime.date.today() + datetime.timedelta(days=1)
+print '  d2:', d2
+print '  d1 > d2:', d1 > d2
+
+    所有比较操作符都得到支持。
+结合日期和时间
+    使用 datetime 类可以存储有日期和时间分量构成的值。类似于 date，可以使用很多便利的类方法由其他常用值创建 datetime 实例。
+
+import datetime
+
+print 'Now    :', datetime.datetime.now()
+print 'Today  :', datetime.datetime.today()
+print 'UTC Now:', datetime.datetime.utcnow()
+print
+
+FIELDS = [ 'year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond', ]
+
+d = datetime.datetime.now()
+for attr in FIELDS:
+    print '%15s: %s' % (attr, getattr(d, attr))
+
+    可以想见，datetime 实例包含 date 和 time 对象的所有属性。
+    与 date 类似，datetime 提供了方便的类方法来创建新实例。它还包括 fromordinal() 和 fromtimestamp()。
+
+import datetime
+
+t = datetime.time(1, 2, 3)
+print 't :', t
+
+d = datetime.date.today()
+print 'd :', d
+
+dt = datetime.datetime.combine(d, t)
+print 'dt:', dt
+
+    利用 combine()，可以有一个 date 实例和一个 time 实例创建一个 datetime 实例。
+格式化和解析
+    datetime 对象的默认字符串表示使用 ISO-8601 格式（YYYY-MM-DDTHH:MM:SS.mmmmmm）。可以使用 strftime() 生成其他格式。
+
+import datetime
+
+format = "%a %b %d %H:%M:%S %Y"
+
+today = datetime.datetime.today()
+print 'ISO     :', today
+
+s = today.strftime(format)
+print 'strftime:', s
+
+d = datetime.datetime.strptime(s, format)
+print 'strptime:', d.strftime(format)
+
+    使用 datetime.strptime() 可以将格式化的字符串转换为 datetime 实例。
+时区
+    在 datetime 中，时区由 tzinfo 的子类表示。由于 tzinfo 是一个抽象基类，实际使用时，应用需要定义它的一个子类，并提供一些方法的适当的表示。遗憾的是，datetime 未包含任何可供使用的具体实现（不过文档提供了一些示例实现）。pytz 也是一个了解时区实现细节的很好的资源。
