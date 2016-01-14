@@ -1,0 +1,235 @@
+[Python标准库]decimal——定点数和浮点数的数学运算
+    作用：使用定点数和浮点数的小数运算。
+    Python 版本：2.4 及以后版本
+    decimal 模块实现了定点和浮点算术运算符，使用的是大多数人所熟悉的模型，而不是程序员熟悉的模型，即大多数计算机硬件实现的 IEEE 浮点数运算。Decimal 实例可以准确地表示任何数，对其上取整或下取整，还可以对有效数字个数加以限制。
+Decimal
+    小数值表示为 Decimal 类的实例。构造函数取一个整数或字符串作为参数。使用浮点数创建 Decimal 之前，可以先将浮点数转换为一个字符串，使调用者能够显式地处理值得位数，倘若使用硬件浮点数表示则无法准确地表述。另外，利用类方法 from_float() 可以转换为精确的小数表示。
+
+import decimal
+
+fmt = '{0:<25} {1:<25}'
+print fmt.format('Input', 'Output')
+print fmt.format('-' * 25, '-' * 25)
+
+# Integer
+print fmt.format(5, decimal.Decimal(5))
+
+# String
+print fmt.format('3.14', decimal.Decimal('3.14'))
+
+# Float
+f = 0.1
+print fmt.format(repr(f), decimal.Decimal(str(f)))
+print fmt.format('%.23g' % f, str(decimal.Decimal.from_float(f))[:25])
+
+    浮点数值 0.1 并不表示为一个精确的二进制值，所以 float 的表示与 Decimal 值不同。在这个输出中它被截断为 25 个字符。
+    Decimal 还可以由元组创建，其中包含一个符号标志（0 表示正，1 表示负）、数字 tuple 以及一个整数指数。
+
+import decimal
+
+# Tuple
+t = (1, (1, 1), -2)
+print 'Input  :', t
+print 'Decimal:', decimal.Decimal(t)
+
+    基于元组的表示创建时不太方便，不过它提供了一种可移植的方式，可以导出小数值而不会损失精度。tuple 形式可以在网络上传输，或者在不支持精确小数值得数据库中存储，以后再转回回 Decimal 实例。
+算术运算
+    Decimal 重载了简单的算术运算符，所以可以采用内置数值类型同样的方式处理 Decimal 实例。
+
+import decimal
+
+a = decimal.Decimal('5.1')
+b = decimal.Decimal('3.14')
+c = 4
+d = 3.14
+
+print 'a     =', repr(a)
+print 'b     =', repr(b)
+print 'c     =', repr(c)
+print 'd     =', repr(d)
+print
+
+print 'a + b =', a + b
+print 'a - b =', a - b
+print 'a * b =', a * b
+print 'a / b =', a / b
+print
+
+print 'a + c =', a + c
+print 'a - c =', a - c
+print 'a * c =', a * c
+print 'a / c =', a / c
+print
+
+print 'a + d =',
+try:
+    print a + d
+except TypeError, e:
+    print e
+
+    Decimal 运算符还接受整数参数，不过浮点数值必须转换为 Decimal 实例。
+    除了基本算术运算，Decimal 还包括一些方法来查找以 10 为底的对数和自然对数。log10() 和 ln() 返回的值都是 Decimal 实例，所以可以与其他值一样直接在公式中使用。
+特殊值
+    除了期望的数字值，Decimal 还可以表示很多特殊值，包括正负无穷大值、“不是一个数”（NaN）和 0。
+
+import decimal
+
+for value in [ 'Infinity', 'NaN', '0' ]:
+    print decimal.Decimal(value), decimal.Decimal('-' + value)
+print
+
+# Math with infinity
+print 'Infinity + 1:', (decimal.Decimal('Infinity') + 1)
+print '-Infinity + 1:', (decimal.Decimal('-Infinity') + 1)
+
+# Print comparing NaN
+print decimal.Decimal('NaN') == decimal.Decimal('Infinity')
+print decimal.Decimal('NaN') != decimal.Decimal(1)
+
+    与无穷大值相加会返回另一个无穷大值。与 NaN 比较相等性总会返回 false，而比较不等性总会返回 true。与 NaN 比较大小来确定排序顺序没有明确定义，这会导致一个错误。
+上下文
+    到目前为止，前面的例子使用的都是 decimal 模块的默认行为。还可以使用一个上下文（context）覆盖某些设置，如保持精度、如何完成取整、错误处理等等。上下文可以应用于一个线程中的所有 Decimal 实例，或者局部应用于一个小代码区。
+    1. 当前上下文
+    要获取当前全局上下文，可以使用 getcontext()。
+
+import decimal
+import pprint
+
+context = decimal.getcontext()
+
+print 'Emax     =', context.Emax
+print 'Emin     =', context.Emin
+print 'capitals =', context.capitals
+print 'prec     =', context.prec
+print 'rounding =', context.rounding
+print 'flags    ='
+pprint.pprint(context.flags)
+print 'traps    ='
+pprint.pprint(context.traps)
+
+    这个示例脚本显示了 Context 的公共属性。
+精度
+    上下文的 prec 属性控制着作为算术运算结果所创建的新值的精度。字面量值会按这个属性保持精度。
+
+import decimal
+
+d = decimal.Decimal('0.123456')
+for i in range(4):
+    decimal.getcontext().prec = i
+    print i, ':', d, d * 1
+
+    要改变精度，可以直接为这个属性赋一个新值。
+取整
+    取整有多种选择，以保证值在所需精度范围内。
+    ROUND_CEILING 总是趋向于无穷大向上取整。
+    ROUND_DOWN 总是趋向 0 取整。
+    ROUND_FLOOR 总是趋向负无穷大向下取整。
+    ROUND_HALF_DOWN 如果最后一个有效数字大于或等于 5 则朝 0 反方向取整；否则，趋向 0 取整。
+    ROUND_HALF_EVEN 类似于 ROUND_HALF_DOWN，不过，如果最后一个有效数字值为 5，则会检查前一位。偶数值会导致结果向下取整，奇数值导致结果向上取整。
+    ROUND_HALF_UP 类似于 ROUND_HALF_DOWN，不过如果最后一位有效数字为 5，值会朝 0 的反方向取整。
+    ROUND_UP 朝 0 的反方向取整。
+    ROUND_05UP 如果最后一位是 0 或 5，则朝 0 的反方向取整；否则向 0 取整。
+
+import decimal
+
+context = decimal.getcontext()
+
+ROUNDING_MODES = [
+    'ROUND_CEILING',
+    'ROUND_DOWN',
+    'ROUND_FLOOR',
+    'ROUND_HALF_DOWN',
+    'ROUND_HALF_EVEN',
+    'ROUND_HALF_UP',
+    'ROUND_UP',
+    'ROUND_05UP',
+    ]
+header_fmt = '{:10} ' + ' '.join(['{:^8}'] * 6)
+print header_fmt.format(' ',
+                        '1/8 (1)', '-1/8 (1)',
+                        '1/8 (2)', '-1/8 (2)',
+                        '1/8 (3)', '-1/8 (3)',
+                        )
+for rounding_mode in ROUNDING_MODES:
+    print '{0:10}'.format(rounding_mode.partition('_')[-1]),
+    for precision in [ 1, 2, 3 ]:
+        context.prec = precision
+        context.rounding = getattr(decimal, rounding_mode)
+        value = decimal.Decimal(1) / decimal.Decimal(8)
+        print '{0:^8}'.format(value),
+        value = decimal.Decimal(-1) / decimal.Decimal(8)
+        print '{0:^8}'.format(value),
+    print
+
+    这个程序显示了使用不同算法将同一个值取整为不同精度的效果。
+局部上下文
+    使用 Python 2.5 或以后版本时，可以使用 with 语句对一个代码块应用上下文。
+
+import decimal
+
+with decimal.localcontext() as c:
+    c.prec = 2
+    print 'Local precision:', c.prec
+    print '3.14 / 3 =', (decimal.Decimal('3.14') / 3)
+print
+print 'Default precision:', decimal.getcontext().prec
+print '3.14 / 3 =', (decimal.Decimal('3.14') / 3)
+
+    Context 支持 with 使用的上下文管理器 API，所以这个设置只在块内应用。
+各实例上下文
+    上下文还可以用来构造 Decimal 实例，然后可以从这个上下文继承精度和转换的取整参数。
+
+import decimal
+
+# Set up a context with limited precision
+c = decimal.getcontext().copy()
+c.prec = 3
+
+# Create our constant
+pi = c.create_decimal('3.1415')
+
+# The constant value is rounded off
+print 'PI    :', pi
+
+# The result of using the constant uses the global context
+print 'RESULT:', decimal.Decimal('2.01') * pi
+
+    这样一来，应用就可以区别于用户数据精度而另外选择常量值精度。
+线程
+    “全局”上下文实际上是线程本地上下文，所以完全可以使用不同的值分别配置各个线程。
+
+import decimal
+import threading
+from Queue import PriorityQueue
+
+class Multiplier(threading.Thread):
+    def __init__(self, a, b, prec, q):
+        self.a = a
+        self.b = b
+        self.prec = prec
+        self.q = q
+        threading.Thread.__init__(self)
+    def run(self):
+        c = decimal.getcontext().copy()
+        c.prec = self.prec
+        decimal.setcontext(c)
+        self.q.put( (self.prec, a * b) )
+        return
+
+a = decimal.Decimal('3.14')
+b = decimal.Decimal('1.234')
+# A PriorityQueue will return values sorted by precision, no matter
+# what order the threads finish.
+q = PriorityQueue()
+threads = [ Multiplier(a, b, i, q) for i in range(1, 6) ]
+for t in threads:
+    t.start()
+
+for t in threads:
+    t.join()
+
+for i in range(5):
+    prec, value = q.get()
+    print prec, '\t', value
+
+    这个例子使用指定的值创建一个新的上下文，然后安装到各个线程中。
