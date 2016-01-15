@@ -108,7 +108,7 @@ print 'traps    ='
 pprint.pprint(context.traps)
 
     这个示例脚本显示了 Context 的公共属性。
-精度
+    2. 精度
     上下文的 prec 属性控制着作为算术运算结果所创建的新值的精度。字面量值会按这个属性保持精度。
 
 import decimal
@@ -119,7 +119,7 @@ for i in range(4):
     print i, ':', d, d * 1
 
     要改变精度，可以直接为这个属性赋一个新值。
-取整
+    3. 取整
     取整有多种选择，以保证值在所需精度范围内。
     ROUND_CEILING 总是趋向于无穷大向上取整。
     ROUND_DOWN 总是趋向 0 取整。
@@ -162,7 +162,7 @@ for rounding_mode in ROUNDING_MODES:
     print
 
     这个程序显示了使用不同算法将同一个值取整为不同精度的效果。
-局部上下文
+    4. 局部上下文
     使用 Python 2.5 或以后版本时，可以使用 with 语句对一个代码块应用上下文。
 
 import decimal
@@ -176,7 +176,7 @@ print 'Default precision:', decimal.getcontext().prec
 print '3.14 / 3 =', (decimal.Decimal('3.14') / 3)
 
     Context 支持 with 使用的上下文管理器 API，所以这个设置只在块内应用。
-各实例上下文
+    5. 各实例上下文
     上下文还可以用来构造 Decimal 实例，然后可以从这个上下文继承精度和转换的取整参数。
 
 import decimal
@@ -195,7 +195,7 @@ print 'PI    :', pi
 print 'RESULT:', decimal.Decimal('2.01') * pi
 
     这样一来，应用就可以区别于用户数据精度而另外选择常量值精度。
-线程
+    6. 线程
     “全局”上下文实际上是线程本地上下文，所以完全可以使用不同的值分别配置各个线程。
 
 import decimal
