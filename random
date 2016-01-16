@@ -1,0 +1,115 @@
+[Python标准库]random——伪随机数生成器
+    作用：实现了多种类型的伪随机数生成器。
+    Python 版本：1.4 及以后版本
+    random 模块基于 Mersenne Twister 算法提供了一个快速伪随机数生成器。原先开发这个生成器是为了向蒙特卡洛模拟生成输入，Mersenne Twister算法会生成有一个大周期的近均匀分布的数，以适用于各种类型的应用。
+生成随机数
+    random() 函数从所生成的序列返回下一个随机的浮点数值。返回的所有值都落在 0 <= n < 1.0 区间内。
+
+import random
+
+for i in xrange(5):
+    print '%04.3f' % random.random(),
+print
+
+    重复运行这个程序会生成不同的数字序列。
+    要生成一个指定数值区间内的数，则要使用 uniform()。
+
+import random
+
+for i in xrange(5):
+    print '%04.3f' % random.uniform(1, 100),
+print
+
+    传入最小值和最大值，uniform() 会使用公式 min + (max - min) * random() 来调整 random() 的返回值。
+指定种子
+    每次调用 random() 会生成不同的值，在一个非常大的周期之后数字才会重复。这对于生成唯一值或变化的值很有用，不过有些情况下可能需要提供相同的数据集，从而以不同的方式处理。对此，一种技术是使用一个程序来生成随机值，并保存这些随机值，以便通过一个单独的步骤另行处理。不过，这对于量很大的数据来说可能并不实用，所以 random 包含了一个 seed() 函数，用来初始化伪随机数生成器，使它能生成一个期望的值集。
+
+import random
+
+random.seed(1)
+
+for i in xrange(5):
+    print '%04.3f' % random.random(),
+print
+
+    种子（seed）值会控制生成伪随机数所用公式产生的第一个值，由于公式是确定性的，改变种子后也就设置了要生成的整个序列。seed() 的参数可以是任意可散列对象。默认为使用一个平台特定的随机源（如果有的话）。否则，如果没有这样一个随机源，则会使用当前时间。
+保存状态
+    random() 使用的伪随机算法的内部状态可以保存，并用于控制后续各轮生成的随机数。继续生成随机数之前恢复一个状态，这会减少由之前输入得到重复的值或值序列的可能性。getstate() 函数会返回一些数据，以后可以用 setstate() 利用这些数据重新初始化伪随机数生成器。
+
+import random
+import os
+import cPickle as pickle
+
+if os.path.exists('state.dat'):
+    # Restore the previously saved state
+    print 'Found state.dat, initializing random module'
+    with open('state.dat', 'rb') as f:
+        state = pickle.load(f)
+    random.setstate(state)
+else:
+    # Use a well-known start state
+    print 'No state.dat, seeding'
+    random.seed(1)
+
+# Produce random values
+for i in xrange(3):
+    print '%04.3f' % random.random(),
+print
+# Save state for next time
+with open('state.dat', 'wb') as f:
+    pickle.dump(random.getstate(), f)
+
+# Produce more random values
+print '\nAfter saving state:'
+for i in xrange(3):
+    print '%04.3f' % random.random(),
+print
+
+    getstate() 返回的数据是一个实现细节，所以这个例子用 pickle 将数据保存到一个文件，不过可以把它当作一个黑盒。如果程序开始时这个文件存在，则加载原来的状态并继续。每次运行时都会在保存状态之前以及之后生成一些数，以展示恢复状态会导致生成器再次生成同样的值。
+随机整数
+    random() 将生成浮点数。可以把结果转换为整数，不过直接使用 randint() 生成整数会更方便。
+
+import random
+
+print '[1, 100]:',
+for i in xrange(3):
+    print random.randint(1, 100),
+
+print '\n[-5, 5]:',
+for i in xrange(3):
+    print random.randint(-5, 5),
+print
+
+    random() 的参数是值的闭区间的两端。这些数可以是正数或负数，不过第一个值要小于第二个值。
+    randrange() 是从区间选择值的一种更一般的形式。
+
+import random
+
+for i in xrange(3):
+    print random.randrange(0, 101, 5),
+print
+
+    除了开始值（start）和结束值（stop），randrange() 还支持一个步长（step）参数，所以它完全等价于从 range(start, stop, step) 选择一个随机值。不过 randrange 更高效，因为它并没有真正构造区间。
+选择随机元素
+    随机数生成器有一种常见用法，即从一个枚举值序列中选择元素，即使这些值并不是数字。random 包括一个 choice() 函数，可以在一个序列中随机选择。下面这个例子模拟抛硬币 10000 次，来统计多少次面朝上，多少次面朝下。
+
+import random
+import itertools
+
+outcomes = { 'heads':0,
+             'tails':0,
+             }
+sides = outcomes.keys()
+
+for i in range(10000):
+    outcomes[ random.choice(sides) ] += 1
+
+print 'Heads:', outcomes['heads']
+print 'Tails:', outcomes['tails']
+
+    由于只允许两个结果，所以不必使用数字然后再进行转换，这里对 choice() 使用了单词“heads”（表示面朝上）和“tails”（表示面朝下）。结果以表格形式存储在一个字典中，使用结果名作为键。
+排列
+    要模拟一个扑克牌游戏，需要把一副牌混起来，然后向玩家发牌，同一张牌不能多次使用。使用 choice() 可能导致同一张牌被发出两次，所以，可以用 shuffle() 来洗牌，然后在发各张牌时删除所发的牌。
+
+
+    这些扑克牌表示为元组，由面值和一个表示花色的字母组成。要创建已发出“一手牌”，可以一次向 4 个列表分别增加一张牌，然后从这副牌中将其删除，使这些牌不会再次发出。
