@@ -111,5 +111,146 @@ print 'Tails:', outcomes['tails']
 排列
     要模拟一个扑克牌游戏，需要把一副牌混起来，然后向玩家发牌，同一张牌不能多次使用。使用 choice() 可能导致同一张牌被发出两次，所以，可以用 shuffle() 来洗牌，然后在发各张牌时删除所发的牌。
 
+import random
+import itertools
+
+FACE_CARDS = ('J', 'Q', 'K', 'A')
+SUITS = ('H', 'D', 'C', 'S')
+
+def new_deck():
+    return list(itertools.product(
+            itertools.chain(xrange(2, 11), FACE_CARDS),
+            SUITS,
+            ))
+def show_deck(deck):
+    p_deck = deck[:]
+    while p_deck:
+        row = p_deck[:13]
+        p_deck = p_deck[13:]
+        for j in row:
+            print '%2s%s' % j,
+        print
+
+# Make a new deck, with the cards in order
+deck = new_deck()
+print 'Initial deck:'
+show_deck(deck)
+
+# Shuffle the deck to randomize the order
+random.shuffle(deck)
+print '\nShuffled deck:'
+show_deck(deck)
+
+# Deal 4 hands of 5 cards each
+hands = [ [], [], [], [] ]
+
+for i in xrange(5):
+    for h in hands:
+        h.append(deck.pop())
+
+# Show the hands
+print '\nHands:'
+for n, h in enumerate(hands):
+    print '%d:' % (n + 1),
+    for c in h:
+        print '%2s%s' % c,
+    print
+
+# Show the remaining deck
+print '\nRemining deck:'
+show_deck(deck)
 
     这些扑克牌表示为元组，由面值和一个表示花色的字母组成。要创建已发出“一手牌”，可以一次向 4 个列表分别增加一张牌，然后从这副牌中将其删除，使这些牌不会再次发出。
+采样
+    很多模拟需要从大量输入值中得到随机样本。sample() 函数可以生成无重复值的样本，且不会修改输入序列。下面的例子会打印系统字典中单词的一个随机样本。
+
+import random
+
+with open('/usr/share/dict/words', 'rt') as f:
+    words = f.readlines()
+words = [ w.rstrip() for w in words ]
+
+for w in random.sample(words, 5):
+    print w
+
+    生成结果集的算法会考虑输入的规模和所请求的样本，从而尽可能高效地生成结果。
+多个并发生成器
+    除了模块级函数，random 还包括一个 Random 类来管理多个随机数生成器的内部状态。之前介绍的所有函数都可以作为 Random 实例的方法得到，而且各个实例可以单独初始化和使用，而不会与其他实例返回的值相互干扰。
+
+import random
+import time
+
+print 'Default initializion:\n'
+
+r1 = random.Random()
+r2 = random.Random()
+
+for i in xrange(3):
+    print '%04.3f  %04.3f' % (r1.random(), r2.random())
+
+print '\nSame seed:\n'
+
+seed = time.time()
+r1 = random.Random(seed)
+r2 = random.Random(seed)
+
+for i in xrange(3):
+    print '%04.3f %04.3f' % (r1.random(), r2.random())
+
+    如果系统上设置了很好的内置随机值种子，不同实例会有唯一的初始状态。不过，如果没有一个好的平台随机值生成器，不同实例往往会用当前时间作为种子，因此会生成相同的值。
+    为了确保生成器从随机周期的不同部分生成值，可以使用 jumpahead() 调整其中一个生成器的初始状态。
+
+import random
+import time
+
+r1 = random.Random()
+r2 = random.Random()
+
+# Force r2 to a different part of the random period than r1.
+r2.setstate(r1.getstate())
+r2.jumpahead(1024)
+
+for i in xrange(3):
+    print '%04.3f  %04.3f' % (r1.random(), r2.random())
+
+    jumpahead() 的参数应当是基于各生成器所需值个数的一个非负整数。生成器的内部状态根据这个输入值调整，但并不只是按给定的步数递增。
+SystemRandom
+    有些操作系统提供了一个随机数生成器，可以访问更多能够引入生成器的信息源。random 通过 SystemRandom 类提供了这个特性，这个类与 Random 的 API 相同，不过使用 os.urandom() 生成值，这构成了所有其他算法的基础。
+
+import random
+import time
+
+print 'Default initializion:\n'
+
+r1 = random.SystemRandom()
+r2 = random.SystemRandom()
+
+for i in xrange(3):
+    print '%04.3f  %04.3f' % (r1.random(), r2.random())
+
+print '\nSame seed:\n'
+
+seed = time.time()
+r1 = random.SystemRandom(seed)
+r2 = random.SystemRandom(seed)
+
+for i in xrange(3):
+    print '%04.3f %04.3f' % (r1.random(), r2.random())
+
+    SystemRandom 产生的序列是不可再生的，因为其随机性来自系统，而不是来自软件状态（实际上，seed() 和 setstate() 根本不起作用）。
+非均匀分布
+    random() 生成的值为均匀分布，这对于很多用途来说非常有用，不过，另外一些分布可以更准确地对特定情况建模。random 模块还包含一些函数来生成这样一些分布的值。这里将列出这些分布，但是并不打算详细介绍，因为它们往往只在特定条件下使用，而且需要更复杂的例子来说明。
+    1. 正态分布
+    正态分布（normal distribution）常用于非均匀的连续值，如梯度、高度、重量等等。正态分布产生的曲线有一个独特形状，所以被昵称为“钟形曲线”。random 包含两个函数可以生成正态分布的值，分别是 normalvariate() 和稍快一些的 gauss()。（正态分布也称为高斯分布）
+    还有一个相关的函数 lognormvariate()，它可以生成对数呈正态分布的伪随机值。对数正态分布适用于多个不交互随机变量的积。
+    2. 近似分布
+    三角分布用于小样本的近似分布。三角分布的“曲线”中，低点在已知的最小和最大值，在模式值处有一个高点，这要根据“最接近”的结果（由 trianglar() 的模式参数反映）来估计。
+    3. 指数分布
+    expovariate() 可以生成一个指数分布，这对于模拟到达或间隔时间值用于齐次泊松过程会很有用，如放射衰变速度或到达 Web 服务器的请求。
+    很多可观察的现象都适用帕累托分布或幂律分布，这个分布因 Chris Anderson 的“长尾效应”而普及。paretovariate() 函数对于模拟资源分配很有用（人的财富、音乐家的需求、对博客的关注，等等）。
+    4. 角分布
+    米塞斯分布或圆正态分布（由 vonmisesvariate() 生成）用于计算周期值的概率，如角度，日历日期和时间。
+    5. 大小分布
+    betavariate() 生成 Beta 分布的值，常用于贝叶斯统计和应用，如任务持续时间建模。
+    gammavariate() 生成的伽玛分布用于对事物的大小建模，如等待时间、雨量和计算错误。
+    weibullvariate() 计算的韦伯分布用于故障分析、工业工程和天气预报。它描述了粒子或其他离散对象的大小分布。
