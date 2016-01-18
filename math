@@ -1,0 +1,69 @@
+[python标准库]math——数学函数
+    作用：提供函数完成特殊的数学运算。
+    Python 版本：1.4 及以后版本
+    math 模块实现了正常情况下内置平台 C 库中才有的很多 IEEE 函数，可以使用浮点值完成复杂的数学运算，包括对数和三角函数运算。
+特殊常量
+    很多数学运算依赖于一些特殊的常量。math 包含有 π（pi）和 e 的值。
+
+import math
+
+print 'π: %.30f' % math.pi
+print 'e: %.30f' % math.e
+
+    这两个值的精度仅接受平台的浮点数 C 库限制。
+测试异常值
+    浮点数计算可能导致两种类型的异常值。第一种是 INF（无穷大），如果用 double 存储一个浮点数值，而它相对于一个很大绝对的值溢出时，就会出现这个异常值。
+
+import math
+
+print '{:^3}  {:6}  {:6}  {:6}'.format('e', 'x', 'x**2', 'isinf')
+print '{:-^3}  {:-^6}  {:-^6}  {:-^6}'.format('', '', '', '')
+
+for e in range(0, 201, 20):
+    x = 10.0 ** e
+    y = x*x
+    print '{:3d}  {!s:6}  {!s:6}  {!s:6}'.format(e, x, y, math.isinf(y),)
+
+    这个例子中的指数变得足够大时，x 的平方无法再存放在一个 double 中，这个值就会记录为无穷大。
+    不过，并不是所有浮点数溢出都会导致 INF 值。具体地，用浮点数值计算一个指数时，会生成 OverflowError 而不是保留 INF 结果。
+
+x = 10.0 ** 200
+
+print 'x    =', x
+print 'x*x  =', x*x
+try:
+    print 'x**2 =', x**2
+except OverflowError, err:
+    print err
+
+    这种差异是由 C 和 Python 所用库中的实现差别造成的。
+    使用无穷大值的除法运算未定义。将一个数除以无穷大值的结果是 NaN（即不是一个数）。
+
+import math
+
+x = (10.0 ** 200) * (10.0 ** 200)
+y = x/x
+
+print 'x =', x
+print 'isnan(x) =', math.isnan(x)
+print 'y = x / x =', x/x
+print 'y == nan =', y == float('nan')
+print 'isnan(y) =', math.isnan(y)
+
+    NaN 不会等于任何值，甚至不等于其自身，所以要想检查 NaN，需要使用 isnan()。
+转换为整数
+    math 模块包括 3 个函数用于将浮点数值转换为整数。这 3 个函数分别采用不同的方法，并适用于不同的场合。
+    最简单的是 trunc()，这会截断小数点后的数字，只留下构成这个值整数部分的有效数字。floor() 将其输入转换为不大于它的最大整数，ceil()（上限）会生成按序列排在这个输入值之后的最小整数。
+
+import math
+
+x = (10.0 ** 200) * (10.0 ** 200)
+y = x/x
+
+print 'x =', x
+print 'isnan(x) =', math.isnan(x)
+print 'y = x / x =', x/x
+print 'y == nan =', y == float('nan')
+print 'isnan(y) =', math.isnan(y)
+
+    trunc() 等价于直接转换为 int。
