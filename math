@@ -57,13 +57,83 @@ print 'isnan(y) =', math.isnan(y)
 
 import math
 
-x = (10.0 ** 200) * (10.0 ** 200)
-y = x/x
+HEADINGS = ('i', 'int', 'trunk', 'floor', 'ceil')
+print '{:^5}  {:^5}  {:^5}  {:^5}  {:^5}'.format(*HEADINGS)
+print '{:-^5}  {:-^5}  {:-^5}  {:-^5}  {:-^5}'.format('', '', '', '', '',)
 
-print 'x =', x
-print 'isnan(x) =', math.isnan(x)
-print 'y = x / x =', x/x
-print 'y == nan =', y == float('nan')
-print 'isnan(y) =', math.isnan(y)
+fmt = '  '.join(['{:5.1f}'] * 5)
+
+TEST_VALUES = [ -1.5, -0.8, -0.5, -0.2, 0, 0.2, 0.5, 0.8, 1, ]
+for i in TEST_VALUES:
+    print fmt.format(i, int(i), math.trunc(i), math.floor(i), math.ceil(i))
 
     trunc() 等价于直接转换为 int。
+其他表示
+    modf() 取一个浮点数，并返回一个 tuple，其中包含这个输入值的小数和整数部分。
+
+import math
+
+for i in range(6):
+    print '{}/2 = {}'.format(i, math.modf(i/2.0))
+
+    返回值中的两个数都是浮点数。
+    frexp() 返回一个浮点数的尾数和指数，可以用来对这个值创建一种更可移植的表示。
+
+import math
+
+print '{:^7}  {:^7}  {:^7}'.format('x', 'm', 'e')
+print '{:-^7}  {:-^7}  {:-^7}'.format('', '', '')
+
+for x in [ 0.1, 0.5, 4.0 ]:
+    m, e = math.frexp(x)
+    print '{:7.2f}  {:7.2f}  {:7d}'.format(x, m, e)
+
+    frexp() 使用公式 x = m * 2**e，并返回值 m 和 e。
+    ldexp() 与 frexp() 正好相反。
+
+import math
+
+print '{:^7}  {:^7}  {:^7}'.format('x', 'm', 'e')
+print '{:-^7}  {:-^7}  {:-^7}'.format('', '', '')
+
+for m, e in [ (0.8, -3),
+              (0.5,  0),
+              (0.5,  3)
+              ]:
+    x = math.ldexp(m, e)
+    print '{:7.2f}  {:7d}  {:7.2f}'.format(m, e, x)
+
+    使用与 frexp() 相同的公式，ldexp() 取尾数和指数值作为参数，将返回一个浮点数。
+正号和负号
+    一个数的绝对值就是不带正负号的本值。使用 fabs() 可以计算一个浮点数的绝对值。
+
+import math
+
+print math.fabs(-1.1)
+print math.fabs(-0.0)
+print math.fabs(0.0)
+print math.fabs(1.1)
+
+    实际上，float 的绝对值表示为一个正值。
+    要确定一个值的符号，比如为一组值给定相同的符号或者要比较两个值，可以使用 copysign() 来设置正确值的符号。
+
+import math
+
+HEADINGS = ('f', 's', '< 0', '> 0', '= 0')
+print '{:^5}  {:^5}  {:^5}  {:^5}  {:^5}'.format(*HEADINGS)
+print '{:-^5}  {:-^5}  {:-^5}  {:-^5}  {:-^5}'.format('', '', '', '', '',)
+
+for f in [ -1.0,
+           0.0,
+           1.0,
+           float('-inf'),
+           float('inf'),
+           float('-nan'),
+           float('nan'),
+           ]:
+    s = int(math.copysign(1, f))
+    print '{:5.1f}  {:5d}  {!s:5}  {!s:5}  {!s:5}'.format(
+        f, s, f < 0, f > 0, f==0,
+        )
+
+    还需要一个类似 copysign() 的额外函数，因为不能将 NaN 和 -NaN 与其他值直接比较。
