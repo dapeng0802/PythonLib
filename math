@@ -358,3 +358,119 @@ for rad, expected in [ (0,                  0),
                                            )
 
     具体转换公式为 deg=rad * 180 / π。
+三角函数
+    三角函数将三角形中的角与其边长相关联。在有周期性质的公式中经常出现三角函数，如谐波或圆周运动，或者处理角时也经常用到三角函数。标准库中所有三角函数的角参数都表示为弧度。
+    给定一个直角三角形中的角，其正弦是对边长度与斜边长度之比（sinA = opposite/hypotenuse）。余弦是邻边长度与斜边长度之比（cosA = adjacent/hypotenuse）。正切是对边与邻边之比（tanA = opposite/adjacent）。
+
+import math
+
+print 'Degrees  Radians  Sine     Cosine    Tangent'
+print '-------  -------  -------  --------  -------'
+
+fmt = '   '.join(['%7.2f'] * 5)
+
+for deg in range(0, 361, 30):
+    rad = math.radians(deg)
+    if deg in (90, 270):
+        t = float('inf')
+    else:
+        t = math.tan(rad)
+    print fmt % (deg, rad, math.sin(rad), math.cos(rad), t)
+
+    正切也可以定义为这个角的正弦值与其余弦值之比，因为弧度 π / 2 和 3 π / 2 的余弦是 0，所以相应的正切值为无穷大。
+    给定一个点 (x, y)，点 [(0, 0), (x, 0), (x, y)] 构成的三角形中斜边长度为 (x**2 + y**2) ** 1/2，可以用 hypot() 来计算。
+
+import math
+
+print '{:^7}  {:^7}  {:^10}'.format('x', 'y', 'Hypotenuse')
+print '{:-^7}  {:-^7}  {:-^10}'.format('', '', '')
+
+for x, y in [ # simple points
+                (1, 1),
+                (-1, -1),
+                (math.sqrt(2), math.sqrt(2)),
+                (3, 4), # 3-4-5 triangle
+                # on the circle
+                (math.sqrt(2)/2, math.sqrt(2)/2), # pi/4 rads
+                (0.5, math.sqrt(3)/2), # pi/3 rads
+                ]:
+    h = math.hypot(x, y)
+    print '{:7.2f}  {:7.2f}  {:7.2f}'.format(x, y, h)
+
+    对于圆上的点，总能得到斜边 == 1。
+    还可以用这个函数查看两个点之间的距离。
+
+import math
+
+print '{:^8}  {:^8}  {:^8}  {:^8}  {:^8}'.format(
+    'X1', 'Y1', 'X2', 'Y2', 'Distance',
+    )
+print '{:^8}  {:^8}  {:^8}  {:^8}  {:^8}'.format(
+    '', '', '', '', '',
+    )
+
+for (x1, y1), (x2, y2) in [ ((5, 5), (6, 6)),
+                            ((-6, -6), (-5, -5)),
+                            ((0, 0), (3, 4)), # 3-4-5 truanle
+                            ((-1, -1), (2, 3)), # 3-4-5 triangle
+                            ]:
+    x = x1 - x2
+    y = y1 - y2
+    h = math.hypot(x, y)
+    print '{:8.2f}  {:8.2f}  {:8.2f}  {:8.2f}  {:8.2f}'.format(
+        x1, y1, x2, y2, h,
+        )
+
+    使用 x 值之差和 y 值之差将一个端点移至原点，然后将结果传入 hypot()。
+    math 还定义了反三角函数。
+
+import math
+
+for r in [ 0, 0.5, 1 ]:
+    print 'arcsine(%.1f)    = %5.2f' % (r, math.asin(r))
+    print 'arccosine(%.1f)  = %5.2f' % (r, math.acos(r))
+    print 'arctangent(%.1f) = %5.2f' % (r, math.atan(r))
+    print
+
+    1.57 大约等于 π / 2，或 90 度，这个角的正弦为 1，余弦为 0。
+双曲函数
+    双曲函数经常出现在线性微分方程中，处理电磁场、流体力学、狭义相对论和其他高级物理和数学问题时常会用到。
+
+import math
+
+print '{:^6}  {:^6}  {:^6}  {:^6}'.format(
+    'X', 'sinh', 'cosh', 'tanh',
+    )
+print '{:-^6}  {:-^6}  {:-^6}  {:-^6}'.format('', '', '', '')
+
+fmt = '   '.join(['{:6.4f}'] * 4)
+
+for i in range(0, 11, 2):
+    x = i/10.0
+    print fmt.format(x, math.sinh(x), math.cosh(x), math.tanh(x))
+
+    余弦和正弦函数构成一个圆，而双曲余弦和双曲正弦函数构成半个双曲线。
+    另外还提供了反双曲函数 acosh()、asinh() 和 atanh()。
+特殊函数
+    统计学中经常用到高斯误差函数（Gauss Error function）。
+
+import math
+
+print '{:^5}  {:7}'.format('x', 'erf(x)')
+print '{:-^5}  {:-^7}'.format('', '')
+
+for x in [ -3, -2, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 2, 3 ]:
+    print '{:5.2f}  {:7.4f}'.format(x, math.erf(x))
+
+    对于误差函数，erf(-x) == -erf(x)。
+    补余误差函数是 1-erf(x)。
+
+import math
+
+print '{:^5}  {:7}'.format('x', 'erfc(x)')
+print '{:-^5}  {:-^7}'.format('', '')
+
+for x in [ -3, -2, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 2, 3 ]:
+    print '{:5.2f}  {:7.4f}'.format(x, math.erfc(x))
+
+    如果 x 值很小，erfc() 实现可以避免从 1 减时可能带来的精度误差。
