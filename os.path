@@ -1,0 +1,109 @@
+[Python标准库]os.path——平台独立的文件名管理
+    作用：解析、构建、测试以及处理文件名和路径。
+    Python 版本：1.4 及以后版本
+    使用 os.path 模块中包含的函数，很容易编写在多个平台上处理文件的代码。即使程序不打算在平台之间移植，也应当使用 os.path 来完成可靠的文件名解析。
+解析路径
+    os.path 中的第一组函数可以用来将表示文件名的字符串解析为文件名的各个组成部分。有一点很重要，需要认识到这些函数并不要求路径的真正存在；它们只处理字符串。
+    路径解析依赖于 os 中定义的一些变量：
+    os.sep——路径各部分之间的分隔符（例如，“/” 或 “\”）。
+    os.extsep——文件名与文件“扩展名”之间的分隔符（例如“.”）。
+    os.pardir——路径中表示目录树上一级的部分（例如“..”）。
+    os.curdir——路径中指示当前目录的部分（例如“.”）。
+    split() 函数将路径分解为两个单独的部分，并返回包含这些结果的一个 tuple。这个 tuple 的第二个元素是路径的最后一部分，第一个元素则是最后这个部分之前的所有内容。
+
+import os.path
+
+for path in [ '/one/two/three',
+              '/one/two/three/',
+              '/',
+              '.',
+              '']:
+    print '%15s : %s' % (path, os.path.split(path))
+
+    输入参数以 os.sep 结尾时，路径的“最后一个元素”是一个空串。
+    basename() 函数返回的值等价于 split() 值的第二部分。
+
+import os.path
+
+for path in [ '/one/two/three',
+              '/one/two/three/',
+              '/',
+              '.',
+              '']:
+    print '%15s : %s' % (path, os.path.basename(path))
+
+    整个路径会剥除到只剩下最后一个元素，不论这指示一个文件还是目录。如果路径以目录分隔符结尾（os.sep），则认为基本部分为空。
+    dirname() 函数返回分解路径得到的第一部分。
+
+import os.path
+
+for path in [ '/one/two/three',
+              '/one/two/three/',
+              '/',
+              '.',
+              '']:
+    print '%15s : %s' % (path, os.path.dirname(path))
+
+    将 basename() 的结果与 dirname() 结合，则可以得到原来的路径。
+    splitext() 的作用类似于 split()，不过它会根据扩展名分隔符而不是目录分隔符来分解路径。
+
+import os.path
+
+for path in [ 'filename.txt',
+              'filename',
+              '/path/to/filename.txt',
+              '/',
+              '',
+              'my-archive.tar.gz',
+              'no-extension.',
+              ]:
+    print '%21s :' % path, os.path.splitext(path)
+
+    查找扩展名时，只使用 os.extsep 的最后一次出现，所以如果一个文件有多个扩展名，分解这个文件名时，部分扩展名会留在前缀上。
+    commonprefix() 取一个路径表作为参数，将返回一个字符串，表示所有路径中都出现的公共前缀。这个值可能并不落在一个分隔符边界上。
+
+import os.path
+
+paths = [ '/one/two/three/four',
+          '/one/two/threefold',
+          '/one/two/three/',
+          ]
+for path in paths:
+    print 'PATH:', path
+
+print
+print 'PREFIX:', os.path.commonprefix(paths)
+
+    在这个例子中，公共前缀字符串是 /one/two/three，尽管其中一个路径并不包括一个名为 three 的目录。
+建立路径
+    除了分解现有的路径，还经常需要从其他字符串建立路径。要将多个路径组成部分结合为一个值，可以使用 join()。
+
+import os.path
+
+for parts in [ ('one', 'two', 'three'),
+               ('/', 'one', 'two', 'three'),
+               ('/one', '/two', '/three'),
+               ]:
+    print parts, ':', os.path.join(*parts)
+
+    如果要连接的某个参数以 os.sep 开头，前面的所有参数都会丢弃，这个新参数会成为返回值的开始部分。
+    还可以处理包含“可变”部分的路径，这些“可变”部分可以自动扩展。例如，expanduser() 可以将波浪线 （~）字符转换为用户主目录名。
+
+import os.path
+
+for user in [ '', 'dhellmann', 'postgresql' ]:
+    lookup = '~' + user
+    print '%12s : %s' % (lookup, os.path.expanduser(lookup))
+
+    如果用户的主目录无法找到，则字符串不做任何改动直接返回。
+    expandvars() 更为通用，它会扩展路径中出现的所有 shell 环境变量。
+
+import os.path
+import os
+
+os.environ['MYVAR'] = 'VALUE'
+
+print os.path.expandvars('/path/to/$MYVAR')
+
+    这里不会做任何验证来确保变量值能够得到正真已经存在的文件名。
+规范化路径
