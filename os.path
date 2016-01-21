@@ -106,4 +106,3 @@ os.environ['MYVAR'] = 'VALUE'
 print os.path.expandvars('/path/to/$MYVAR')
 
     这里不会做任何验证来确保变量值能够得到正真已经存在的文件名。
-规范化路径
