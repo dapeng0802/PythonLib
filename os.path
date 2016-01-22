@@ -132,4 +132,70 @@ for path in [ '.',
               ]:
     print '%17s : "%s"' % (path, os.path.abspath(path))
 
-    结果是一个文件系统数最顶层开始的完整的路径。
+    结果是一个文件系统树最顶层开始的完整的路径。
+文件时间
+    除了处理路径，os.path 还包括一些用来获取文件属性的函数，类似于 os.stat() 返回的结果。
+
+import os.path
+import time
+
+print 'File         :', __file__
+print 'Access time  :', time.ctime(os.path.getatime(__file__))
+print 'Modified time:', time.ctime(os.path.getmtime(__file__))
+print 'Change time  :', time.ctime(os.path.getctime(__file__))
+print 'Size         :', os.path.getsize(__file__)
+
+    os.path.getatime() 返回访问时间，os.path.getmtime() 返回修改时间，os.path.getctime() 返回创建时间。os.path.getsize() 返回文件中的数据量，以字节为单位表示。
+测试文件
+    程序遇到一个路径名时，通常需要知道这个路径是指示一个文件、目录还是一个符号链接（symlink），另外还要知道它是否确实存在。os.path 包含了一些函数来测试所有这些条件。
+
+import os.path
+
+FILENAMES = [ __file__,
+              os.path.dirname(__file__),
+              '/',
+              './broken_link',
+              ]
+
+for file in FILENAMES:
+    print 'File        :', file
+    print 'Absolute    :', os.path.isabs(file)
+    print 'Is File?    :', os.path.isfile(file)
+    print 'Is Dir?     :', os.path.isdir(file)
+    print 'Is Link?    :', os.path.islink(file)
+    print 'Mountpoint? :', os.path.ismount(file)
+    print 'Exists?     :', os.path.exists(file)
+    print 'Link Exists?:', os.path.lexists(file)
+    print
+
+    所有这些测试函数都返回布尔值。
+遍历一个目录树
+    os.path.walk() 会遍历一个树中的所有目录，并调用所提供的一个函数，将目录名和该目录中各内容的名字作为参数传入该函数。
+
+import os.path
+import os
+import pprint
+
+def visit(arg, dirname, names):
+    print dirname, arg
+    for name in names:
+        subname = os.path.join(dirname, name)
+        if os.path.isdir(subname):
+            print '  %s/' % name
+        else:
+            print '  %s' % name
+    print
+
+if not os.path.exists('example'):
+    os.mkdir('example')
+if not os.path.exists('example/one'):
+    os.mkdir('example/one')
+
+with open('example/one/file.txt', 'wt') as f:
+    f.write('contents')
+with open('example/two.txt', 'wt') as f:
+    f.write('contents')
+
+os.path.walk('example', visit, '(User data)')
+
+    这个例子会生成一个递归的目录列表。
