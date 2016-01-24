@@ -1,0 +1,124 @@
+[Python标准库]tempfile——临时文件系统对象
+    作用：创建临时文件系统对象。
+    Python 版本：1.4 及以后版本
+    要想安全地创建具有唯一名称的临时文件，以防止被试图破坏应用或窃取数据的人猜出，这并不容易。tempfile 模块提供了多个函数来安全地创建临时文件系统资源。TemporaryFile() 打开并返回一个未命名的文件，NamedTemporaryFile() 打开并返回一个命名文件，mkdtemp() 会创建一个临时目录，并返回其目录名。
+临时文件
+    如果应用需要临时文件来存储数据，而不需要与其他程序共享这些文件，就应当使用 TemporaryFile() 函数来创建文件。这个函数会创建一个文件，而且如果平台支持，它会立即断开文件链接。这样一来，其他程序就不可能找到或打开这个文件了，因为文件系统表中根本没有这个文件的引用。对于 TemporaryFile() 创建的文件，不论通过调用 close() 还是结合使用上下文管理器 API 和 with 语句来关闭文件，文件都会在关闭时自动删除。
+
+import os
+import tempfile
+
+print 'Building a filename with PID:'
+filename = '/tmp/guess_my_name.%s.txt' % os.getpid()
+temp = open(filename, 'w+b')
+try:
+    print 'temp:'
+    print '  ', temp
+    print 'temp.name:'
+    print '  ', temp.name
+finally:
+    temp.close()
+    # Clean up the temprary file yourself
+    os.remove(filename)
+
+print
+print 'TemporaryFile:'
+temp = tempfile.TemporaryFile()
+try:
+    print 'temp:'
+    print '  ', temp
+    print 'temp.name:'
+    print '  ', temp.name
+finally:
+    # Automatically cleans up the file
+    temp.close()
+
+    这个例子展示了采用不同方法创建临时文件的差别，一种做法时使用一个通用模式来构造临时文件的文件名，另一种做法是使用 TemporaryFile() 函数。TemporaryFile() 返回的文件没有文件名。
+    默认地，文件句柄采用模式 'w+b' 创建，使之在所有平台上都表现一致，而且调用者可以读写这个文件。
+
+import os
+import tempfile
+
+with tempfile.TemporaryFile() as temp:
+    temp.write('Some data')
+    temp.seek(0)
+
+    print temp.read()
+
+    写文件之后，必须使用 seek() “回转”文件句柄，从而能够有文件读回数据。
+    要以文本模式打开文件，创建文件时要设置模式为 'w+t'。
+
+import tempfile
+
+with tempfile.TemporaryFile(mode='w+t') as f:
+    f.writelines(['first\n', 'second\n'])
+    f.seek(0)
+
+    for line in f:
+        print line.rstrip()
+
+    这个文件句柄将数据处理为文本。
+命名文件
+    很多情况下都需要有一个命名的临时文件。对于跨多个进程甚至主机的应用来说，为文件命名是在应用不同部分之间传递文件的最简单的方法。NamedTemporayFile() 函数会创建一个文件，但不会断开其链接，所以会保留其文件名（用 name 属性访问）。
+
+import os
+import tempfile
+
+with tempfile.NamedTemporaryFile() as temp:
+    print 'temp:'
+    print '  ', temp
+    print 'temp.name:'
+    print '  ', temp.name
+print 'Exists after close:', os.path.exists(temp.name)
+
+    句柄关闭后文件会被删除。
+临时目录
+    需要多个临时文件时，可能更方便的做法是用 mkdtemp() 创建一个临时目录，并打开该目录中的所有文件。
+
+import os
+import tempfile
+
+directory_name = tempfile.mkdtemp()
+print directory_name
+# Clean up the directory
+os.removedirs(directory_name)
+
+    由于这个目录事实上并不是“打开的”，不再需要它时必须显式地将其删除。
+预测名
+    虽然没有严格匿名的临时文件那么安全，但有时也需要在名字中包含一个可预测的部分，从而能够查找和检查文件来进行调试。目前为止介绍的所有函数都取 3 个参数，可以在某种程度上控制文件。文件名使用以下公式生成。
+    dir + prefix + random + suffix
+    除了 random 外，所有其他值都可以作为参数传递给 TemporaryFile()、NamedTemporaryFile() 和 mkdtemp() 。例如：
+
+import tempfile
+
+with tempfile.NamedTemporaryFile(
+    suffix='_suffix', prefix='prefix_', dir='/tmp',
+    ) as temp:
+    print 'temp:'
+    print '  ', temp
+    print 'temp.name'
+    print '  ', temp.name
+
+    前缀（prefix）和后缀（suffix）参数与一个随机的字符串结合来生成文件名，dir 参数保持不变，用作新文件的位置。
+临时文件位置
+    如果没有使用 dir 参数指定明确的目标位置，临时文件使用的路径会根据当前平台和设置而有所不同。tempfile 模块包含两个函数来查询运行时使用的设置。
+
+import tempfile
+
+print 'gettempdir():', tempfile.gettempdir()
+print 'gettempprefix():', tempfile.gettempprefix()
+
+    gettempdir() 返回包含所有临时文件的默认目录，gettempprefix() 返回新文件和目录名的字符串前缀。
+    gettempdir() 返回的值根据一个简单算法来设置，它会查找 5 个位置，寻找允许当前进程创建文件的第一个位置。搜索列表如下：
+    1. 环境变量 TMPDIR。
+    2. 环境变量 TEMP。
+    3. 环境变量 TMP。
+    4. 作为“后路”的位置，取决于具体平台。（RiscOS 使用 Wimp$ScrapDir。Windows 使用 C:\TEMP、C:\TMP、\TEMP 或 \TMP 中第一个可用的位置。其他平台使用 /tmp、/var/tmp 或 /usr/tmp。）
+    5. 如果找不到其他目录，则使用当前工作目录。
+
+import tempfile
+
+tempfile.tempdir = '/I/Changed/this/path'
+print 'gettempdir():', tempfile.gettempdir()
+
+    如果程序需要对所有临时文件使用一个全局位置，但不使用以上任何环境变量，则应当直接设置 tempfile.tempdir，为该变量赋一个值。
