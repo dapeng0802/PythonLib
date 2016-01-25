@@ -1,0 +1,60 @@
+[Python标准库]glob——文件名模式匹配
+    作用：使用 UNIX shell 规则查找与一个模式匹配的文件名。
+    Python 版本：1.4 及以后版本
+    尽管 glob API 很小，但这个模块的功却能很大。只要程序需要查找文件系统中名字与某个模式匹配的一组文件，就可以使用这个模块。要创建一个文件名列表，要求其中各个文件名都有某个特定的扩展名、前缀或者中间都有某个共同的字符串，就可以使用 glob 而不用编写定制代码来扫描目录内容。
+    glob 的模式规则与 re 规则使用的正则表达式并不相同。实际上，glob 的模式遵循标准 UNIX 路径扩展规则。只使用几个特殊字符来实现两个不同的通配符和字符区间。模式规则要应用于文件名中的段（在路径分隔符 / 处截止）。模式中的路径可以是相对路径或绝对路径。shell 变量名和波浪线（~）都不会扩展。
+示例数据
+    假设当前工作目录中有以下测试文件。
+
+# glob_maketestdata.py
+
+dir
+dir/file.txt
+dir/file1.txt
+dir/file2.txt
+dir/filea.txt
+dir/fileb.txt
+dir/subdir
+dir/subdir/subfile.txt
+
+    如果这些文件不存在，那么在运行以下例子之前，请使用示例代码中的 glob_maketestdata.py 创建这些文件。
+通配符
+    星号（*）匹配一个文件名段中的 0 个或多个字符。例如，dir/*。
+
+import glob
+
+for name in glob.glob('dir/*'):
+    print name
+
+    这个模式会匹配目录“dir”中的所有路径名（文件或目录），但不会进一步递归搜索到子目录。
+    要列出子目录中的文件，必须把子目录包含在模式中。
+
+import glob
+
+print 'Named explicitly:'
+for name in glob.glob('dir/subdir/*'):
+    print '\t', name
+
+print 'Named with wildcard:'
+for name in glob.glob('dir/*/*'):
+    print '\t', name
+
+    前面显示的第一种情况显式列出了子目录名，第二种情况则依赖一个通配符查找目录。两种做法的结果是一样的。如果还有另一个子目录，通配符则会匹配这两个子目录，并包含这两个子目录中的文件名。
+单字匹配符
+    问号（?）也是一个通配符，它会匹配文件名中该位置的单个字符。
+
+import glob
+
+for name in glob.glob('dir/file?.txt'):
+    print name
+
+    前面的例子会匹配以 file 开头，然后是另外一个任意字符，最后以 .txt 结尾的所有文件名。
+字符区间
+    如果使用字符区间（[a-z）而不是问号，可以匹配多个字符中的一个字符。下面这个例子会查找扩展名前名字中有一个数字的所有文件。
+
+import glob
+
+for name in glob.glob('dir/*[0-9].txt'):
+    print name
+
+    字符区间 [0-9] 会匹配所有单个数字。区间根据各字母 / 数字的字符码排序，短横线指示连续字符组成的一个不间断区间。这个区间值也可以写作 [0123456789]。
