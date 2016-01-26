@@ -1,0 +1,168 @@
+[Python标准库]shutil——高级文件操作
+    作用：高级文件操作。
+    Python 版本：1.4 及以后版本
+    shutil 模块包括一些高级文件操作，如复制和设置权限。
+复制文件
+    copyfile() 将源的内容复制到目标，如果没有权限写目标文件则产生 IOError。
+
+from shutil import *
+from glob import glob
+
+print 'BEFORE:', glob('shutil_copyfile.*')
+copyfile('shutil_copyfile.py', 'shutil_copyfile.py.copy')
+print 'AFTER:', glob('shutil_copyfile.*')
+
+    由于这个函数会打开输入文件进行读取，而不论其类型，所以某些特殊文件（如 UNIX 设备节点）不能用 copyfile() 复制为新的特殊文件。
+    copyfile() 的实现使用了底层函数 copyfileobj()。copyfile() 的参数是文件名，但 copyfileobj() 的参数是打开的文件句柄。还可以有第三个参数（可选）：用于读入块的一个缓冲区长度。
+
+from shutil import *
+import os
+from StringIO import StringIO
+import sys
+
+class VerboseStringIO(StringIO):
+    def read(self, n=-1):
+        next = StringIO.read(self, n)
+        print 'read(%d) bytes' % n
+        return next
+
+lorem_ipsum = """Lorem ipsum dolor sit amet, consectetuer adipiscing
+elit.  Vestibulum aliquam mollis dolor. Donec vulputate nunc ut diam.
+Ut rutrum mi vel sem. Vestibulum ante ipsum."""
+
+print 'Default:'
+input = VerboseStringIO(lorem_ipsum)
+output = StringIO()
+copyfileobj(input, output)
+
+print
+
+print 'All at once:'
+input = VerboseStringIO(lorem_ipsum)
+output = StringIO()
+copyfileobj(input, output, -1)
+
+print
+
+print 'Blocks of 256:'
+input = VerboseStringIO(lorem_ipsum)
+output = StringIO()
+copyfileobj(input, output, 256)
+
+    默认行为是使用大数据块读取。使用 -1 会一次读入所有输入，或者使用其他正数可以设置特定的块大小。下面这个例子将使用多个不同的块大小来显示效果。
+    类似于 UNIX 命令行工具 cp，copy() 函数会用同样的方式解释输出名。如果指定的目标指示一个目录而不是一个文件，会使用源文件的基名在该目录中创建一个新文件。
+
+from shutil import *
+import os
+
+os.mkdir('example')
+print 'BEFORE:', os.listdir('example')
+copy('shutil_copy.py', 'example')
+print 'AFTER:', os.listdir('example')
+
+    文件的权限会随内容复制。
+    copy2() 的工作类似于 copy()，不过复制到新文件的元数据中会包含访问和修改时间。
+
+from shutil import *
+import os
+import time
+def show_file_info(filename):
+    stat_info = os.stat(filename)
+    print '\tMode    :', stat_info.st_mode
+    print '\tCreated :', time.ctime(stat_info.st_ctime)
+    print '\tAccessed:', time.ctime(stat_info.st_atime)
+    print '\tModified:', time.ctime(stat_info.st_mtime)
+
+os.mkdir('example')
+print 'SOURCE:'
+show_file_info('shutil_copy2.py')
+copy2('shutil_copy2.py', 'example')
+print 'DEST:'
+show_file_info('example/shutil_copy2.py')
+
+    这个新文件的所有特性都与原文件完全相同。
+复制文件元数据
+    默认地，在 UNIX 下创建一个新文件时，它会根据当前用户的 umask 接受权限。要把权限从一个文件复制到另一个文件，可以使用 copymode()。
+
+from shutil import *
+from commands import *
+import os
+
+with open('file_to_change.txt', 'wt') as f:
+    f.write('content')
+os.chmod('file_to_change.txt', 0444)
+print 'BEFORE:'
+print getstatus('file_to_change.txt')
+copymode('shutil_copymode.py', 'file_to_change.txt')
+print 'AFTER:'
+print getstatus('file_to_change.txt')
+
+    首先，创建一个要修改的文件。
+
+# !/bin/sh
+# Set up file needed by shutil_copymode.py
+touch file_to_change.txt
+chmod ugo+w file_to_change.txt
+
+    然后，运行示例脚本来改变权限。
+    要复制文件的其他元数据，可以使用 copystat()。
+
+from shutil import *
+import os
+import time
+def show_file_info(filename):
+    stat_info = os.stat(filename)
+    print '\tMode    :', stat_info.st_mode
+    print '\tCreated :', time.ctime(stat_info.st_ctime)
+    print '\tAccessed:', time.ctime(stat_info.st_atime)
+    print '\tModified:', time.ctime(stat_info.st_mtime)
+
+with open('file_to_change.txt', 'wt') as f:
+    f.write('content')
+os.chmod('file_to_change.txt', 0444)
+
+print 'BEFORE:'
+show_file_info('file_to_change.txt')
+copystat('shutil_copystat.py', 'file_to_change.txt')
+print 'AFTER:'
+show_file_info('file_to_change.txt')
+
+    使用 copystat() 只会复制与文件关联的权限和日期。
+处理目录树
+    shutil 包含 3 个函数来处理目录树。要把一个目录从一个位置复制到另一个位置，可以使用 copytree()。这会递归遍历源目录树，将文件复制到目标。目标目录不能已存在。
+
+from shutil import *
+from commands import *
+
+print 'BEFORE:'
+print getoutput('ls -rlast /tmp/example')
+copytree('../shutil', '/tmp/example')
+print '\nAFTER:'
+print getoutput('ls -rlast /tmp/example')
+
+    symlinks 参数控制着符号链接作为链接复制还是作为文件复制。默认将内容复制到新文件。如果这个选项为 true，就好在目标树中创建新的符号链接。
+    要删除一个目录及其中的内容，可以使用 rmtree()。
+
+from shutil import *
+from commands import *
+
+print 'BEFORE:'
+print getoutput('ls -rlast /tmp/example')
+rmtree('/tmp/example')
+print 'AFTER:'
+print getoutput('ls -rlast /tmp/example')
+
+    默认地，错误会作为异常产生，不过如果第二个参数为 true，就可以忽略这些异常。可以在第三个参数中提供一个特殊的错误处理函数。
+    要把一个文件或目录从一个位置移动到另一个位置，可以使用 move()。
+
+from shutil import *
+from glob import glob
+
+with open('example.txt', 'wt') as f:
+    f.write('content')
+
+print 'BEFORE:', glob('example*')
+move('example.txt', 'example.out')
+print 'AFTER :', glob('example*')
+
+    其语义与 UNIX 命令 mv 类似。如果源和目标都在同一个文件系统内，则会重命名源文件。否则，源文件会复制到目标文件，然后将源文件删除。
