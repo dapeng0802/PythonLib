@@ -1,0 +1,126 @@
+[Python标准库]mmap——内存映射文件
+    作用：建立内存映射文件而不是直接读取内容。
+    Python 版本：2.1 及以后版本
+    建立一个文件的内存映射将使用操作系统虚拟内存系统直接访问文件系统中的数据，而不是使用常规的 I/O 函数。内存映射通常可以提高 I/O 性能，因为使用内存映射时，不会对每个访问都有一个单独的系统调用，而且不需要在缓存区之间复制数据——内核和用户应用的会直接访问内存。
+    内存映射文件可以看作是可修改的字符串或类文件对象，这取决于具体的需要。映射文件支持一般的文件 API 方法，如 close()、flush()、read()、readline()、seek()、tell() 和 write()。它还支持字符串 API，提供分片等特性以及类似 find() 的方法。
+    下面的所有示例都会使用文本文件 lorem.txt，其中包含一些 Lorem Ipsum。为便于参考，这里给出这个文件的文本。
+
+Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Donec
+egestas, enim et consectetuer ullamcorper, lectus ligula rutrum len,
+a elementum elit tortor eu quam. Duis tincidunt nisi ut ante. Nulla
+facilisi. Sed tristique eros eu libero. Pellentesque vel
+arcu. Vivamus purus orci, iaculis ac, suscipit sit amet, pulvinar eu,
+lacus. Praesent placerat tortor sed nisl. Nunc blandit diam egestas
+dui. Pellentesque habitant morbi tristique senectus et netus et
+malesuda fames ac turpis egestas. Aliquam viverra fringilla
+leo. Nulla feugiat augue eleifend nulla. Vivamus mauris. Vivamus sed
+mauris in nibh placerat egestas. Suspendisse potenti. Mauris
+massa. Ut eget velit auctor tortor blandit sollicitudin. Suspendisse
+imperdiet justo.
+
+读文件
+    使用 mmap() 函数可以创建一个内存映射文件。第一个参数是文件描述符，可以来自 file 对象的 fileno() 方法，或者来自 os.open()。调用者在调用 mmap() 之前负责打开文件， 不再需要文件时要负责将其关闭。
+    mmap() 的第二个参数是要映射的文件部分的大小（以字节为单位）。如果这个值为 0，则映射整个文件。如果大小大于文件的当前大小，则会扩展该文件。
+    还有一个可选的关键字参数 access。使用 ACCESS_READ 表示只读访问，ACCESS_WRITE 表示“写通过”（write-through），即对内存的赋值直接写入文件，或者 ACCESS_COPY 表示“写时复制”（copy-on-write），对内存的赋值不会写至文件。
+
+import mmap
+import contextlib
+
+with open('lorem.txt', 'r') as f:
+    with contextlib.closing(mmap.mmap(f.fileno(), 0,
+                                      access=mmap.ACCESS_READ)
+                            ) as m:
+        print 'First 10 bytes via read :', m.read(10)
+        print 'First 10 bytes via slice:', m[:10]
+        print '2nd   10 bytes via read :', m.read(10)
+
+    文件指针会跟踪通过一个分片操作访问的最后一个字节。在这个例子中，第一次读之后，指针向前移动 10 个字节。然后由分片操作将指针重置回到文件的起始位置，并由于分片使指针再次向前移动 10 个字节。分片操作之后，再调用 read() 会给出文件的第 11~20 字节。
+写文件
+    要建立内存映射文件来接收更新，映射之前首先要使用模式 'r+'（而不是 'w'）打开文件以便完成追加。然后可以使用任何改变数据的 API 方法（例如 write()，或赋值到一个分片，等等）。下面的例子使用了默认访问模式 ACCESS_WRITE，并赋值到一个分片，原地修改某一行的一部分。
+
+import mmap
+import shutil
+import contextlib
+
+# Copy the example file
+shutil.copyfile('lorem.txt', 'lorem_copy.txt')
+
+word = 'consectetuer'
+reversed = word[::-1]
+print 'Looking for    :', word
+print 'Replacing with :', reversed
+
+with open('lorem_copy.txt', 'r+') as f:
+    with contextlib.closing(mmap.mmap(f.fileno(), 0,)) as m:
+        print 'Before:'
+        print m.readline().rstrip()
+        m.seek(0) # rewind
+
+        loc = m.find(word)
+        m[loc:loc+len(word)] = reversed
+        m.flush()
+
+        m.seek(0) # rewind
+        print 'After :'
+        print m.readline().rstrip()
+
+        f.seek(0) # rewind
+        print 'File  :'
+        print f.readline().rstrip()
+
+    内存和文件中的第一行中间的单词“consectetuer”将被替换。
+    使用访问设置 ACCESS_COPY（复制模式）时不会将修改写入磁盘的文件。
+
+import mmap
+import shutil
+import contextlib
+
+# Copy the example file
+shutil.copyfile('lorem.txt', 'lorem_copy.txt')
+
+word = 'consectetuer'
+reversed = word[::-1]
+print 'Looking for    :', word
+print 'Replacing with :', reversed
+
+with open('lorem_copy.txt', 'r+') as f:
+    with contextlib.closing(mmap.mmap(f.fileno(), 0,
+                                      access=mmap.ACCESS_COPY)
+                            ) as m:
+        print 'Memory Before:'
+        print m.readline().rstrip()
+        print 'File Before  :'
+        print f.readline().rstrip()
+        print
+        
+        m.seek(0) # rewind
+        loc = m.find(word)
+        m[loc:loc+len(word)] = reversed
+
+        m.seek(0) # rewind
+        print 'Memory After :'
+        print m.readline().rstrip()
+
+        f.seek(0) # rewind
+        print 'File After   :'
+        print f.readline().rstrip()
+
+    在这个例子中，必须单独地回转文件句柄和 mmap 句柄，因为这两个对象的内部状态会单独维护。
+正则表达式
+    由于内存映射文件就类似于一个字符串，因此也适用于其他处理字符串的模式，如正则表达式。下面的例子会找出所有包含“nulla”的句子。
+
+import mmap
+import re
+import contextlib
+
+pattern = re.compile(r'(\.\W+)?([^.]?nulla[^.]*?\.)',
+                     re.DOTALL | re.IGNORECASE | re.MULTILINE)
+
+with open('lorem.txt', 'r') as f:
+    with contextlib.closing(mmap.mmap(f.fileno(), 0,
+                                      access=mmap.ACCESS_READ)
+                            ) as m:
+        for match in pattern.findall(m):
+            print match[1].replace('\n', ' ')
+
+    由于这个模式包含两个组，findall() 的返回值是一个元组序列。print 语句会找出匹配的句子，并用空格代替换行符，使各结果都打印在同一行上。
