@@ -1,0 +1,94 @@
+[Python标准库]codecs——字符串编码和解码
+    作用：编码器和解码器，用于转换文本的不同表示。
+    Python 版本：2.1 及以后版本
+    codecs 模块提供了流接口和文件接口来转换数据。通常用于处理 Unicode 文本，不过也提供了其他编码来满足其他用途。
+Unicode 入门
+    CPython 2.x 支持两种类型的字符串来处理文本数据。老式的 str 实例使用单个 8 位字节表示字符串字符（使用其 ASCII 码）。与之不同，unicode 串在内部作为一个 Unicode 码点（code point）序列来管理。码点值分别保存为两个或四个字节的序列，这取决于编译 Python 时指定的选项。unicode 和 str 都派生自一个公共基类，并支持类似的 API。
+    输出 unicode 串时，会使用某种标准机制编码，使得以后可以将这个字节序列重构为同样的文本串。编码值的字节不一定与码点值完全相同，编码只是定义了在两个值集之间转换的一种方式。读取 Unicode 数据时还需要指定编码，这样才能把接收到的字节转换为 unicode 类使用的内部表示。
+    西方语言最常用的编码是 UTF-8 和 UTF-16，这两种编码分别使用单字节和两字节值序列表示各个码点。对于其他语言，由于大多数字符都由超过两字节的码点表示，所以使用其他编码来存储可能更为高效。
+    编码
+    要了解编码，最好的方法就是采用不同方式对相同的串进行编码，并查看所生成的字节序列的区别。下面的例子使用以下函数格式化字符串，使之更易读。
+
+import binascii
+
+def to_hex(t, nbytes):
+    """Format text t as a sequence of nbyte long values
+    separated by spaces.
+    """
+    chars_per_item = nbytes * 2
+    hex_version = binascii.hexlify(t)
+    return ' '.join(
+        hex_version[start:start + chars_per_item]
+        for start in xrange(0, len(hex_version), chars_per_item)
+        )
+
+if __name__ == '__main__':
+    print to_hex('abcdef', 1)
+    print to_hex('abcdef', 2)
+
+    这个函数使用 binascii 得到输入字节串的十六进制表示，在返回这个值之前每隔 nbytes 字节就插入一个空格。
+    第一个编码示例首先使用 unicode 类的原始表示打印文本 pi：π，π 字符替换为其 Unicode 码点的表达式 \u03c0。接下来的两行将这个字符串分别编码为 UTF-8 和 UTF-16，并显示编码得到的十六进制值。
+
+from codecs_to_hex import to_hex
+
+text = u'pi: π'
+
+print 'Raw   :', repr(text)
+print 'UTF-8 :', to_hex(text.encode('utf-8'), 1)
+print 'UTF-16:', to_hex(text.encode('utf-16'), 2)
+
+    对一个 unicode 串编码的结果是一个 str 对象。
+    给定一个编码字节序列（作为一个 str 实例），decode() 方法会将其转换为码点，并作为一个 unicode 实例返回转换后的序列。
+
+#coding=utf-8
+from codecs_to_hex import to_hex
+
+text = u'pi: π'
+encoded = text.encode('utf-8')
+decoded = encoded.decode('utf-8')
+
+print 'Original :', repr(text)
+print 'Encoded  :', to_hex(encoded, 1), type(encoded)
+print 'Decoded  :', repr(decoded), type(decoded)
+
+    选择使用哪一种编码不会改变输出类型。
+处理文件
+    处理 I/O 操作时，编码和解码字符串尤其重要。不论是写至一个文件、一个套接字还是另一个流，数据都必须使用适当的编码。一般来讲，所有文本数据在读取时都需要从其字节表示解码，写时则需要从内部值编码为一种特定的表示。一个程序可以显式地编码和解码数据，但是取决于所用的编码，要确定是否已读取足够的字节以便充分解码数据，这一点可能并不容易。codecs 提供了一些类来管理数据的编码和解码，所以应用不需要做这个工作。
+    codecs 提供的最简单的接口可以用来替代内置 open() 函数。这个新版本的函数与内置函数的做法很相似，不过增加了两个参数来指定编码和所需的错误处理技术。
+
+from codecs_to_hex import to_hex
+
+import codecs
+import sys
+
+encoding = sys.argv[1]
+filename = encoding + '.txt'
+
+print 'Writing to', filename
+with codecs.open(filename, mode='wt', encoding=encoding) as f:
+    f.write(u'pi: \u03c0')
+
+# Determine the byte grouping to use for to_hex()
+nbytes = { 'utf-8':1,
+           'utf-16':2,
+           'utf-32':4,
+           }.get(encoding, 1)
+# Show the raw bytes in the file
+print 'File contents:'
+with open(filename, mode='rt') as f:
+    print to_hex(f.read(), nbytes)
+
+    这个例子首先从一个 unicode 串开始（包含 π 的码点），并使用命令行上指定的编码将文件保存到一个文件。
+    用 open() 读数据很简单，但有一点要注意：必须提前知道编码，才能正确地建立解码器。尽管有些数据格式（如 XML）会指定编码作为文件的一部分，但是通常都要由应用来管理。codecs 只是取一个编码参数，并假设这个编码是正确的。
+
+import codecs
+import sys
+
+encoding = sys.argv[1]
+filename = encoding + '.txt'
+
+print 'Reading from', filename
+with codecs.open(filename, mode='rt', encodind=encoding) as f:
+    print repr(f.read())
+    
+    这个例子读取上一个程序创建的文件，并把得到的 unicode 对象的表示打印到控制台。
