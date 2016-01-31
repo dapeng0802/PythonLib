@@ -156,3 +156,7 @@ with codecs.open('nonnative-encoded.txt',
 print 'Decoded:', repr(decoded_text)
 
     由于文件的前两个字节用于字节序检测，所以它们并不包含在 read() 返回的数据中。
+错误处理
+    前面几节指出，读写 Unicode 文件时需要知道所使用的编码。正确地设置编码很重要，这有两个原因。如果读文件时未能正确地配置编码，就无法正确地解释数据，数据则有可能破坏或者无法解码。并不是所有 Unicode 字符都可以采用所有编码表示，所以如果写文件时使用了错误的编码，就会产生一个错误，数据也可能丢失。
+    类似于 unicode 的 encode() 方法和 str 的 decode() 方法，codecs 也使用了同样的 5 个错误处理选项，如下所示：
+    
