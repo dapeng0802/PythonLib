@@ -159,4 +159,112 @@ print 'Decoded:', repr(decoded_text)
 错误处理
     前面几节指出，读写 Unicode 文件时需要知道所使用的编码。正确地设置编码很重要，这有两个原因。如果读文件时未能正确地配置编码，就无法正确地解释数据，数据则有可能破坏或者无法解码。并不是所有 Unicode 字符都可以采用所有编码表示，所以如果写文件时使用了错误的编码，就会产生一个错误，数据也可能丢失。
     类似于 unicode 的 encode() 方法和 str 的 decode() 方法，codecs 也使用了同样的 5 个错误处理选项，如下所示：
-    
+    |---------------------|-----------------------------------------------|
+    |      错误模式       |                   描述                        |
+    |---------------------|-----------------------------------------------|
+    |  strict             |  如果数据无法转换，产生一个异常               |
+    |---------------------|-----------------------------------------------|
+    |  replace            |  将无法编码的数据替换为一个特殊的标志字符     |
+    |---------------------|-----------------------------------------------|
+    |  ignore             |  跳过数据                                     |
+    |---------------------|-----------------------------------------------|
+    |  xmlcharrefreplace  |  XML 字符（仅适用编码）                       |
+    |---------------------|-----------------------------------------------|
+    |  backslashreplace   |  转义序列（仅适用编码）                       |
+    |---------------------------------------------------------------------|
+    1. 编码错误
+    最常见的错误条件是向一个 ASCII 输出流（如一个常规文件或 sys.stdout）写 Unicode 数据时接收到一个 UnicodeEncodeError。以下示例程序可以用来试验不同的错误处理模式。
+
+import codecs
+import sys
+
+error_handling = sys.argv[1]
+
+text = u'pi: \u03c0'
+
+try:
+    # Save the data, encoded as ASCII, using the error
+    # handling mode specified on the command line.
+    with codecs.open('encode_error.txt', 'w',
+                     encoding='ascii',
+                     errors=error_handling) as f:
+        f.write(text)
+
+except UnicodeEncodeError, err:
+    print 'ERROR:', err
+else:
+    # If there was no error writing to the file,
+    # show what it contains.
+    with open('encode_error.txt', 'r') as f:
+        print 'File contents:', repr(f.read())
+
+    要确保一个应用显式地为所有 I/O 操作设置正确地编码，strict 模式是最安全的，但是产生一个异常时，这种模式可能导致程序崩溃。
+    另外一些错误模式更为灵活。例如，replace 确保不会产生任何错误，其代价是可能丢失一些无法转换为所需编码的数据。pi（π）的 Unicode 字符仍然无法用 ASCII 编码，但是采用这种错误处理模式时，并不是产生一个异常，而是会在输出中将这个字符替换为 ?。
+    要完全跳过有问题的数据，可以使用 ignore。无法编码的数据都会被丢弃。
+    还有两种无损的错误处理选项，这两种模式会用一个不同于编码的标准中定义的候选表示替换字符。xmlcharrefreplace 使用一个 XML 字符引用来完成替换（W3C 文档《XML Entity Definitions for Characters》（字符的 XML 实体定义）中指定了字符引用列表）。另一个无损的错误处理机制是 backslashreplace，它生成的输入格式类似于打印 unicode 对象的 repr() 时返回的值。Unicode 字符会替换为 \u，后面会跟有码点的十六进制值。
+    2. 解码错误
+    数据解码时也有可能遇到错误，特别是在使用了错误的编码时。
+
+import codecs
+import sys
+
+from codecs_to_hex import to_hex
+
+error_handling = sys.argv[1]
+
+text = u'pi: \u03c0'
+print 'Original      :', repr(text)
+
+# Save the data with one encoding
+with codecs.open('decode_error.txt', 'w', encoding='utf-16') as f:
+    f.write(text)
+
+# Dump the bytes from the file
+with open('decode_error.txt', 'r') as f:
+    print 'File contents:', to_hex(f.read(), 1)
+
+# Try to read the data with the wrong encoding
+with codecs.open('decode_error.txt', 'r',
+                 encoding='utf-8',
+                 errors=error_handling) as f:
+    try:
+        data = f.read()
+    except UnicodeDecodeError, err:
+        print 'ERROR:', err
+    else:
+        print 'Read          :', repr(data)
+
+    与编码一样，如果不能正确地解码字节流，strict 错误处理模式会产生一个异常。在这种情况下，产生 UnicodeDecodeError 的原因是尝试将 UTF-16 BOM 的部分转换为一个使用 UTF-8 解码器的字符。
+    切换到 ignore 会导致解码器跳过不合法的字节。不过，结果仍然不是原来期望的，因为其中包括嵌入的 null 字节。
+    采用 replace 模式时，非法的字节会替换为 \uFFFD，这是官方的 Unicode 替换字符，看起来像是一个有黑色背景的菱形，其中包含一个白色的问号。
+标准输入和输出流
+    之所以会产生 UnicodeEncodeError 异常，最常见的原因是代码中试图将 unicode 数据打印到控制台或一个 UNIX 管道，而 sys.stdout 未配置一个编码。
+
+import codecs
+import sys
+
+text = u'pi: π'
+# Print to stdout may cause an encoding error
+print 'Defalut encoding:', sys.stdout.encoding
+print 'TTY:', sys.stdout.isatty()
+print text
+
+    标准 I/O 通道默认编码存在的问题可能很难调试。这是因为，向控制台打印输出时，程序通常仍能如期工作，但是作为管道的一部分而且输出包括超出 ASCII 范围的 Unicode 字符时，则会导致一个编码错误。这种行为差异是 Python 的初始化代码造成的，它只在通道连接到一个终端时（isatty() 返回 True）才会为各个标准 I/O 通道设置默认编码。如果没有终端，Python 则假设程序会显式地配置编码，因此不再设置 I/O 通道的编码。
+    要显式地设置标准输出通道的编码，可以使用 getwriter() 得到一个特定编码的流编码器类。实例化这个类，传入 sys.stdout 作为其唯一参数。
+
+import codecs
+import sys
+
+text = u'pi: π'
+
+# Wrap sys.stdout with a writer that knows how to handle encoding
+# Unicode data.
+wrapped_stdout = codecs.getwriter('UTF-8')(sys.stdout)
+wrapped_stdout.write(u'Via write: ' + text + '\n')
+
+# Replace sys.stdout with a writer
+sys.stdout = wrapped_stdout
+
+print u'Via print:', text
+
+    写至包装的 sys.stdout 时，将编码字节发送到 stdout 之前会通过一个编码器传递 Unicode 文本。替换 sys.stdout 意味着应用中完成标准输出打印所使用的代码都能利用这个编码书写器。
