@@ -268,3 +268,122 @@ sys.stdout = wrapped_stdout
 print u'Via print:', text
 
     写至包装的 sys.stdout 时，将编码字节发送到 stdout 之前会通过一个编码器传递 Unicode 文本。替换 sys.stdout 意味着应用中完成标准输出打印所使用的代码都能利用这个编码书写器。
+    下一个要解决的问题时如何知道应当使用哪一个编码。根据位置、语言以及用户或系统配置，可能会有不同的使用编码，所以在程序中硬编码一个固定值不是一个好的想法。对于用户来说，如果需要设置输入和输出编码从而向各个程序传递显式参数，这也很烦人。幸运的是，对此有一种全局方法，可以使用 locale 得到一个合理的默认编码。
+
+import codecs
+import locale
+import sys
+
+text = u'pi: π'
+
+# Configure locale from the user's enviroment settings.
+locale.setlocale(locale.LC_ALL, '')
+
+# Wrap stdout with an encoding-aware writer.
+lang, encoding = locale.getdefaultlocale()
+print 'Locale encoding    :', encoding
+sys.stdout = codecs.getwriter(encoding)(sys.stdout)
+
+print 'With wrapped stdout', text
+
+    函数 locale.getdefaultlocale() 会根据系统和用户的配置设置返回语言和首选编码，并采用一种 getwriter() 可用的格式。
+    处理 sys.stdin 时也需要设置编码。使用 getreader() 可以得到一个能够解码输入字节的阅读器。
+
+import codecs
+import locale
+import sys
+
+# Configure locale from the user's enviroment settings.
+locale.setlocale(locale.LC_ALL, '')
+
+# Wrap stdout with an encoding-aware writer.
+lang, encoding = locale.getdefaultlocale()
+sys.stdin = codecs.getwriter(encoding)(sys.stdin)
+
+print 'From stdin:'
+print repr(sys.stdin.read())
+
+    从包装的句柄读取数据时会返回 unicode 对象而不是 str 实例。
+编码转换
+    尽管大多数应用都在内部处理 unicode 数据，将数据解码或编码作为 I/O 操作的一部分，但有些情况下，可能需要改变文件的编码而不固定这种中间数据格式。EncodeFile() 取一个使用某种编码的打开文件句柄，用一个类来包装这个文件句柄，有 I/O 操作时则会把数据转换为一种编码。
+
+from codecs_to_hex import to_hex
+
+import codecs
+from cStringIO import StringIO
+
+# Raw version of the original data.
+data = u'pi: \u03c0'
+
+# Manually encode it as UTF-8.
+utf8 = data.encode('utf-8')
+print 'Start as UTF-8   :', to_hex(utf8, 1)
+
+# Set up an output buffer, then wrap it as an EncodedFile.
+output = StringIO()
+encoded_file = codecs.EncodedFile(output, data_encoding='utf-8',
+                                  file_encoding='utf-16')
+encoded_file.write(utf8)
+
+# Fetch the buffer contents as a UTF-16 encoded byte string
+utf16 = output.getvalue()
+print 'Encoded to UTF-16:', to_hex(utf16, 2)
+
+# Set up another buffer with the UTF-16 data for reading,
+# and wrap it with another EncodedFile.
+buffer = StringIO(utf16)
+encoded_file = codecs.EncodedFile(buffer, data_encoding='utf-8',
+                                  file_encoding='utf-16')
+
+# Read the UTF-8 encoded version of the data.
+recoded = encoded_file.read()
+print 'Back to UTF-8    :', to_hex(recoded, 1)
+
+    这个例子显示了如何读写 EncodeFile() 返回的不同句柄。不论这个句柄用于读还是写，file_encofing 总是指示打开文件句柄所用的编码（作为第一个参数传入），data_encoding 值则指示通过 read() 和 write() 调用传递数据时所用的编码。
+非 Unicode 编码
+    尽管之前大多数例子都使用 Unicode 编码，实际上 codecs 还可以用于很多其他数据转换。例如，Python 包含了 codecs 来处理 base-64、bzip2、ROT-13、ZIP 和其他数据格式。
+
+import codecs
+from cStringIO import StringIO
+
+buffer = StringIO()
+stream = codecs.getwriter('rot_13')(buffer)
+
+text = 'abcdefghijklmnopqrstuvwxyz'
+
+stream.write(text)
+stream.flush()
+
+print 'Original:', text
+print 'ROT-13  :', buffer.getvalue()
+
+    如果转换可以表述为有单个输入参数的函数，并返回一个字节或 Unicode 串，这样的转换都可以注册为一个 codec。
+    使用 codecs 包装一个数据流，可以提供比直接使用 zlib 更简单的接口。
+
+import codecs
+from cStringIO import StringIO
+
+from codecs_to_hex import to_hex
+
+buffer = StringIO()
+stream = codecs.getwriter('zlib')(buffer)
+text = 'abcdefghijklmnopqrstuvwxyz\n' * 50
+
+stream.write(text)
+stream.flush()
+
+print 'Original length :', len(text)
+compressed_data = buffer.getvalue()
+print 'ZIP compressed  :', len(compressed_data)
+
+buffer = StringIO(compressed_data)
+stream = codecs.getreader('zlib')(buffer)
+
+first_line = stream.readline()
+print 'Read first line :', repr(first_line)
+
+uncompressed_data = first_line + stream.read(0)
+print 'Uncompressed    :', len(uncompressed_data)
+print 'Same            :', text == uncompressed_data
+
+    并不是所有压缩或编码系统都支持使用 readline() 或 read() 通过流接口读取数据的一部分，因为这需要找到压缩段的末尾来实现解压缩。如果一个程序无法再内存中保存整个解压缩的数据集，可以使用压缩库的增量访问特性，而不是 codecs。
