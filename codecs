@@ -387,3 +387,177 @@ print 'Uncompressed    :', len(uncompressed_data)
 print 'Same            :', text == uncompressed_data
 
     并不是所有压缩或编码系统都支持使用 readline() 或 read() 通过流接口读取数据的一部分，因为这需要找到压缩段的末尾来实现解压缩。如果一个程序无法再内存中保存整个解压缩的数据集，可以使用压缩库的增量访问特性，而不是 codecs。
+增量编码
+    目前提供的一些编码（特别是 bz2 和 zlib）在处理数据流时可能会显著改变数据流的长度。对于大的数据集，这些编码采用增量方式可以更好地处理，即一次只处理一个小数据块。IncrementalEncoder 和 IncrementalDecoder API 就设计用来完成这个任务。
+
+import codecs
+import sys
+from codecs_to_hex import to_hex
+
+text = 'abcdefghijklmnopqrstuvwxyz\n'
+repetitions = 50
+
+print 'Text length :', len(text)
+print 'Repetitions :', repetitions
+print 'Expected len:', len(text) * repetitions
+
+# Encode the text several times to build up a large amount of data
+encoder = codecs.getincrementalencoder('bz2')()
+encoded = []
+
+print
+print 'Encoding:',
+for i in range(repetitions):
+    en_c = encoder.encode(text, final = (i==repetitions-1))
+    if en_c:
+        print '\nEncoded : {} bytes'.format(len(en_c))
+        encoded.append(en_c)
+    else:
+        sys.stdout.write('.')
+
+bytes = ''.join(encoded)
+print
+print 'Total encoded length:', len(bytes)
+print
+
+# Decode the byte string one byte at a time
+decoder = codecs.getincrementaldecoder('bz2')()
+decoded = []
+
+print 'Decoding:',
+for i, b in enumerate(bytes):
+    final = (i+1) == len(text)
+    c = decoder.decode(b, final)
+    if c:
+        print '\nDecoded : {} characters'.format(len(c))
+        print 'Decoding:',
+        decoded.append(c)
+    else:
+        sys.stdout.write('.')
+print
+restored = u''.join(decoded)
+
+print
+print 'Total uncompressed length:', len(restored)
+
+    每次将数据传递到编码器或解码器时，其内部状态会更新。状态一致时（按照 codec 的定义），会返回数据并重置状态。在此之前，encode() 或 decode() 调用并不返回任何数据。传入最后一部分数据时，参数 final 应当设置为 True，这样 codec 就能知道需要刷新输出所有余下的缓冲数据。
+Unicode 数据和网络通信
+    类似于标准输入和输出文件描述符，网络套接字也是字节流，因此将 Unicode 数据写至一个套接字之前必须先编码为字节。以下服务器会把接收到的数据回送到发送者。
+
+#coding=utf-8
+import sys
+import SocketServer
+
+class Echo(SocketServer.BaseRequestHandler):
+    def handle(self):
+        # Get some bytes and echo them back to the client.
+        data = self.request.recv(1024)
+        self.request.send(data)
+        return
+
+if __name__ == '__main__':
+    import codecs
+    import socket
+    import threading
+
+    address = ('localhost', 0) # let the kernel assign a port
+    server = SocketServer.TCPServer(address, Echo)
+    ip, port = server.server_address # what port was assigned?
+
+    t = threading.Thread(target=server.serve_forever)
+    t.setDaemon(True) # don't hang on exit
+    t.start()
+
+    # Connect to the server
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((ip, port))
+
+    # Send the data
+    # WRONG: Not encoded first!
+    text = u'pi: π'
+    len_sent = s.send(text)
+
+    # Receive a response
+    response = s.recv(len_sent)
+    print repr(response)
+
+    # Clean up
+    s.close()
+    server.socket.close()
+
+    可以在每个 send() 调用之前对数据显式编码，不过如果少一个 send() 调用就会导致一个编码错误。
+    可以使用 makefile() 得到套接字的一个类文件句柄，然后用一个基于流的阅读器或书写器包装这个句柄，这意味着 Unicode 串传入和传出套接字时会被编码。
+
+#coding=utf-8
+import sys
+import SocketServer
+
+class Echo(SocketServer.BaseRequestHandler):
+    def handle(self):
+        # Get some bytes and echo them back to the client.
+        data = self.request.recv(1024)
+        self.request.send(data)
+        return
+
+class PassThrough(object):
+
+    def __init__(self, other):
+        self.other = other
+
+    def write(self, data):
+        print 'Writing :', repr(data)
+        return self.other.write(data)
+
+    def read(self, size=-1):
+        print 'Reading :',
+        data = self.other.read(size)
+        print repr(data)
+        return data
+
+    def flush(self):
+        return self.other.flush()
+
+    def close(self):
+        return self.other.close()
+
+if __name__ == '__main__':
+    import codecs
+    import socket
+    import threading
+
+    address = ('localhost', 0) # let the kernel assign a port
+    server = SocketServer.TCPServer(address, Echo)
+    ip, port = server.server_address # what port was assigned?
+
+    t = threading.Thread(target=server.serve_forever)
+    t.setDaemon(True) # don't hang on exit
+    t.start()
+
+    # Connect to the server
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((ip, port))
+
+    # Wrap the socket with a reader and writer.
+    read_file = s.makefile('r')
+    incoming = codecs.getreader('utf-8')(PassThrough(read_file))
+    write_file = s.makefile('w')
+    outgoing = codecs.getwriter('utf-8')(PassThrough(write_file))
+
+    # Send the data
+    text = u'pi: π'
+    print 'Sending :', repr(text)
+    outgoing.write(text)
+    outgoing.flush()
+
+    # Receive a response
+    response = incoming.read()
+    print 'Received:', repr(response)
+
+    # Clean up
+    s.close()
+    server.socket.close()
+
+    这个例子使用 PassThrough 来展示数据在发送之前会进行编码，另外客户端接收响应之后会进行解码。
+定义定制编码
+    由于 Python 已经提供了大量编制编码，所以一般应用不太可能需要定义定制的编码器或解码器。不过，如果确实有必要，codecs 中包含有很多基类，使你能更容易地定义定制编码。
+    第一步是了解编码描述的转换性质。下面的例子将使用一个“invertcaps”编码，它把大写字母转换为小写，把小写字母转换为大写。下面是一个编码函数的简单定义，它会对一个输入字符串完成这个转换。
