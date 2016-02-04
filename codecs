@@ -560,4 +560,176 @@ if __name__ == '__main__':
     这个例子使用 PassThrough 来展示数据在发送之前会进行编码，另外客户端接收响应之后会进行解码。
 定义定制编码
     由于 Python 已经提供了大量编制编码，所以一般应用不太可能需要定义定制的编码器或解码器。不过，如果确实有必要，codecs 中包含有很多基类，使你能更容易地定义定制编码。
-    第一步是了解编码描述的转换性质。下面的例子将使用一个“invertcaps”编码，它把大写字母转换为小写，把小写字母转换为大写。下面是一个编码函数的简单定义，它会对一个输入字符串完成这个转换。
+    第一步是了解编码描述的转换性质。下面的例子将使用一个“invertcaps”编码，它把大写字母转换为小写，把小写字母转换为大写。下面是一个编码函数的简单定义，它会对一个输入字符串完成这个转换：
+
+import string
+
+def invertcaps(text):
+    """Return new string with the case of all letters switched."""
+    return ''.join( c.upper() if c in string.ascii_lowercase
+                    else c.lower() if c in string.ascii_uppercase
+                    else c
+                    for c in text
+                    )
+
+if __name__ == '__main__':
+    print invertcaps('ABC.def')
+    print invertcaps('abc.DEF')
+
+    在这里，编码器和解码器都是同一个函数（与 ROT-13 类似）。
+    尽管很容易理解，但这个实现效率不高，特别是对于非常大的文本串。幸运的是，codecs 包含一些辅助函数可以根据字符映射（character map）创建编码，如 invertcaps 编码。字符映射编码由两个字典构成。编码映射（encoding map）将输入串的字符值装换为输出中的字节值，解码映射（decoding map）则相反。首先创建解码映射，然后使用 make_encoding_map() 把它转换为一个编码映射。C 函数 charmap_encode() 和 charmap_decode() 可以使用这些映射高效地转换输入数据。
+
+import codecs
+import string
+
+# Map every character to itself
+decoding_map = codecs.make_identity_dict(range(256))
+
+# Make a list of pairs of ordinal values for the lower and uppercase letters
+pairs = zip([ ord(c) for c in string.ascii_lowercase],
+            [ ord(c) for c in string.ascii_uppercase])
+
+# Modify the mapping to convert upper to lower and lower to upper.
+decoding_map.update( dict( (upper, lower)
+                           for (lower, upper)
+                           in pairs
+                           )
+                     )
+decoding_map.update( dict( (lower, upper)
+                           for (lower, upper)
+                           in pairs
+                           )
+                     )
+
+# Create a separate encoding map.
+encoding_map = codecs.make_encoding_map(decoding_map)
+
+if __name__ == '__main__':
+    print codecs.charmap_encode('abc.DEF', 'strict', encoding_map)
+    print codecs.charmap_decode('abc.DEF', 'strict', decoding_map)
+    print encoding_map == decoding_map
+
+    尽管 invertcaps 的编码和解码映射是一样的，但并不总是如此。make_encoding_map() 会检测哪些情况下多个输入字符编码为相同的输出字节，并把编码值替换为 None，将编码标记为未定义。
+    字符映射编码器和解码器支持前面介绍的所有标准错误处理方法，所以不需要为支持这部分 API 做任何额外的工作。
+
+import codecs
+from codecs_invertcaps_charmap import encoding_map
+
+text = u'pi: π'
+
+for error in [ 'ignore', 'replace', 'strict' ]:
+    try:
+        encoded = codecs.charmap_encode(text, error, encoding_map)
+    except UnicodeEncodeError, err:
+        encoded = str(err)
+    print '{:7}: {}'.format(error, encoded)
+
+    由于 π 的 Unicode 码点不在编码映射中，所以采用 strict 错误处理模式时会产生一个异常。
+    定义了编码和解码映射之后，还需要建立一些额外的类，另外要注册编码。register() 向注册表增加一个搜索函数，这样当用户希望使用这种编码时，codecs 能够找到。这个搜索函数必须有一个字符串参数，其中包含编码名，如果它知道这个编码则返回一个 CodecInfo 对象，否则返回 None。
+
+import codecs
+import encodings
+
+def search1(encoding):
+    print 'search1: Searching for:', encoding
+    return None
+def search2(encoding):
+    print 'search2: Searching for:', encoding
+    return None
+
+codecs.register(search1)
+codecs.register(search2)
+
+utf8 = codecs.lookup('utf-8')
+print 'UTF-8:', utf8
+
+try:
+    unknown = codecs.lookup('no-such-encoding')
+except LookupError, err:
+    print 'ERROR:', err
+
+    可以注册多个搜索函数，每个搜索函数将依次调用，直到一个搜索函数返回一个 CodecInfo，或者所有搜索函数都已经调用。codecs 注册的内部搜索函数知道如何加载标准编码，如 encodings 的 UTF-8，所以这些编码名不会传递到定制搜索函数。
+    搜索函数返回的 CodecInfo 实例告诉 codecs 如何使用所支持的各种不同机制来完成编码和解码，包括：无状态编码、增量式编码和流编码。codecs 包括一些基类来帮助建立字符映射编码。下面这个例子集成了所有内容，它会注册一个搜索函数，并返回为 invertcaps 编码配置的一个 CodecInfo 实例。
+
+import codecs
+from codecs_invertcaps_charmap import encoding_map, decoding_map
+
+# Stateless encoder/decoder
+
+class InvertCapsCodec(codecs.Codec):
+    def encode(self, input, errors='strict'):
+        return codecs.charmap_encode(input, errors, encoding_map)
+    def decode(self, input, errors='strict'):
+        return codecs.charmap_decode(input, errors, decoding_map)
+
+# Incremental forms
+
+class InvertCapsIncrementalEncoder(codecs.IncrementalEncoder):
+    def encode(self, input, final=False):
+        data, nbytes = codecs.charmap_encode(input,
+                                             self.errors,
+                                             encoding_map)
+        return data
+
+class InvertCapsIncrementalDecoder(codecs.IncrementalDecoder):
+    def decode(self, input, final=False):
+        data, nbytes = codecs.charmap_decode(input,
+                                             self.errors,
+                                             decoding_map)
+        return data
+
+# Stream reader and writer
+
+class InvertCapsStreamReader(InvertCapsCodec, codecs.StreamReader):
+    pass
+
+class InvertCapsStreamWriter(InvertCapsCodec, codecs.StreamWriter):
+    pass
+
+# Register the codec search function
+
+def find_invertcaps(encoding):
+    """Return the codec for 'invertcaps'."""
+    if encoding == 'invertcaps':
+        return codecs.CodecInfo(
+            name='invertcaps',
+            encode=InvertCapsCodec().encode,
+            decode=InvertCapsCodec().decode,
+            incrementalencoder=InvertCapsIncrementalEncoder,
+            incrementaldecoder=InvertCapsIncrementalDecoder,
+            streamreader=InvertCapsStreamReader,
+            streamwriter=InvertCapsStreamWriter,
+            )
+    return None
+codecs.register(find_invertcaps)
+
+if __name__ == '__main__':
+
+    # Stateless encoder/decoder
+    encoder = codecs.getencoder('invertcaps')
+    text = 'abc.DEF'
+    encoded_text, consumed = encoder(text)
+    print 'Encoded "{}" to "{}", consuming {} characters'.format(
+        text, encoded_text, consumed)
+
+    # Stream writer
+    import sys
+    writer = codecs.getwriter('invertcaps')(sys.stdout)
+    print 'StreamWriter for stdout: ',
+    writer.write('abc.DEF')
+    print
+
+    # Incremental decoder
+    decoder_factory = codecs.getincrementaldecoder('invertcaps')
+    decoder = decoder_factory()
+    decoded_text_parts = []
+    for c in encoded_text:
+        decoded_text_parts.append(decoder.decode(c, final=False))
+    decoded_text_parts.append(decoder.decode('', final=True))
+    decoded_text = ''.join(decoded_text_parts)
+    print 'IncrementalDecoder converted "{}" to "{}"'.format(
+        encoded_text, decoded_text)
+
+    无状态编码器/解码器的基类是 Codec，要用新实现覆盖 encode() 和 decode()（在这里分别调用了 charmap_encode() 和 charmap_decode()）。这些方法必须分别返回一个 tuple，其中包含转换的数据和利用过的输入字节或字符数。charmap_encode() 和 charmap_decode() 已经返回了这个信息，所以很方便。
+    IncrementalEncoder 和 IncrementalDecoder 可以作为增量式编码接口的基类。增量类的 encode() 和 decode() 方法定义为只返回具体的转换数据。有关缓冲的所有信息都作为内部状态维护。invertcaps 编码不需要缓冲数据（它使用一种一对一映射）。如果编码根据所处理的数据会生成数量不同的输出，如压缩算法，对于这些编码，BufferedIncrementalEncoder 和 BufferedIncrementalDecoder 作为基类更为合适，因为它们可以管理输入中未处理的部分。
+    StreamReader 和 StreamWriter 也需要 encode() 和 decode() 方法，而且因为它们往往返回与 Codec 相应方法同样的值，所以实现时可以使用多重继承。
