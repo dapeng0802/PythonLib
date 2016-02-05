@@ -1,0 +1,4 @@
+[Python标准库]StringIO——提供类文件 API 的文本缓冲区
+    作用：使用一个类文件 API 处理文本缓冲区。
+    Python 版本：1.4 及以后版本
+    StringIO 提供了一种方便的做法，可以使用文件 API（read()、write() 等等）处理内存中的文本。有两种不同的实现。cStringIO 版本用 C 编写以提高速度，而 StringIO 用 Python 编写来提供可移植性。与其他一些字符串连接技术相比，使用 cStringIO 构造大字符串可以提供更好的性能。
