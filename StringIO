@@ -2,3 +2,28 @@
     作用：使用一个类文件 API 处理文本缓冲区。
     Python 版本：1.4 及以后版本
     StringIO 提供了一种方便的做法，可以使用文件 API（read()、write() 等等）处理内存中的文本。有两种不同的实现。cStringIO 版本用 C 编写以提高速度，而 StringIO 用 Python 编写来提供可移植性。与其他一些字符串连接技术相比，使用 cStringIO 构造大字符串可以提供更好的性能。
+示例
+    以下是使用 StringIO 缓冲区的一些标志例子：
+
+# Find the best implementation available on this platform
+try:
+    from cStringIO import StringIO
+except:
+    from StringIO import StringIO
+
+# Writing to a buffer
+output = StringIO()
+output.write('This goes into the buffer.')
+print >>output, 'And so does this.'
+
+# Retrieve the value written
+print output.getvalue()
+
+output.close() # discard buffer memory
+
+# Initialize a read buffer
+input = StringIO('Inital value for read buffer')
+# Read from the buffer
+print input.read()
+
+    这个例子使用了 read()，不过也可以用 readline() 和 readlines() 方法。StringIO 类还提供了一个 seek() 方法，读取文本时可以在缓冲区中跳转，如果使用一种前向解析算法，这对于回转很有用。
