@@ -1,0 +1,65 @@
+[Python标准库]fnmatch——UNIX 式 glob 模式匹配
+    作用：处理 UNIX 式文件名比较。
+    Python 版本：1.4 及以后版本
+    fnmatch 模块用于根据 glob 模式（如 UNIX shell 所用的模式）比较文件名。
+简单匹配
+    fnmatch() 根据一个模式来比较一个文件名，并返回一个布尔值，指示二者是否匹配。如果操作系统使用一个区分大小写的文件系统，这个比较则是区分大小写的。
+
+import fnmatch
+import os
+pattern = 'fnmatch_*.py'
+print 'Pattern :', pattern
+print
+
+files = os.listdir('.')
+for name in files:
+    print 'Filename: %-25s %s' % \
+          (name, fnmatch.fnmatch(name, pattern))
+
+    在这个例子中，这个模式会匹配所有以 fnmatch_ 开头并以 .py 结尾的文件。
+    要强制完成一个区分大小写的比较，而不论文件系统和操作系统如何设置，可以使用 fnmatchcase()。
+
+import fnmatch
+import os
+pattern = 'FNMATCH_*.PY'
+print 'Pattern :', pattern
+print
+
+files = os.listdir('.')
+
+for name in files:
+    print 'Filename: %-25s %s' % \
+          (name, fnmatch.fnmatch(name, pattern))
+
+    由于用来测试这个程序的 OS X 系统使用的是区分大小写的文件系统，所以模式修改后无法匹配任何文件。
+过滤
+    要测试一个文件名序列，可以使用 filter()，它会返回与模式参数匹配的文件名列表。
+
+import fnmatch
+import os
+import pprint
+
+pattern = 'fnmatch_*.py'
+print 'Pattern :', pattern
+
+files = os.listdir('.')
+
+print
+print 'Files  :'
+pprint.pprint(files)
+
+print
+print 'Matches :'
+pprint.pprint(fnmatch.filter(files, pattern))
+
+    在这个例子中，filter() 返回了与这一节有关的示例源文件的文件名列表。
+转换模式
+    在内部，fnmatch 将 glob 模式转换为一个正则表达式，并使用 re 模块来比较文件名和模式。translate() 函数就是将 glob 模式转换为正则表达式的公共 API。
+
+import fnmatch
+
+pattern = 'fnmatch_*.py'
+print 'Pattern :', pattern
+print 'Regex   :', fnmatch.translate(pattern)
+
+    要建立一个合法的表达式，需要对一些字符进行转义。
