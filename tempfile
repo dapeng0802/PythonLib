@@ -122,3 +122,4 @@ tempfile.tempdir = '/I/Changed/this/path'
 print 'gettempdir():', tempfile.gettempdir()
 
     如果程序需要对所有临时文件使用一个全局位置，但不使用以上任何环境变量，则应当直接设置 tempfile.tempdir，为该变量赋一个值。
+    
