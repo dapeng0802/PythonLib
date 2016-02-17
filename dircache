@@ -1,0 +1,69 @@
+[Python标准库]dircache——缓存目录列表
+    作用：缓存目录列表，目录的修改时间改变时会更新。
+    Python 版本：1.4 及以后版本
+    dircache 模块从文件系统读取目录列表，并保存在内存中。
+列出目录内容
+    dircache API 中的主要函数是 listdir()，这是 os.listdir() 的一个包装器。给定一个路径，每次调用 dircache.listdir() 时，这个函数会返回同样的 list 对象，除非目录的修改日期有改变。
+
+import dircache
+
+path = '.'
+first = dircache.listdir(path)
+second = dircache.listdir(path)
+
+print 'Contents :'
+for name in first:
+    print '  ', name
+
+print
+print 'Identical:', first is second
+print 'Equal    :', first == second
+
+    有一点很重要，要认识到每次都会返回完全相同的 list，所以不能原地修改。
+    如果目录的内容有改变，则会重新扫描。
+
+import dircache
+import os
+
+path = '.'
+file_to_create = os.path.join(path, 'pymotw_tmp.txt')
+
+# Look at the directory contents
+first = dircache.listdir(path)
+
+# Create the new file
+open(file_to_create, 'wt').close()
+
+# Rescan the directory
+second = dircache.listdir(path)
+
+# Remove the file we created
+os.unlink(file_to_create)
+
+print 'Identical :', first is second
+print 'Equal     :', first == second
+print 'Difference:', list(set(second) - set(first))
+
+    在这种情况下，由于出现了新文件，这就导致构造一个新的 list。
+    重置之后，会返回一个新的 list 实例。
+标注列表
+    dircache 模块还提供了另一个有趣的函数：annotate()，它会修改 list()（如 listdir() 返回的 list），向表示目录的名称末尾增加一个“/”。
+
+import dircache
+from pprint import pprint
+import os
+
+path = '../..'
+
+contents = dircache.listdir(path)
+annotated = contents[:]
+dircache.annotate(path, annotated)
+
+fmt = '%25s\t%25s'
+
+print fmt % ('ORIGINAL', 'ANNOTATED')
+print fmt % (('-' * 25,) * 2)
+for o, a in zip(contents, annotated):
+    print fmt % (o, a)
+
+    遗憾的是，对于 Windows 用户，尽管 annotate() 使用 os.path.join() 来构造要测试的名称，但是它总是追加一个“/”，而不是 os.sep。
