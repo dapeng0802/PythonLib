@@ -1,0 +1,199 @@
+[Python标准库]filecmp——比较文件
+    作用：比较文件系统中的文件和目录。
+    Python 版本：2.1 及以后版本
+    filecmp 模块包含一些函数和一个类来比较文件系统中的文件和目录。
+示例数据
+    以下讨论的例子使用了 filecmp_mkexamples.py 创建的一组测试文件。
+
+import os
+
+def mkfile(filename, body=None):
+    with open(filename, 'w') as f:
+        f.write(body or filename)
+    return
+
+def make_example_dir(top):
+    if not os.path.exists(top):
+        os.mkdir(top)
+    curdir = os.getcwd()
+    os.chdir(top)
+
+    os.mkdir('dir1')
+    os.mkdir('dir2')
+
+    mkfile('dir1/file_only_in_dir1')
+    mkfile('dir2/file_only_in_dir2')
+
+    os.mkdir('dir1/dir_only_in_dir1')
+    os.mkdir('dir2/dir_only_in_dir2')
+
+    os.mkdir('dir1/common_dir')
+    os.mkdir('dir2/common_dir')
+
+    mkfile('dir1/common_file', 'this file is the same')
+    mkfile('dir2/common_file', 'this file is the same')
+
+    mkfile('dir1/not_the_same')
+    mkfile('dir2/not_the_same')
+
+    mkfile('dir1/file_in_dir1', 'This is a file in dir1')
+    os.mkdir('dir2/file_in_dir1')
+
+    os.chdir(curdir)
+    return
+
+if __name__ == '__main__':
+    os.chdir(os.path.dirname(__file__) or os.getcwd())
+    make_example_dir('example')
+    make_example_dir('example/dir1/common_dir')
+    make_example_dir('example/dir2/common_dir')
+    
+    运行 filecmp_mkexamples.py 时，会在 example 目录下生成一个文件树。
+比较文件
+    cmp() 用于比较文件系统中的两个文件。
+
+import filecmp
+
+print 'common_file:',
+print filecmp.cmp('example/dir1/common_file',
+                  'example/dir2/common_file'),
+print filecmp.cmp('example/dir1/common_file',
+                  'example/dir2/common_file',
+                  shallow=False)
+
+print 'not_the_same:',
+print filecmp.cmp('example/dir1/not_the_same',
+                  'example/dir2/not_the_same'),
+print filecmp.cmp('example/dir1/not_the_same',
+                  'example/dir2/not_the_same',
+                  shallow=False)
+
+print 'identical:',
+print filecmp.cmp('example/dir1/file_only_in_dir1',
+                  'example/dir1/file_only_in_dir1'),
+print filecmp.cmp('example/dir1/file_only_in_dir1',
+                  'example/dir1/file_only_in_dir1',
+                  shallow=False)
+
+    shallow 参数告诉 cmp() 除了文件的元数据外，是否还要查看文件的内容。默认情况下，会使用由 os.stat() 得到的信息完成一个浅比较，而不查看内容。对于同时创建的相同大小的文件，如果不比较其内容，会报告为相同。
+    如果非递归地比较两个目录中的一组文件，可以使用 cmpfiles()。参数是目录名和两个位置上要检查的文件列表。传入的公共文件列表应当只包括文件名（目录会导致匹配不成功），而且这些文件在两个位置上都应当出现。下一个例子显示了构造公共列表的一种简单方法。与 cmp() 一样，这个比较也可以取一个 shallow 标志。
+
+import filecmp
+import os
+
+# Determine the items that exist in both directories
+d1_contents = set(os.listdir('example/dir1'))
+d2_contents = set(os.listdir('example/dir2'))
+common = list(d1_contents & d2_contents)
+common_files = [ f
+                 for f in common
+                 if os.path.isfile(os.path.join('example/dir1', f))
+                 ]
+print 'Common files:', common_files
+
+# Compare the directories
+match, mismatch, errors = filecmp.cmpfiles('example/dir1',
+                                           'example/dir2',
+                                           common_files)
+print 'Match   :', match
+print 'Mismatch:', mismatch
+print 'Errors  :', errors
+
+    cmpfiles() 返回 3 个文件名列表，分别包括匹配的文件、不匹配的文件和不能比较的文件（由于权限问题或出于其他原因）。
+比较目录
+    前面介绍的函数适合完成相对简单的比较。对于大目录树的递归比较或者完成更完整的分析，dircmp 类会更有用。在以下最简单的使用用例中，report() 会打印比较两个目录的报告。
+
+import filecmp
+
+filecmp.dircmp('example/dir1', 'example/dir2').report()
+
+    输出是一个纯文本报告，显示的结果只包括给定目录的内容，而不会递归比较其子目录。在这里，文件“not_the_same”被认为是相同的，因为并没有比较内容。无法让 dircmp 像 cmp() 那样比较文件的内容。
+    要想完成更为详细的递归比较，可以使用 report_full_closure()：
+
+import filecmp
+
+filecmp.dircmp('example/dir1', 'example/dir2').report_full_closure()
+
+    输出将包括所有同级子目录的比较。
+程序中使用差异
+    除了生成打印报告，dircmp 还能计算文件列表，可以在程序中直接使用。以下各个属性只在请求时才计算，所以对于未用的数据，创建 dirmap 实例并不会带来开销。
+
+import filecmp
+import pprint
+dc = filecmp.dircmp('example/dir1', 'example/dir2')
+print 'Left:'
+pprint.pprint(dc.left_list)
+
+print '\nRigth:'
+pprint.pprint(dc.right_list)
+
+    所比较目录中包含的文件和子目录分别列在 left_list 和 right_list 中。
+    可以向构造函数传入一个要忽略的名字列表（该列表中指定的名字将被忽略），对输入进行过滤。默认情况下，RCS、CVS 和 tags 等名字会被忽略。
+
+import filecmp
+import pprint
+
+dc = filecmp.dircmp('example/dir1', 'example/dir2',
+                    ignore=['common_file'])
+
+print 'Left:'
+pprint.pprint(dc.left_list)
+
+print '\nRigth:'
+pprint.pprint(dc.right_list)
+
+    在这里，将把“common_file”从要比较的文件列表中去除。
+    两个输入目录中共有的文件名会保存在 common，各目录独有的文件会列在 left_only 和 right_only 中。
+
+import filecmp
+import pprint
+
+dc = filecmp.dircmp('example/dir1', 'example/dir2')
+print 'Common:'
+pprint.pprint(dc.common)
+
+print 'Left:'
+pprint.pprint(dc.left_only)
+
+print '\nRigth:'
+pprint.pprint(dc.right_only)
+
+    “left”目录是 dircmp() 的第一个参数，“right”目录是第二个参数。
+    公共成员可以进一步分解为文件、目录和“有趣”（funny）元素（两个目录中类型不同的内容，或者 os.stat() 指出错误的地方）。
+
+import filecmp
+import pprint
+
+dc = filecmp.dircmp('example/dir1', 'example/dir2')
+print 'Common:'
+pprint.pprint(dc.common)
+
+print '\nDirectories:'
+pprint.pprint(dc.common_dirs)
+
+print '\nFiles:'
+pprint.pprint(dc.common_files)
+
+print '\nFunny:'
+pprint.pprint(dc.common_funny)
+
+    在示例数据中，名为“file_in_dir1”的元素在一个目录中是一个文件，而在另一个目录中是一个子目录，所以它会出现在“有趣”列表中。
+    文件之间的差别也可以做类似的划分。
+
+import filecmp
+
+dc = filecmp.dircmp('example/dir1', 'example/dir2')
+print 'Same      :', dc.same_files
+print 'Different :', dc.diff_files
+print 'Funny     :', dc.funny_files
+
+    文件 not_the_same 只通过 os.stat() 比较，并不检查内容，所以它会包含在 same_files 列表中。
+    最后一点，子目录也会保存，从而能容易地完成递归比较。
+
+import filecmp
+
+dc = filecmp.dircmp('example/dir1', 'example/dir2')
+print 'Subdirectories:'
+print dc.subdirs
+
+    属性 subdirs 是一个字典，它将目录名映射到新的 dircmp 对象。
