@@ -1,0 +1,97 @@
+[Python标准库]pickle——对象串行化
+    作用：对象串行化。
+    Python 版本：pickle 为 1.4 及以后版本，cPickle 为 1.5 及以后版本。
+    pickle 模块实现了一个算法可以将一个任意的 Python 对象转换为一系列字节。这个过程也称为串行化对象。表示对象的字节流可以传输或存储，然后重新构造来创建有相同性质的新对象。
+    cPickle 模块实现了同样的算法，不过用 C 实现而不是 Python。它比 Python 实现要快数倍，所以通常会使用这个模块而不是纯 Python 实现。
+导入
+    由于 cPickle 比 pickle 更快，所以通常首先会尝试导入 cPickle，并给定一个别名“pickle”，如果导入失败，则退而使用 pickle 中的内置 Python 实现。这说明，如果有更快的实现，程序总是倾向于使用更快的实现，否则才使用可移植的实现。
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+
+    C 和 Python 版本的 API 完全相同，数据可以在使用 C 和 Python 版本库的程序之间交换。
+编码和解码字符串数据
+    第一个例子使用 dumps() 将一个数据结构编码为一个字符串，然后把这个字符串打印到控制台。它使用了一个完全由内置类型构成的数据结构。任何类的实例都可以 pickle，如下例所示。
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+import pprint
+
+data = [ { 'a':'A', 'b':2, 'c':3.0 } ]
+print 'DATA:',
+pprint.pprint(data)
+data_string = pickle.dumps(data)
+print 'PICKLE: %r' % data_string
+
+    默认情况下，pickle 只包含 ASCII 字符。还有一种更高效的二进制 pickle 格式，不过这里的所有例子都使用 ASCII 输出，因为这样在打印时更容易理解。
+    数据串行化后，可以写到一个文件、套接字或者管道等等。之后可以读取这个文件，将数据解除 pickle，用同样的值构造一个新的对象。
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+import pprint
+
+data1 = [ { 'a':'A', 'b':2, 'c':3.0 } ]
+print 'BEFORE: ',
+pprint.pprint(data1)
+
+data1_string = pickle.dumps(data1)
+
+data2 = pickle.loads(data1_string)
+print 'AFTER : ',
+pprint.pprint(data2)
+
+print 'SAME? :', (data1 is data2)
+print 'EQUAL?:', (data1 == data2)
+
+    新构造的对象等于原来的对象，但并不是同一个对象。
+处理流
+    除了 dumps() 和 loads()，pickle 还提供了一些便利函数处理类文件的流。可以向一个流写多个对象，然后从流读取这些对象，而无须事先知道要写多少个对象或者这些对象有多大。
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+import pprint
+from StringIO import StringIO
+
+class SimpleObject(object):
+
+    def __init__(self, name):
+        self.name = name
+        self.name_backwards = name[::-1]
+        return
+
+data = []
+data.append(SimpleObject('pickle'))
+data.append(SimpleObject('cPickle'))
+data.append(SimpleObject('last'))
+
+# Simulate a file with StringIO
+out_s = StringIO()
+
+# Write to the stream
+for o in data:
+    print 'WRITING : %s (%s)' % (o.name, o.name_backwards)
+    pickle.dump(o, out_s)
+    out_s.flush()
+
+# Set up a read-able stream
+in_s = StringIO(out_s.getvalue())
+
+# Read the data
+while True:
+    try:
+        o = pickle.load(in_s)
+    except EOFError:
+        break
+    else:
+        print 'READ    : %s (%s)' % (o.name, o.name_backwards)
+
+    这个例子使用两个 StringIO 缓冲区来模拟流。第一个缓冲区接收 pickle 的对象，将其值传入到第二个缓冲区，load() 将读取这个缓冲区。简单的数据库格式也可以使用 pickle 来存储对象（参见 shelve）。
+    除了存储数据，pickle 对于进程间通信也很方便。例如，os.fork() 和 os.pipe() 可以用来建立工作进程，从一个管道读取作业指令，并把结果写至另一个管道。管理工作线程池以及发送作业和接收响应的核心代码可以重用，因为作业和响应对象不必基于一个特定的类。使用管道或套接字时，在转储各个对象之后不要忘记刷新输出，将数据通过连接推至另一端。要了解可重用的工作线程池管理器，可以参见 multiprocessing 模块。
