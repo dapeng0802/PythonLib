@@ -95,3 +95,129 @@ while True:
 
     这个例子使用两个 StringIO 缓冲区来模拟流。第一个缓冲区接收 pickle 的对象，将其值传入到第二个缓冲区，load() 将读取这个缓冲区。简单的数据库格式也可以使用 pickle 来存储对象（参见 shelve）。
     除了存储数据，pickle 对于进程间通信也很方便。例如，os.fork() 和 os.pipe() 可以用来建立工作进程，从一个管道读取作业指令，并把结果写至另一个管道。管理工作线程池以及发送作业和接收响应的核心代码可以重用，因为作业和响应对象不必基于一个特定的类。使用管道或套接字时，在转储各个对象之后不要忘记刷新输出，将数据通过连接推至另一端。要了解可重用的工作线程池管理器，可以参见 multiprocessing 模块。
+重构对象的问题
+    处理定制类时，pickle 类必须出现在读取 pickle 的进程所在的命名空间。只会 pickle 这个实例数据，而不包括类定义。类名用于查找构造函数，以便在解除 pickle 时创建新对象。下面这个例子将一个类的实例写至一个文件。
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+import sys
+
+class SimpleObject(object):
+    def __init__(self, name):
+        self.name = name
+        l = list(name)
+        l.reverse()
+        self.name_backwards = ''.join(l)
+        return
+
+if __name__ == '__main__':
+    data = []
+    data.append(SimpleObject('pickle'))
+    data.append(SimpleObject('cPickle'))
+    data.append(SimpleObject('last'))
+
+    filename = sys.argv[1]
+    with open(filename, 'wb') as out_s:
+        # Write to the stream
+        for o in data:
+            print 'WRITING: %s (%s)' % (o.name, o.name_backwards)
+            pickle.dump(o, out_s)
+
+    运行这个脚本时，会根据作为命令行参数给定的名字创建一个文件。
+    如果简单地试图加载得到的 pickle 对象，将会失败。
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+import pprint
+from StringIO import StringIO
+import sys
+
+filename = sys.argv[1]
+
+with open(filename, 'rb') as in_s:
+    # Read the data
+    while True:
+        try:
+            o = pickle.load(in_s)
+        except EOFError:
+            break
+        else:
+            print 'READ: %s (%s)' % (o.name, o.name_backwards)
+
+    这个版本失败的原因在于并没有 SimpleObject 类。
+    修正后的版本从原脚本导入 SimpleObject，这一次运行会成功。在导入列表的最后添加以下 import 语句，从而允许脚本查找类并构造对象。
+
+from pickle_dump_to_file_1 import SimpleObject
+
+    现在运行修改后的脚本会生成期望的结果。
+不可 pickle 的对象
+    并不是所有对象都是可 pickle 的。套接字、文件句柄、数据库连接以及其他运行时状态依赖于操作系统或其他进程的对象可能无法用一种有意义的方式保存。如果对象包含不可 pickle 的属性，可以定义 __getstate__() 和 __setstate__() 来返回可 pickle 实例状态的一个子集。新式的类还可以定义 __getnewargs__()，这会返回要传至类内存分配器 (C.__new__()) 的参数。
+循环引用
+    pickle 协议会自动处理对象之间的循环引用，所以复杂数据结构不需要任何特殊的处理。
+    下例为一个有向图中包含几个循环，仍然可以 pickle 正确的结构然后重新加载。
+
+import pickle
+
+class Node(object):
+    """A simple digraph"""
+    def __init__(self, name):
+        self.name = name
+        self.connections = []
+
+    def add_edge(self, node):
+        "Create an edge between this node and the other."
+        self.connections.append(node)
+
+    def __iter__(self):
+        return iter(self.connections)
+
+def preorder_traversal(root, seen=None, parent=None):
+    """Generator function to yield the edges in a graph."""
+    if seen is None:
+        seen = set()
+    yield (parent, root)
+    if root in seen:
+        return
+    seen.add(root)
+    for node in root:
+        for parent, subnode in preorder_traversal(node, seen, root):
+            yield (parent, subnode)
+
+def show_edges(root):
+    "Print all the edges in the graph."
+    for parent, child in preorder_traversal(root):
+        if not parent:
+            continue
+        print '%5s -> %2s (%s)' % \
+              (parent.name, child.name, id(child))
+
+# Set up the nodes
+root = Node('root')
+a = Node('a')
+b = Node('b')
+c = Node('c')
+
+# Add edges between them.
+root.add_edge(a)
+root.add_edge(b)
+a.add_edge(b)
+b.add_edge(a)
+b.add_edge(c)
+a.add_edge(a)
+
+print 'ORIGINAL GRAPH:'
+show_edges(root)
+
+# Pickle and unpickle the graph to create
+# a new set of nodes.
+dumped = pickle.dumps(root)
+reloaded = pickle.loads(dumped)
+
+print '\nRELOADED GRAPH:'
+show_edges(reloaded)
+
+    重新加载的节点并不是同一个对象，不过节点之间的关系得到了维护，而且如果对象有多个引用，那么只会重新加载它的一个副本。要验证这两点，可以对通过 pickle 传递之前和传递之后的节点的 id() 值进行检查。
