@@ -1,0 +1,63 @@
+[Python标准库]shelve——对象持久存储
+    作用：shelve 模块使用一种类字典的 API，可以持久存储可 pickle 的任意 Python 对象。
+    不需要关系型数据库时，shelve 模块可以用作 Python 对象的一个简单的持久存储选择。类似于字典，shelve 要按键来访问。值将被 pickle 并写至由 anydbm 创建和管理的数据库。
+创建一个新 shelf
+    使用 shelve 最简单的方法就是通过 DbfilenameShelf 类。它使用 anydbm 存储数据。这个类可以直接使用，也可以通过调用 shelve.open() 来使用。
+
+import shelve
+from contextlib import closing
+with closing(shelve.open('test_shelf.db')) as s:
+    s['key1'] = { 'int':10, 'float':9.5, 'string':'Sample data' }
+
+    要再访问这个数据，可以打开 shelf，像字典一样使用。
+
+import shelve
+from contextlib import closing
+with closing(shelve.open('test_shelf.db')) as s:
+    existing = s['key1']
+print existing
+
+    dbm 模块不支持多个应用同时写同一个数据库，不过它支持并发的只读客户。如果一个客户没有修改 shelf，可以传入 flag='r' 告诉 shelve 以只读方式打开数据库。
+
+import shelve
+from contextlib import closing
+with closing(shelve.open('test_shelf.db', flag='r')) as s:
+    existing = s['key1']
+print existing
+
+    如果数据库以只读模式打开，此时倘若一个程序试图修改这个数据库，会生成一个访问错误异常。具体的异常类型取决于创建数据库时 anydbm 选择的数据库模块。
+写回
+    默认情况下，shelf 不会跟踪对可变对象的修改。这说明，如果存储在 shelf 中的一个元素内容有变化，shelf 必须通过再次存储整个元素来显式更新。
+
+import shelve
+from contextlib import closing
+
+with closing(shelve.open('test_shelf.db')) as s:
+    print s['key1']
+    s['key1']['new_value'] = 'this was not here before'
+
+with closing(shelve.open('test_shelf.db', writeback=True)) as s:
+    print s['key1']
+
+    在这个例子中，'key1' 的相应字典没有再次存储，所以重新打开 shelf 时，修改不会保留。
+    对于 shelf 中存储的可变对象，为了自动获取其修改，打开 shelf 时可以启用写回（writeback）。写回标志使得 shelf 使用内存中缓存记住从数据库获取的所有对象。shelf 关闭时每个缓存对象也写回到数据库。
+
+import shelve
+import pprint
+from contextlib import closing
+
+with closing(shelve.open('test_shelf.db', writeback=True)) as s:
+    print 'Initial data:'
+    pprint.pprint(s['key1'])
+    
+    s['key1']['new_value'] = 'this was not here before'
+    print '\nModified:'
+    pprint.pprint(s['key1'])
+
+with closing(shelve.open('test_shelf.db', writeback=True)) as s:
+    print '\nPreserved:'
+    pprint.pprint(s['key1'])
+
+    尽管这会减少程序员犯错的机会。并且能使对象持久存储更透明，但是并非所有情况下都有必要使用写回模式。打开 shelf 时缓存会消耗额外的内存，它关闭时会暂停将各个缓存对象写回到数据库，这会使应用的速度减慢。所有缓存的对象都要写回数据库，因为无法区分它们是否有修改。如果应用读取的数据多于写的数据，写回会影响性能而且没有太大意义。
+特定 shelf 类型
+    之前的例子都使用了默认的 shelf 实现。可以使用 shelve.open() 而不是直接使用某种 shelf 实现，这是一种常见的用法，特别是当使用何种类型的数据库存储数据都无关紧要时。不过，有些情况下数据库格式会很重要。在这些情况下，可以直接使用 DbfilenameShelf 或 BsdDbShelf，或者甚至可以派生 Shelf 来得到一个定制的解决方案。
