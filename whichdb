@@ -1,0 +1,15 @@
+[Python标准库]whichdb——识别 DBM 数据库格式
+    作用：检查现有的 DBM 数据库文件，以确定应当使用哪个库来打开该文件。
+    Python 版本：1.4 及以后版本
+    whichdb 模块包含一个函数 whichdb()，这个函数用来检查一个现有的数据库文件，以确定应当使用哪个 DBM 库打开该文件。它会返回用来打开文件的模块的串名，或者如果打开文件存在问题则返回 None。如果可以打开文件，但是不能确定要使用的库，则返回一个空串。
+
+import anydbm
+import whichdb
+
+db = anydbm.open('example.db', 'n')
+db['key'] = 'value'
+db.close()
+
+print whichdb.whichdb('example.db')
+
+    取决于系统上可用的模块，运行这个示例程序的结果可能有所不同。
