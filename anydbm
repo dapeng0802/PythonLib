@@ -1,0 +1,81 @@
+[Python标准库]anydbm——DBM 数据库
+    作用：anydbm 为以字符串为键的 DBM 数据库提供了一个通用的类字典接口。
+    Python 版本：1.4 及以后版本
+    anydbm 是面向 DBM 数据库的一个前端，DBM 数据库使用简单的字符串值作为键来访问包含字符串的记录。anydbm 使用 whichdb 标识数据库，然后用适当的模块打开这些数据库。它还用作为 shelve 的一个后端，shelve 使用 pickle 将对象存储在一个 DBM 数据库中。
+数据库类型
+    Python 提供了很多模块来访问 DBM 数据库。具体选择哪个实现取决于当前系统上可用的库以及编译 Python 时使用的选项。
+    1. dbhash
+    dbhash 模块是 anydbm 的主要后端。它使用 bsddb 库来管理数据库文件。使用 dbhash 数据库的语义与 anydbm API 定义的语义相同。
+    2. gdbm
+    gdbm 是 GUN 项目 dbm 库的一个更新版本。其工作方式与这里介绍的其他 DBM 实现相同，只是对 open() 支持的标志有些修改。
+    除了标准 'r'、'w'、'c' 和 'n' 标志，gdbm.open() 还支持以下标志：
+    'f' 以快速（fast）模式打开数据库。在快速模式下，对数据库的写并不同步。
+    's' 以同步（synchronize）模式打开数据库。对数据库做出修改时，这些改变要写至文件，而不是延迟到数据库关闭或显式同步时才写至文件。
+    'u' 不加锁（unlocked）地打开数据库。
+    3. dbm
+    dbm 模块为 dbm 格式的某个 C 实现提供了一个接口，具体哪个 C 实现取决于编译时如何配置这个模块。模块属性 library 指示编译扩展模块时 configure 能够找到的库名。
+    4. dumbdbm
+    dumbdbm 模块是没有其他实现可用时 DBM API 的一个可移植的后备实现。使用 dumbdbm 不要求依赖任何外部库，不过它比大多数其他实现速度都慢。
+创建一个新数据库
+    会按顺序查找以下各个模块来选择新数据库的存储格式：
+    dbhash、gdbm、dbm、dumbdbm。
+    open() 函数可以接收一些标志来控制如何管理数据库文件。必要时，要创建一个新的数据库，可以使用 'c'。使用 'n' 则总会创建一个新数据库而覆盖现有的文件。
+
+import anydbm
+
+db = anydbm.open('example.db', 'n')
+db['key'] = 'value'
+db['today'] = 'Sunday'
+db['author'] = 'Doug'
+db.close()
+
+    在这个例子中，文件总会重新初始化。
+    whichdb 会报告所创建的数据库的类型。
+
+import whichdb
+
+print whichdb.whichdb('example.db')
+
+    取决于系统上安装的模块，示例程序的输出可能有所不同。
+打开一个现有数据库
+    要打开一个现有数据库，可以使用标志 'r'（只读）或 'w'（读写）。会把现有的数据库自动提供给 whichdb 来识别，所以只要一个文件可以识别，就会使用一个适当的模块来打开这个文件。
+
+import anydbm
+
+db = anydbm.open('example.db', 'r')
+try:
+    print 'keys():', db.keys()
+    for k, v in db.iteritems():
+        print 'iterating:', k, v
+    print 'db["author"] = ', db['author']
+finally:
+    db.close()
+
+    一旦打开，db 是一个类字典的对象，并支持所有常用的方法。
+错误情况
+    数据库的键必须是字符串。
+
+import anydbm
+
+db = anydbm.open('example.db', 'r')
+try:
+    db[1] = 'one'
+except TypeError, err:
+    print '%s: %s' % (err.__class__.__name__, err)
+finally:
+    db.close()
+
+    如果传入其他类型则会导致一个 TypeError。
+    值必须是字符串或 None。
+
+import anydbm
+
+db = anydbm.open('example.db', 'r')
+try:
+    db['one'] = 1
+except TypeError, err:
+    print '%s: %s' % (err.__class__.__name__, err)
+finally:
+    db.close()
+
+    如果值不是一个字符串，也会产生一个类似的 TypeError。
