@@ -1,0 +1,228 @@
+[Python标准库]sqlite3——嵌入式关系数据库
+    作用：实现一个嵌入式关系数据库，并提供 SQL 支持。
+    Python 版本：2.5 及以后版本
+    sqlite3 模块为 SQLite 提供了一个 DB-API 2.0 兼容接口，SQLite 是一个进程中关系数据库。SQLite 设计为嵌入在应用中，而不是像 MySQL、PostgreSQL 或 Oracle 使用一个单独的数据库服务器程序。SQLite 的速度很快、经过了严格的测试，而且很灵活，所以非常适合为一些应用建立原型和生产部署。
+创建数据库
+    SQLite 数据库作为一个文件存储在文件系统中。这个库管理对文件的访问，包括加锁来防止多个书写器使用它时造成破坏。数据库在第一次访问文件时创建，不过应用要负责管理数据库中的数据库表定义，即模式（schema）。
+    下面这个例子在用 connect() 打开数据库文件之前先查找这个文件，以便了解何时为新数据库创建模式。
+
+import os
+import sqlite3
+
+db_filename = 'todo.db'
+
+db_is_new = not os.path.exists(db_filename)
+
+conn = sqlite3.connect(db_filename)
+
+if db_is_new:
+    print 'Need to create schema'
+else:
+    print 'Database exists, assume schema dose, too.'
+
+conn.close()
+
+    将这个脚本运行两次，可以看到，如果文件尚不存在则会创建空文件。
+    创建新的数据库文件后，下一步是创建模式来定义数据库中的表。这一节余下的例子使用的数据库模式与管理任务的表相同。数据库模式的详细信息见下表：
+                      “project” 表
+    --------------------------------------------------
+          列      |  类型  |           描述
+    --------------------------------------------------
+      name        |  text  |  项目名
+    --------------------------------------------------
+      description |  text  |  详细的项目描述
+    --------------------------------------------------
+      deadline    |  date  |  整个项目的预定结束日期
+    --------------------------------------------------
+
+                          “task” 表
+    ----------------------------------------------------------------
+          列      |   类型   |                  描述
+    ----------------------------------------------------------------
+      id          |  number  |  唯一任务标识
+    ----------------------------------------------------------------
+      priority    |  integer |  优先级数值：值越小越重要
+    ----------------------------------------------------------------
+      details     |  text    |  完备的任务详细描述
+    ----------------------------------------------------------------
+      status      |  text    |  任务状态[new/pending/done/canceled]
+    ----------------------------------------------------------------
+      deadline    |  date    |  这个任务的预定结束日期
+    ----------------------------------------------------------------
+      completed_on|  date    |  任务何时完成
+    ----------------------------------------------------------------
+      project     |  text    |  这个任务对应的项目名
+    ----------------------------------------------------------------
+    以下是创建这些表的数据定义语言（data definition language, DDL）语句。
+
+-- Schema for to-do application examples.
+
+-- Projects are high-level activities made up of tasks
+create table project (
+    name        text primary key,
+    description text,
+    deadline    date
+);
+
+-- Task are steps that can be taken to complete a project
+create table task (
+    id           integer primary key autoincrement not null,
+    priority     integer default 1,
+    details      text,
+    status       text,
+    deadline     date,
+    completed_on date,
+    project      text not null references project(name)
+);
+    可以用 Connection 的 executescript() 方法来运行创建模式的 DDL 指令。
+
+import os
+import sqlite3
+
+db_filename = 'todo.db'
+schema_filename = 'todo_schema.sql'
+
+db_is_new = not os.path.exists(db_filename)
+
+with sqlite3.connect(db_filename) as conn:
+    if db_is_new:
+        print 'Creating schema'
+        with open(schema_filename, 'rt') as f:
+            schema = f.read()
+        conn.executescript(schema)
+
+        print 'Inserting initial data'
+
+        conn.executescript(
+            """
+            insert into project (name, description, deadline)
+            values ('pymotw', 'Python Module of the Week', '2010-11-01');
+            insert into task (details, status, deadline, project)
+            values ('write about select', 'done', '2010-10-03', 'pymotw');
+            insert into task (details, status, deadline, project)
+            values ('write about random', 'waiting', '2010-10-10', 'pymotw');
+            insert into task (details, status, deadline, project)
+            values ('write about sqlite3', 'active', '2010-10-17', 'pymotw');
+            """
+            )
+    else:
+        print 'Database exists, assume schema does, too.'
+
+    创建这些数据表之后，用一些插入语句创建一个示例项目和相关的任务。可以用 sqlite3 命令行程序检查数据库的内容。
+获取数据
+    要从一个 Python 程序中获取 task 表中保存的值，可以从数据库连接创建一个 cursor。游标（cursor）会生成一个一致的数据视图，这也是与类似 SQLite 的事务型数据库系统交互的主要方式。
+
+import sqlite3
+
+db_filename = 'todo.db'
+
+with sqlite3.connect(db_filename) as conn:
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        select id, priority, details, status, deadline from task
+        where project = 'pymotw'
+        """
+        )
+
+    for row in cursor.fetchall():
+        task_id, priority, details, status, deadline = row
+        print '%2d {%d} %-20s [%-8s] (%s)' % \
+              (task_id, priority, details, status, deadline)
+
+    查询过程包括两步。首先，用游标的 execute() 方法运行查询，告诉数据库引擎要收集哪些数据。然后，使用 fetchall() 获取结果。返回值是一个元组序列，元组中包含查询 select 子句中所包括的列的值。
+    可以用 fetchone() 一次获取一个结果，也可以用 fetchmany() 获取固定大小的批量结果。
+
+import sqlite3
+
+db_filename = 'todo.db'
+
+with sqlite3.connect(db_filename) as conn:
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        select name, description, deadline from project
+        where name = 'pymotw'
+        """
+        )
+    name, description, deadline = cursor.fetchone()
+    print 'Project details for %s (%s) due %s' % \
+              (description, name, deadline)
+
+    cursor.execute(
+        """
+        select id, priority, details, status, deadline from task
+        where project = 'pymotw' order by deadline
+        """
+        )
+
+    print '\nNext 5 tasks:'
+    for row in cursor.fetchmany(5):
+        task_id, priority, details, status, deadline = row
+        print '%2d {%d} %-25s [%-8s] (%s)' % \
+              (task_id, priority, details, status, deadline)
+
+    传入 fetchmany() 的值是要返回的最大元素数。如果没有提供足够的元素，返回的序列大小将小于这个最大值。
+查询元数据
+    DB-API 2.0 规范指出：调用 execute() 之后，cursor 应当设置其 description 属性，来保存将由 fetch 方法返回的数据的有关信息。API 规范指出这个描述值是一个元组序列，各元组包含列名、类型、显示大小、内部大小、精度、范围和一个指示是否接受 null 值的标志。
+
+import sqlite3
+
+db_filename = 'todo.db'
+
+with sqlite3.connect(db_filename) as conn:
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        select * from task where project = 'pymotw'
+        """
+        )
+
+    print 'Task table has these columns:'
+    for coinfo in cursor.description:
+        print coinfo
+
+    由于 sqlite3 对插入到数据库的数据没有类型或大小约束，所以只填入列名值。
+行对象
+    默认情况下，获取方法从数据库作为“行”返回的值是元组。调用者负责了解查询中列的顺序，并从元组中抽取单个的值。查询的值个数增加时，或者处理数据的代码分布在一个库的不同位置时，通常更容易的做法是处理一个对象，并使用其列名来访问值。这样一来，编辑查询时，元组内容的个数和顺序可以随时间改变，另外依赖于查询结果的代码也不太可能出问题。
+    Connection 对象有一个 row_factory 属性，允许调用代码控制所创建对象的类型来表示查询结果集中的各行。sqlite3 还包括一个 Row 类，这个类将用作一个行工厂。可以通过 Row 实例使用列索引或名来访问列值。
+
+import sqlite3
+
+db_filename = 'todo.db'
+
+with sqlite3.connect(db_filename) as conn:
+    # Change the row factory to use Row
+    conn.row_factory = sqlite3.Row
+    
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        select name, description, deadline from project
+        where name = 'pymotw'
+        """
+        )
+    name, description, deadline = cursor.fetchone()
+    
+    print 'Project details for %s (%s) due %s' % (
+        description, name, deadline)
+    
+    cursor.execute(
+        """
+        select id, priority, details, status, deadline from task
+        where project = 'pymotw' order by deadline
+        """
+        )
+
+    print '\nNext 5 tasks:'
+    for row in cursor.fetchmany(5):
+        print '%2d {%d} %-25s [%-8s] (%s)' % (
+            row['id'], row['priority'], row['details'],
+            row['status'], row['deadline'],
+            )
+
+    这个版本的例子重写为使用 Row 实例而不是元组。打印 project 表中的行时仍然通过位置来访问列值，不过打印任务的 print 语句使用了关键字查找，所以任务查询中列顺序的该表并不会有任何影响。
