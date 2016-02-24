@@ -226,3 +226,91 @@ with sqlite3.connect(db_filename) as conn:
             )
 
     这个版本的例子重写为使用 Row 实例而不是元组。打印 project 表中的行时仍然通过位置来访问列值，不过打印任务的 print 语句使用了关键字查找，所以任务查询中列顺序的该表并不会有任何影响。
+查询中使用变量
+    如果查询定义为字面量字符串嵌入到程序中，使用这种查询很不灵活。例如，向数据库添加另一个项目时，显示前 5 个任务的查询就应当更新，以处理其中某一个项目。要想增加灵活性，一种方法是建立一个 SQL 语句，通过在 Python 中结合相应的值来得到所需的查询。不过，以这种方式构造查询串很危险，应当尽量避免。如果未能对查询中可变部分的特殊字符正确转义，可能会导致 SQL 解析错误，或者更糟糕的是，还有可能导致一个安全漏洞，称为 SQL 注入攻击（SQL-injection attack），这使得入侵者可以在数据库中执行任意的 SQL 语句。
+    要在查询中使用动态值，正确的方法是利用随 SQL 指令一起传入 execute() 的宿主变量（host variable）。SQL 语句执行时，语句中的占位符值会替换为宿主变量的值。通过使用宿主变量，而不是解析之前在 SQL 语句中插入任意的值，这样可以避免注入攻击，因为不可信的值没有机会影响 SQL 语句的解析。SQLite 支持两种形式带占位符的查询，分别是位置参数和命名参数。
+    1. 位置参数
+    问号（?）指示一个位置参数，将作为元组的一个成员传至 execute()。
+
+import sqlite3
+import sys
+
+db_filename = 'todo.db'
+project_name = sys.argv[1]
+
+with sqlite3.connect(db_filename) as conn:
+    cursor = conn.cursor()
+    query = """select id, priority, details, status, deadline from task
+            where project = ?
+            """
+
+    cursor.execute(query, (project_name,))
+
+    for row in cursor.fetchall():
+        task_id, priority, details, status, deadline = row
+        print '%2d {%d} %-20s [%-8s] (%s)' % (
+            task_id, priority, details, status, deadline)
+
+    命令行参数会作为位置参数安全地传至查询，所以恶意数据不可能破坏数据库。
+    2. 命名参数
+    对于包含大量参数的更为复杂的查询，或者如果查询中某些参数会重复多次，则可以使用命名参数。命令参数前面有一个冒号作为前缀（例如，:param_name）。
+
+import sqlite3
+import sys
+
+db_filename = 'todo.db'
+project_name = sys.argv[1]
+
+with sqlite3.connect(db_filename) as conn:
+    cursor = conn.cursor()
+    query = """select id, priority, details, status, deadline from task
+            where project = :project_name
+            order by deadline, priority
+            """
+
+    cursor.execute(query, {'project_name':project_name})
+
+    for row in cursor.fetchall():
+        task_id, priority, details, status, deadline = row
+        print '%2d {%d} %-20s [%-8s] (%s)' % (
+            task_id, priority, details, status, deadline)
+
+    位置或命名参数都不需要加引号或转义，因为查询解析器会对它们做特殊处理。
+    查询参数可以在 select（选择）、insert（插入）和 update（更新）语句中使用。查询中字面量能够出现的位置都可以放置查询参数。
+
+import sqlite3
+import sys
+
+db_filename = 'todo.db'
+id = int(sys.argv[1])
+status = sys.argv[2]
+
+with sqlite3.connect(db_filename) as conn:
+    cursor = conn.cursor()
+    query = "update task set status = :status where id = :id"
+    cursor.execute(query, {'status':status, 'id':id})
+
+    这个 update 语句使用了两个命名参数。id 值用于查找要修改的行，status 值则要写入数据表。
+批量加载
+    要对一个很大的数据集应用相同的 SQL 指令，可以使用 executemany()。这对于加载数据很有用，因为这样可以避免在 Python 中循环处理输入，而是让底层库对循环应用一些优化。下面这个示例程序使用 csv 模块从一个逗号分隔值文件读取任务列表，并将其加载到数据库。
+
+import csv
+import sqlite3
+import sys
+
+db_filename = 'todo.db'
+data_filename = sys.argv[1]
+
+SQL = """
+      insert into task (details, priority, status, deadline, project)
+      values (:details, :priority, 'active', :deadline, :project)
+      """
+
+with open(data_filename, 'rt') as csv_file:
+    csv_reader = csv.DictReader(csv_file)
+
+    with sqlite3.connect(db_filename) as conn:
+        cursor = conn.cursor()
+        cursor.executemany(SQL, csv_reader)
+
+    示例数据文件 tasks.csv 包含以下数据。
