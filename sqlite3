@@ -313,4 +313,158 @@ with open(data_filename, 'rt') as csv_file:
         cursor = conn.cursor()
         cursor.executemany(SQL, csv_reader)
 
-    示例数据文件 tasks.csv 包含以下数据。
+    示例数据文件 tasks.csv 包含以下数据:
+    deadline,project,priority,details
+    2010-10-02,pymotw,2,"finish reviewing markup"
+    2010-10-03,pymotw,2,"revise chapter intros"
+    2010-10-03,pymotw,3,"subtitle"
+定义新列类型
+    SQLite 对整数、浮点数和文本列提供了内置支持。sqlite3 会自动将这些类型的数据从 Python 的表示转换为可在数据库中存储的一个值，还可以根据需要从数据库中存储的值转换回 Python 的表示。整数值由数据库加载为 int 或 long 变量，这取决于值的大小。文本将作为 unicode 保存和获取（除非改变了 Connection 的 text_factory）。
+    尽管 SQLite 在内部只支持几种数据类型，不过 sqlite3 包括了一些便利工具，可以定义定制类型，允许 Python 应用在列中存储任意类型的数据。除了那些得到默认支持的类型外，还可以在数据库连接中使用 detect_types 标志启用其他类型。如果定义表时列使用所要求的类型来声明，可以使用 PARSE_DECLTYPES。
+
+import sqlite3
+import sys
+
+db_filename = 'todo.db'
+
+sql = "select id, details, deadline from task"
+
+def show_deadline(conn):
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    row = cursor.fetchone()
+    for col in ['id', 'details', 'deadline']:
+        print '  %-8s  %-30r %s' % (col, row[col], type(row[col]))
+    return
+
+print 'Without type detection:'
+with sqlite3.connect(db_filename) as conn:
+    show_deadline(conn)
+
+print '\nWith type detection'
+with sqlite3.connect(db_filename,
+                     detect_types=sqlite3.PARSE_DECLTYPES,
+                     ) as conn:
+    show_deadline(conn)
+
+    sqlite3 为日期和时间戳列提供了转换器，它使用 datetime 模块的 date 和 datetime 表示 Python 中的值。这两个与日期有关的转换器会在打开类型检测时自动启用。
+    定义一个新类型需要注册两个函数。适配器（adapter）取 Python 对象作为输入，返回一个可以存储在数据库中的字节串。转换器（converter）从数据库接收串，返回一个 Python 对象。要使用 register_adapter() 定义适配器函数，使用 register_converter() 定义转换器函数。
+
+import sqlite3
+try:
+    import cPickle as pickle
+except:
+    import pickle
+
+db_filename = 'todo.db'
+
+sql = "select id, details, deadline from task"
+
+def adapter_func(obj):
+    """Convert from in-memory to storage representation."""
+    print 'adapter_func(%s)\n' % obj
+    return pickle.dumps(obj)
+
+def converter_func(data):
+    """Convert from storage to in-memory representation."""
+    print 'converter_func(%r)\n' % data
+    return pickle.loads(data)
+
+class MyObj(object):
+    def __init__(self, arg):
+        self.arg = arg
+    def __str__(self):
+        return 'MyObj(%r)' % self.arg
+
+# Register the functions for manipulating the type.
+sqlite3.register_adapter(MyObj, adapter_func)
+sqlite3.register_converter("MyObj", converter_func)
+
+# Create some objects to save.  Use a list of tuples so
+# the sequence can be passed directly to executemany().
+to_save = [ (MyObj('this is a value to save'),),
+            (MyObj(42),),
+            ]
+
+with sqlite3.connect(db_filename,
+                     detect_types=sqlite3.PARSE_DECLTYPES) as conn:
+    # Create a table with column of type "MyObj"
+    conn.execute("""
+    create table if not exists obj (
+        id    integer primary key autoincrement not null,
+        data  MyObj
+    )
+    """)
+    cursor = conn.cursor()
+
+    # Insert the objects into the database
+    cursor.executemany("insert into obj (data) values (?)", to_save)
+
+# Query the database for the objects just saved
+cursor.execute("select id, data from obj")
+for obj_id, obj in cursor.fetchall():
+    print 'Retrieved', obj_id, obj, type(obj)
+    print
+
+    这个例子使用 pickle 将一个对象保存为可以存储在数据库中的串，这对于存储任意的对象很有用，不过这种技术不支持按对象属性查询。正真的对象关系映射器（object-relational mapper，如 SQLAlchemy）可以将属性值存储在单独的列中，这对于大量数据更为有用。
+确定列类型
+    查询返回的值的类型信息有两个来源。可以用原表声明来识别一个实际列的类型，这在前面已经看到。另外还可以在查询自身的 select 子句中包含类型指示符，采用以下形式：as "name[type]"。
+
+import sqlite3
+try:
+    import cPickle as pickle
+except:
+    import pickle
+
+db_filename = 'todo.db'
+
+sql = "select id, details, deadline from task"
+
+def adapter_func(obj):
+    """Convert from in-memory to storage representation."""
+    print 'adapter_func(%s)\n' % obj
+    return pickle.dumps(obj)
+
+def converter_func(data):
+    """Convert from storage to in-memory representation."""
+    print 'converter_func(%r)\n' % data
+    return pickle.loads(data)
+
+class MyObj(object):
+    def __init__(self, arg):
+        self.arg = arg
+    def __str__(self):
+        return 'MyObj(%r)' % self.arg
+
+# Register the functions for manipulating the type.
+sqlite3.register_adapter(MyObj, adapter_func)
+sqlite3.register_converter("MyObj", converter_func)
+
+# Create some objects to save.  Use a list of tuples so
+# the sequence can be passed directly to executemany().
+to_save = [ (MyObj('this is a value to save'),),
+            (MyObj(42),),
+            ]
+
+with sqlite3.connect(db_filename,
+                     detect_types=sqlite3.PARSE_DECLTYPES) as conn:
+    # Create a table with column of type "MyObj"
+    conn.execute("""
+    create table if not exists obj2 (
+        id    integer primary key autoincrement not null,
+        data  MyObj
+    )
+    """)
+    cursor = conn.cursor()
+
+    # Insert the objects into the database
+    cursor.executemany("insert into obj2 (data) values (?)", to_save)
+
+# Query the database for the objects just saved
+cursor.execute('select id, data as "pickle [MyObj]" from obj2')
+for obj_id, obj in cursor.fetchall():
+    print 'Retrieved', obj_id, obj, type(obj)
+    print
+
+    如果类型是查询的一部分而不属于原表定义，则要使用 detect_types 标志 PARSE_COLNAMES。
