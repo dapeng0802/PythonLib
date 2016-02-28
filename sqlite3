@@ -468,3 +468,170 @@ for obj_id, obj in cursor.fetchall():
     print
 
     如果类型是查询的一部分而不属于原表定义，则要使用 detect_types 标志 PARSE_COLNAMES。
+事务
+    关系型数据库的关键特性之一是使用事务（transaction）维护一致的内部状态。启用事务时，在提交结果并刷新输出到真正的数据库之前，可以通过一个连接完成多个变更，而不会影响任何其他用户。
+    1. 保留变更
+    不论通过插入（insert）还是更新（update）语句改变数据库，都需要显式地调用 commit() 保存这些变更。这个要求为应用提供了一个机会，可以将多个相关的变更一同完成，使它们以一种“原子”方式保存而不是增量保存，这样可以避免同时连接到数据库的不同客户只看到部分更新的情况。
+    可以利用一个使用了多个数据库连接的程序来查看调用 commit() 的效果。用第一个连接插入一个新行，然后两次尝试使用不同的连接读回这个数据行。
+
+import sqlite3
+
+db_filename = 'todo.db'
+
+def show_projects(conn):
+    cursor = conn.cursor()
+    cursor.execute('select name, description from project')
+    for name, desc in cursor.fetchall():
+        print '  ', name
+    return
+
+with sqlite3.connect(db_filename) as conn1:
+
+    print 'Before changes:'
+    show_projects(conn1)
+
+    # Insert in one cursor
+    cursor1 = conn1.cursor()
+    cursor1.execute("""
+    insert into project (name, description, deadline)
+    values ('virtualenvwrapper', 'Virtualenv Extensions',
+            '2011-01-01')
+    """)
+
+    print '\nAfter changes in conn1:'
+    show_projects(conn1)
+
+    # Select from another connection, without committing first
+    print '\nBefore commit:'
+    with sqlite3.connect(db_filename) as conn2:
+        show_projects(conn2)
+
+        # Commit then select from another connection
+        conn1.commit()
+        print '\nAfter commit:'
+        with sqlite3.connect(db_filename) as conn3:
+            show_projects(conn3)
+
+    提交 conn1 之前调用 show_projects() 时，其结果取决于使用了哪个连接。由于这个改变通过 conn1 完成，它会看到修改后的数据。不过，conn2 看不到这个改变。提交之后，新连接 conn3 会看到插入的行。
+    2. 丢弃变更
+    还可以使用 rollback() 完全丢弃未提交的变更。commit() 和 rollback() 方法通常在同一个 try:except 块的不同部分调用，有错误时就会触发回滚。
+
+import sqlite3
+
+db_filename = 'todo.db'
+
+def show_projects(conn):
+    cursor = conn.cursor()
+    cursor.execute('select name, description from project')
+    for name, desc in cursor.fetchall():
+        print '  ', name
+    return
+
+with sqlite3.connect(db_filename) as conn:
+
+    print 'Before changes:'
+    show_projects(conn)
+    try:
+        # Insert in one cursor
+        cursor = conn.cursor()
+        cursor.execute("""delete from project
+                       where name = 'virtualenvwrapper'
+                       """)
+
+        # Show the settings
+        print '\nAfter delete:'
+        show_projects(conn)
+
+        # Pretend the processing caused an error
+        raise RuntimeError('simulated error')
+
+    except Exception, err:
+        # Discard the changes
+        print 'ERROR:', err
+        conn.rollback()
+
+    else:
+        # Save the changes
+        conn.commit()
+
+    print '\nAfter rollback:'
+    show_projects(conn)
+
+    调用 rollback() 后，对数据库的修改不复存在。
+隔离级别
+    sqlite3 支持 3 种加锁模式，也称为隔离级别（isolation level），这会控制使用何种技术避免连接之间不兼容的变更。打开一个连接时可以传入一个字符串作为 isolation_level 参数来设置隔离级别，所以不同的连接可以使用不同的隔离级别值。
+    下面这个程序展示了使用同一个数据库的不同连接时，不同的隔离级别对于线程中事件的顺序会有什么影响。这里创建 4 个线程。两个线程会更新现有的行，将变更写入数据库。另外两个线程尝试从 task 表读取所有行。
+
+import sqlite3
+import logging
+import sys
+import threading
+import time
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s (%(threadName)-10s) %(message)s',
+    )
+
+db_filename = 'todo.db'
+isolation_level = sys.argv[1]
+
+def writer():
+    my_name = threading.currentThread().name
+    with sqlite3.connect(db_filename,
+                         isolation_level=isolation_level) as conn:
+        cursor = conn.cursor()
+        cursor.execute('update task set priority = priority + 1')
+        logging.debug('waiting to synchronize')
+        ready.wait() # synchronize threads
+        logging.debug('PAUSING')
+        time.sleep(1)
+        conn.commit()
+        logging.debug('CHANGES COMMITTED')
+    return
+
+def reader():
+    my_name = threading.currentThread().name
+    with sqlite3.connect(db_filename,
+                         isolation_level=isolation_level) as conn:
+        cursor = conn.cursor()
+        logging.debug('waiting to synchronize')
+        ready.wait() # synchronize threads
+        logging.debug('wait over')
+        cursor.execute('select * from task')
+        logging.debug('SELECT EXECUTED')
+        results = cursor.fetchall()
+        logging.debug('results fetched')
+    return
+
+if __name__ == '__main__':
+    ready = threading.Event()
+
+    threads = [
+        threading.Thread(name='Reader 1', target=reader),
+        threading.Thread(name='Reader 2', target=reader),
+        threading.Thread(name='Writer 1', target=writer),
+        threading.Thread(name='Writer 2', target=writer),
+        ]
+
+    [ t.start() for t in threads ]
+
+    time.sleep(1)
+    logging.debug('setting ready')
+    ready.set()
+
+    [ t.join() for t in threads ]
+
+    这些线程使用 threading 模块的一个 Event 完成同步。writer() 函数连接数据库，并完成数据库修改，不过在事件触发前并不提交。reader() 函数连接数据库，然后等待查询数据库，知道出现同步事件。
+    1. 延迟
+    默认的隔离级别是 DEFERRED。使用延迟（Deferred）模块会锁定数据库，但只是在修改真正开始时锁定一次。前面的所有例子都使用了延迟模式。
+    2. 立即
+    采用立即（Immediate）模式时，修改一开始时就会锁定数据库，从而在事务提交之前避免其他游标修改数据库。如果数据库有复杂的写操作，但是阅读器比书写器更多，这种模式就非常适合，因为事务进行中不会阻塞阅读器。
+    3. 互斥
+    互斥（Exclusive）模式会对所有阅读器和书写器锁定数据库。如果数据库性能很重要，这种情况下就要限制使用这种模式，因为每个互斥的连接都会阻塞所有其他用户。
+    如果第一个书写器已经开始修改，阅读器和第二个书写器会阻塞，直到第一个书写器提交。sleep() 调用在书写器线程中引入一个人为的延迟，以强调其他连接已阻塞这一事实。
+    4. 自动提交
+    连接的 isolation_level 参数还可以设置为 None，以启用自动提交（autocommit）模式。启用自动提交时，每个 execute() 调用会在语句完成时立即提交。自动提交模式很适合简短的事务，如向一个表插入少量数据。数据库锁定时间尽可能短，所以线程间竞争的可能性更小。
+    sqlite3_autocommit.py 中删除了 commit() 的显式调用，并将隔离级别设置为 None，不过除此以外，其他内容都与 sqlite3_isolation_levels.py 相同。但输出是不同的，因为两个书写器线程会在阅读器开始查询之前完成工作。
+内存中数据库
+    SQLite 支持在 RAM 中管理整个数据库，而不是依赖一个磁盘文件。如果测试运行之间不需要保留数据库，或者要尝试一个模式或其他数据库特性，此时内存中数据库对于自动测试会很有用。要打开一个内存中数据库，创建 Connection 时可以使用串 ':memory:' 而不是一个文件名。每个 ':memory:' 连接会创建一个单独的数据库实例，所以一个连接中游标所做的修改不会影响其他连接。
