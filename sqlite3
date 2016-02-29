@@ -635,3 +635,82 @@ if __name__ == '__main__':
     sqlite3_autocommit.py 中删除了 commit() 的显式调用，并将隔离级别设置为 None，不过除此以外，其他内容都与 sqlite3_isolation_levels.py 相同。但输出是不同的，因为两个书写器线程会在阅读器开始查询之前完成工作。
 内存中数据库
     SQLite 支持在 RAM 中管理整个数据库，而不是依赖一个磁盘文件。如果测试运行之间不需要保留数据库，或者要尝试一个模式或其他数据库特性，此时内存中数据库对于自动测试会很有用。要打开一个内存中数据库，创建 Connection 时可以使用串 ':memory:' 而不是一个文件名。每个 ':memory:' 连接会创建一个单独的数据库实例，所以一个连接中游标所做的修改不会影响其他连接。
+导出数据库内容
+    内存中数据库的内容可以使用 Connection 的 iterdump() 方法保存。iterdump() 方法返回的迭代器生成一系列字符串，这些字符串将共同构造相应的 SQL 指令来重新创建数据库的状态。
+
+import sqlite3
+
+schema_filename = 'todo_schema.sql'
+
+with sqlite3.connect(':memory:') as conn:
+    conn.row_factory = sqlite3.Row
+
+    print 'Creating schema'
+    with open(schema_filename, 'rt') as f:
+        schema = f.read()
+    conn.executescript(schema)
+
+    print 'Inserting initial data'
+    conn.execute("""
+        insert into project (name, description, deadline)
+        values ('pymotw', 'Python Module of the Week', '2010-11-01')
+        """)
+    data = [
+        ('write about select', 'done', '2010-10-03', 'pymotw'),
+        ('write about random', 'waiting', '2010-10-10', 'pymotw'),
+        ('write about sqlite3', 'active', '2010-10-17', 'pymotw'),
+        ]
+    conn.executemany("""
+        insert into task (details, status, deadline, project)
+        values (?, ?, ?, ?)
+        """, data)
+
+    print 'Dumping:'
+    for text in conn.iterdump():
+        print text
+
+    iterdump() 也适用于保存到文件的数据库，不过对于未保存的数据库最为有用。这里对输出做了一些编辑调整，从而使其在保证语法正确的前提下适合在页面中显示。
+SQL 中使用 Python 函数
+    SQL 语法支持在查询中调用函数，可以在列列表中调用，也可以在 select 语句的 where 子句中调用。利用这个特性，从查询返回数据之前可以先处理数据，可以用于在不同格式之间转换、完成一些计算（否则使用纯 SQL 会很麻烦），以及重用应用代码。
+
+import sqlite3
+
+db_filename = 'todo.db'
+
+def encrypt(s):
+    print 'Encrypting %r' % s
+    return s.encode('rot-13')
+
+def decrypt(s):
+    print 'Decrypting %r' % s
+    return s.encode('rot-13')
+
+with sqlite3.connect(db_filename) as conn:
+
+    conn.create_function('encrypt', 1, encrypt)
+    conn.create_function('decrypt', 1, decrypt)
+    cursor = conn.cursor()
+
+    # Raw values
+    print 'Original values:'
+    query = 'select id, details from task'
+    cursor.execute(query)
+    for row in cursor.fetchall():
+        print row
+
+    print '\nEncrypting...'
+    query = 'update task set details = encrypt(details)'
+    cursor.execute(query)
+    print '\nRaw encrypted values:'
+    query = 'select id, details from task'
+    cursor.execute(query)
+    for row in cursor.fetchall():
+        print row
+    print '\nDecrypting in query...'
+    query = 'select id, decrypt(details) from task'
+    cursor.execute(query)
+    for row in cursor.fetchall():
+        print row
+
+    函数使用 Connection 的 create_function() 方法提供。参数包括函数名（即 SQL 中使用的函数名）、函数所取的参数个数，以及要提供的 Python 函数。
+    
