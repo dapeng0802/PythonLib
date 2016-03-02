@@ -1,0 +1,156 @@
+[Python标准库]xml.etree.ElementTree——XML 操作 API
+    作用：生成和解析 XML 文档。
+    Python 版本：2.5 及以后版本
+    ElementTree 库包括一些工具，可以使用基于事件和基于文档的 API 解析 XML、用 XPath 表达式搜索已解析的文档，还可以创建或修改现有文档。
+解析 XML 文档
+    已解析的 XML 文档在内存中由 ElementTree 和 Element 对象表示，这些对象基于 XML 文档中节点嵌套的方式以树结构相互连接。
+    用 parse() 解析一个完整的文档时，会返回一个 ElementTree 实例。这个树了解输入文档中的所有数据，另外可以原地搜索或操纵树中的节点。基于这种灵活性，可以更为方便地处理已解析文档，不过，与基于事件的解析方法相比，这样往往需要更多的内存，因为整个文档必须一次全部加载。
+    对于简单的小文档（如以下播客列表，表示为一个 OPML 大纲），其内存需求并不大：
+
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+<head>
+    <title>My Podcasts</title>
+    <dateCreated>Sun, 07 Mar 2010 15:53:26 GMT</dateCreated>
+    <dateModified>Sun, 07 Mar 2010 15:53:26 GMT</dateModified>
+</head>
+<body>
+    <outline text="Fiction">
+        <outline
+	        text="tor.com / category / tordotstories" type="rss"
+	        xmlUrl="http://www.tor.com/rss/category/TorDotStories"
+	        htmlUrl="http://www.tor.com" />
+    </outline>
+    <outline text="Python">
+        <outline
+		    text="PyCon Podcast" type="rss"
+	        xmlUrl="http://advocacy.python.org/podcasts/pycon.rss"
+	        htmlUrl="http://advocacy.python.org/podcasts/" />
+	    <outline
+	        text="A Little Bit of Python" type="rss"
+	        xmlUrl="http://advocacy.python.org/podcasts/littlebit.rss"
+	        htmlUrl="http://advocacy.python.org/podcasts/" />
+    </outline>
+</body>
+</opml>
+
+    要解析这个文档，需要向 parse() 传递一个打开的文件句柄。
+
+from xml.etree import ElementTree
+
+with open('podcasts.opml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+print tree
+
+    它会读取数据、解析 XML，并返回一个 ElementTree 对象。
+遍历解析树
+    要按顺序访问所有子节点，可以使用 iter() 创建一个生成器，迭代处理这个 ElementTree 实例。
+
+from xml.etree import ElementTree
+
+with open('podcasts.opml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+for node in tree.iter():
+    print node.tag
+
+    这个例子会打印整个树，一次打印一个标记。
+    如果只是打印播客的名字组和提要 URL，可以只迭代处理 outline 节点（而不考虑首部中的所有数据），通过查找 attrib 字典中的值来打印 text 和 xmlUrl 属性。
+
+from xml.etree import ElementTree
+
+with open('podcasts.opml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+for node in tree.iter('outline'):
+    name = node.attrib.get('text')
+    url = node.attrib.get('xmlUrl')
+    if name and url:
+        print '  %s' % name
+        print '    %s' % url
+    else:
+        print name
+
+    iter() 的 'outline' 参数意味着只处理标记为 'outline' 的节点。
+查找文档中的节点
+    如果像这样查看整个树并搜索有关的节点，可能很容易出错。前面的例子必须查看每一个 outline 节点，来确定这是一个组（只有一个 text 属性的节点）还是一个播客（包含 text 和 xmlUrl 的节点）。要生成一个简单的播客提要 URL 列表，而不包括名字或组，可以简化逻辑，使用 findall() 来查找包含更多描述性搜索特性的节点。
+    对于以上的第一个版本，作为第一次转换，可以用一个 XPath 参数来查找所有 outline 节点。
+
+from xml.etree import ElementTree
+
+with open('podcasts.opml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+for node in tree.findall('.//outline'):
+    url = node.attrib.get('xmlUrl')
+    if url:
+        print url
+
+    这个版本中的逻辑与使用 getiterator() 的版本并没有显著区别。这里仍然必须检查 URL 是否存在，只不过如果没有发现 URL，它不会打印组名。
+    outline 节点只有 2 层嵌套，可以利用这一点。把搜索路径修改为 .//outline/outline，这意味着只处理 outline 节点的第 2 层。
+
+from xml.etree import ElementTree
+
+with open('podcasts.opml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+for node in tree.findall('.//outline/outline'):
+    url = node.attrib.get('xmlUrl')
+    print url
+
+    输入中所有嵌套深度为 2 层的 outline 节点都认为有一个 xmlUrl 属性指向播客提要，所以循环在使用这个属性之前可以不再先做检查。
+    不过，这个版本仅限于当前的这个结构，所以如果 outline 节点重新组织为一个更深的树，这个版本就无法正常工作。
+解析节点属性
+    findall() 和 iter() 返回的元素是 Element 对象，各个对象分别表示 XML 解析树中的一个节点。每个 Element 有一些属性来访问 XML 中的数据。可以用一个稍有些牵强的示例输入文件 data.xml 来说明。
+
+<?xml version="1.0" encoding="UTF-8"?>
+<top>
+    <child>Regular text.</child>
+	<child_with_tail>Regular text.</child_with_tail>"Tail" text.
+	<with_attributes name="value" foo="bar" />
+	<entity_expansion attribute="This &#38; That">
+	    That &#38; This
+	</entity_expansion>
+</top>
+
+    节点的属性可以由 attrib 属性得到，它就像是一个字典。
+
+from xml.etree import ElementTree
+
+with open('data.xml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+node = tree.find('./with_attributes')
+print node.tag
+for name, value in sorted(node.attrib.items()):
+    print '  %-4s = "%s"' % (name, value)
+
+    输入文件第 5 行上的节点有两个属性 name 和 foo。
+    还可以得到节点的文本内容，以及结束标记后面的 tail 文本。
+
+from xml.etree import ElementTree
+
+with open('data.xml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+for path in [ './child', './child_with_tail' ]:
+    node = tree.find(path)
+    print node.tag
+    print '  child node text:', node.text
+    print '  and tail text  :', node.tail
+
+    第 3 行的 child 节点包含嵌入文本，第 4 行的节点除了文本还有 tail 文本（包括空白符）。
+    返回值之前，文档中嵌入的 XML 实体引用会转换为适当的字符。
+
+from xml.etree import ElementTree
+
+with open('data.xml', 'rt') as f:
+    tree = ElementTree.parse(f)
+
+node = tree.find('entity_expansion')
+print node.tag
+print '  in attribute:', node.attrib['attribute']
+print '  in text  :', node.text.strip()
+
+    这个自动转换意味着可以忽略表示 XML 文档中某些字符的实现细节。
