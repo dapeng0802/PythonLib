@@ -154,3 +154,72 @@ print '  in attribute:', node.attrib['attribute']
 print '  in text  :', node.text.strip()
 
     这个自动转换意味着可以忽略表示 XML 文档中某些字符的实现细节。
+解析时监视事件
+    另一个处理 XML 文档的 API 是基于事件的。解析器为开始标记生成 start 事件，为结束标记生成 end 事件。解析阶段中可以通过迭代处理事件流从文档抽取数据，如果以后没有必要处理整个文档，或者没有必要将整个解析文档都保存在内存中，基于事件的 API 就会很方便。
+    有以下事件类型：
+    start 遇到一个新标记。会处理标记的结束尖括号，但不处理内容。
+    end 已经处理结束标记的结束尖括号。所有子节点都已经处理。
+    start-ns 开始一个命名空间声明。
+    end-ns 结束一个命名空间声明。
+    iterparse() 返回一个可迭代的对象，它将生成元组，其中包含事件名和触发事件的节点。
+
+from xml.etree.ElementTree import iterparse
+
+depth = 0
+prefix_width = 8
+prefix_dots = '.' * prefix_width
+line_template = ''.join([ '{prefix:<0.{prefix_len}}'
+                          '{event:<8}',
+                          '{suffix:<{suffix_len}} ',
+                          '{node.tag:<12} ',
+                          '{node_id}',
+                          ])
+
+EVENT_NAMES = ['start', 'end', 'start-ns', 'end-ns']
+
+for (event, node) in iterparse('podcasts.opml', EVENT_NAMES):
+    if event == 'end':
+        depth -= 1
+
+    prefix_len = depth * 2
+
+    print line_template.format(
+        prefix=prefix_dots,
+        prefix_len=prefix_len,
+        suffix='',
+        suffix_len=(prefix_width - prefix_len),
+        node=node,
+        node_id=id(node),
+        event=event,
+        )
+
+    if event == 'start':
+        depth += 1
+        
+    默认情况下，只会生成 end 事件。要查看其他事件，可以将所需事件名列表传入 iterparse()，如上列所示。
+    以事件方式进行处理对于某些操作来说更为自然，如将 XML 输入转换为另外某种格式。可以使用这个技术将播客列表（来自前面的例子）由 XML 文件转换为一个 CSV 文件，从而可以将它们加载到一个电子表格或数据库应用。
+
+import csv
+from xml.etree.ElementTree import iterparse
+import sys
+
+writer = csv.writer(sys.stdout, quoting=csv.QUOTE_NONNUMERIC)
+
+group_name = ''
+
+for (event, node) in iterparse('podcasts.opml', events=['start']):
+    if node.tag != 'outline':
+        # Ignore anything not part of the outline
+        continue
+    if not node.attrib.get('xmlUrl'):
+        # Remember the current group
+        group_name = node.attrib['text']
+    else:
+        # Output a podcasts entry
+        writer.writerow( (group_name, node.attrib['text'],
+                          node.attrib['xmlUrl'],
+                          node.attrib.get('htmlUrl', ''),
+                          )
+                         )
+
+    这个转换程序并不需要将整个已解析的输入文件保存在内存中，而且遇到输入中的各个节点时才进行处理，这样做也更为高效。
