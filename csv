@@ -1,0 +1,73 @@
+[Python标准库]csv——逗号分隔值文件
+    作用：读写逗号分隔值文件。
+    Python 版本：2.3 及以后版本
+    可以用 csv 模块处理从电子表格和数据库导出的数据，并写入采用字段和记录格式的文本文件，这种格式通常称为逗号分隔值（comma-separated value, CSV）格式，因为常用逗号来分隔记录中的字段。
+读文件
+    可以使用 reader() 创建一个对象从 CSV 文件读取数据。这个阅读器可以用作一个迭代器，按顺序处理文件中的行。例如：
+
+import csv
+import sys
+
+with open(sys.argv[1], 'rt') as f:
+    reader = csv.reader(f)
+    for row in reader:
+        print row
+
+    reader() 的第一个参数是文本行的源。在这个例子中，这是一个文件，不过也可以是任何可迭代的对象（如 StringIO 实例、list 等等）。还可以指定其他可选参数，来控制如何解析输入数据。
+
+"Title 1","Title 2","Title 3"
+1,"a",08/18/07
+2,"b",08/19/07
+3,"c",08/20/07
+
+    读文件时，输入数据的每一行都会解析，并转换为一个字符串 list。
+    这个解析器会处理嵌在行字符串中的换行符，正是因为这个原因，这里的“行”（row）并不一定等同于文件的一个输入“行”（line）。
+
+"Title 1","Title 2","Title 3"
+1,"first line
+second line", 08/18/07
+
+    由解析器返回时，输入中带换行符的字段仍保留内部换行符。
+写文件
+    写 CSV 文件与读 CSV 文件同样容易。可以使用 writer() 创建一个对象来写数据，然后使用 writerow() 迭代处理文本行进行打印。
+
+import csv
+import sys
+
+with open(sys.argv[1], 'wt') as f:
+    writer = csv.writer(f)
+    writer.writerow( ('Title 1', 'Title 2', 'Title 3') )
+    for i in range(3):
+        writer.writerow( (i+1,
+                          chr(ord('a') + i),
+                          '08/%02d/07' % (i+1),
+                          )
+                         )
+
+print open(sys.argv[1], 'rt').read()
+
+    这里的输入与阅读器示例中使用的导出数据看上去不完全相同。
+    引号
+    对于书写器，默认的引号行为有所不同，所以前例中第 2 列和第 3 列没有加引号。要加引号，需要将 quoting 参数设置为另外某种引号模式。
+
+import csv
+import sys
+
+with open(sys.argv[1], 'wt') as f:
+    writer = csv.writer(f, quoting=csv.QUOTE_NONNUMERIC)
+    writer.writerow( ('Title 1', 'Title 2', 'Title 3') )
+    for i in range(3):
+        writer.writerow( (i+1,
+                          chr(ord('a') + i),
+                          '08/%02d/07' % (i+1),
+                          )
+                         )
+
+print open(sys.argv[1], 'rt').read()
+
+    在这里，QUOTE_NONNUMERIC 会在所有包含非数值内容的列周围加引号。
+    有 4 种不同的引号选项，在 csv 模块中定义为 4 个常量。
+    QUOTE_ALL 不论类型是什么，对所有字段都加引号。
+    QUOTE_MINIMAL 对包含特殊字符的字段加引号（所谓特殊字符是指，对于一个用相同方言和选项配置的解析器，可能会造成混淆的字符）。这是默认选项。
+    QUOTE_NONNUMERIC 对所有非整数或浮点数的字段加引号。在阅读器中使用时，不加引号的输入字段会转换为浮点数。
+    QUOTE_NONE 输出中所有内容都不加引号。在阅读器中使用时，引号字符包含在字段值中（正常情况下，它们会处理为定界符并去除）。
