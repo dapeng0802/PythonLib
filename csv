@@ -71,3 +71,165 @@ print open(sys.argv[1], 'rt').read()
     QUOTE_MINIMAL 对包含特殊字符的字段加引号（所谓特殊字符是指，对于一个用相同方言和选项配置的解析器，可能会造成混淆的字符）。这是默认选项。
     QUOTE_NONNUMERIC 对所有非整数或浮点数的字段加引号。在阅读器中使用时，不加引号的输入字段会转换为浮点数。
     QUOTE_NONE 输出中所有内容都不加引号。在阅读器中使用时，引号字符包含在字段值中（正常情况下，它们会处理为定界符并去除）。
+方言
+    逗号分隔值文件没有明确定义的标准，所以解析器必须很灵活。这种灵活性意味着可以用很多参数来控制 csv 如何解析或写数据。并不是将各个参数单独传入阅读器和书写器，可以把它们成组在一起构成一个方言（dialect）对象。
+    Dialect 类可以按名注册，这样 csv 模块的调用者就不需要提前知道参数设置。可以用 list_dialects() 获取完整的已注册方言列表。
+
+import csv
+
+print csv.list_dialects()
+
+    这个标准库包括两个方言：excel 和 excel-tabs。excel 方言用于处理采用 Microsoft Excel 默认导出格式的数据，也可以处理 OpenOffice 或 NeoOffice。
+    1. 创建方言
+    可以不使用逗号来分隔字段，输入文件使用了竖线（|），如下所示：
+
+"Title 1"|"Title 2"|"Title 3"
+1|"first line
+second line"|08/18/07
+
+    可以使用适当的定界符注册一个新的方言。
+
+import csv
+
+csv.register_dialect('pipes', delimiter='|')
+
+with open('testdata.pipes', 'r') as f:
+    reader = csv.reader(f, dialect='pipes')
+    for row in reader:
+        print row
+
+    使用“pipes”方言，可以像逗号定界文件一样读取文件。
+    2. 方言参数
+    方言指定了解析或写一个数据文件时使用的所有记号（token）。下表列出了可以指定的文件格式的各个方面，从如何对列定界到使用哪个字符来转义一个记号都可以指定。
+                                       CSV 方言参数
+    ————————————————————————————————————————————————————————————————————————————————————————
+            属性        |      默认值      |                    含义
+    ————————————————————————————————————————————————————————————————————————————————————————
+      delimiter         |  ,               |  字段分隔符（一个字符）
+    ————————————————————————————————————————————————————————————————————————————————————————
+      doublequote       |  True            |  这个标志控制 quotechar 实例是否成对
+    ————————————————————————————————————————————————————————————————————————————————————————
+      escapechar        |  None            |  这个字符用来指示一个转义序列
+    ————————————————————————————————————————————————————————————————————————————————————————
+      lineterminator    |  \r\n            |  书写器使用这个字符串结束一行
+    ————————————————————————————————————————————————————————————————————————————————————————
+      quotechar         |  "               |  这个字符串用来包围包含特殊值的字段（一个字符）
+    ————————————————————————————————————————————————————————————————————————————————————————
+      quoting           |  QUOTE_MINIMAL   |  控制前面介绍的引号行为
+    ————————————————————————————————————————————————————————————————————————————————————————
+      skipinitialspace  |  False           |  忽略字段定界符后面的空白符
+    ————————————————————————————————————————————————————————————————————————————————————————
+
+import csv
+import sys
+
+csv.register_dialect('escaped',
+                     escapechar='\\',
+                     doublequote=False,
+                     quoting=csv.QUOTE_NONE,
+                     )
+csv.register_dialect('singlequote',
+                     quotechar="'",
+                     quoting=csv.QUOTE_ALL,
+                     )
+
+quoting_modes = dict( (getattr(csv,n), n)
+                      for n in dir(csv)
+                      if n.startswith('QUOTE_')
+                      )
+
+for name in sorted(csv.list_dialects()):
+    print 'Dialect: "%s"\n' % name
+    dialect = csv.get_dialect(name)
+
+    print '  delimiter   = %-6r    skipinitialspace = %r' % (
+        dialect.delimiter, dialect.skipinitialspace)
+    print '  doublequote = %-6r    quoting          = %s' % (
+        dialect.doublequote, quoting_modes[dialect.quoting])
+    print '  quotechar   = %-6r    lineterminator   = %r' % (
+        dialect.quotechar, dialect.lineterminator)
+    print '  escapechar  = %-6r' % dialect.escapechar
+    print
+
+    writer = csv.writer(sys.stdout, dialect=dialect)
+    writer.writerow(
+        ('col1', 1, '10/01/2010',
+         'Special chars: " \' %s to parse' % dialect.delimiter)
+        )
+
+    print
+
+    这个程序显示了采用多种不同的方言时相同的数据会如何显示。
+    3. 自动检测方言
+    要配置方言来解析一个输入文件，最好的办法就是提前知道正确的设置。对于方言参数位置的数据，可以用 Sniffer 类来做一个有根据的猜测。sniff() 方法取一个输入数据样本和一个可选的参数（给出可能的定界字符）。
+
+import csv
+from StringIO import StringIO
+import textwrap
+
+csv.register_dialect('escaped',
+                     escapechar='\\',
+                     doublequote=False,
+                     quoting=csv.QUOTE_NONE,
+                     )
+csv.register_dialect('singlequote',
+                     quotechar="'",
+                     quoting=csv.QUOTE_ALL,
+                     )
+
+# Generate sample data for all known dialects
+samples = []
+for name in sorted(csv.list_dialects()):
+    buffer = StringIO()
+    dialect = csv.get_dialect(name)
+    writer = csv.writer(buffer, dialect=dialect)
+    writer.writerow(
+        ('col1', 1, '10/01/2010',
+         'Special chars: " \' %s to parse' % dialect.delimiter)
+        )
+    samples.append( (name, dialect, buffer.getvalue()) )
+# Guess the dialect for a given sample, and then use the results to
+# parse the data.
+sniffer = csv.Sniffer()
+for name, expected, sample in samples:
+    print 'Dialect: "%s"\n' % name
+    dialect = sniffer.sniff(sample, delimiters=',\t')
+    reader = csv.reader(StringIO(sample), dialect=dialect)
+    print reader.next()
+    print
+
+    sniff() 会返回一个 Dialect 实例，其中包含用于解析数据的设置。这个结果并不总是尽善尽美，示例中的“escaped”方言可以说明这一点。
+使用字段名
+    除了处理数据序列，csv 模块还包括一些类，可以将行为作为字典来处理，从而可以对字段命名。DictReader 和 DictWriter 类将行转换为字典而不是列表。字典的键可以传入，也可以由输入的第一行推导得出（如果行包含首部）。
+
+import csv
+import sys
+
+with open(sys.argv[1], 'rt') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        print row
+
+    基于字典的阅读器和书写器会实现为基于序列的类的包装器，它们使用相同的方法和参数。阅读器 API 中唯一的差别是：行将作为字典返回，而不是作为列表或元组。
+    必须为 DictWriter 提供一个字段名列表，使它知道如何在输出中确定列的顺序。
+
+import csv
+import sys
+
+with open(sys.argv[1], 'wt') as f:
+    
+    fieldnames = ('Title 1', 'Title 2', 'Title 3')
+    headers = dict( (n,n) for n in fieldnames )
+
+    writer = csv.DictWriter(f, fieldnames=fieldnames)
+    writer.writerow(headers)
+
+    for i in range(3):
+        writer.writerow({ 'Title 1':i+1,
+                          'Title 2':chr(ord('a') + i),
+                          'Title 3':'08/%02d/07' % (i+1),
+                          })
+
+print open(sys.argv[1], 'rt').read()
+
+    字段名并不自动写至文件，所以需要在写其他数据之前显式写出。
