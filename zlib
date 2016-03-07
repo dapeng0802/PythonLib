@@ -1,0 +1,59 @@
+[Python标准库]zlib——GUN zlib 压缩
+    作用：对 GUN zlib 压缩库的底层访问。
+    Python 版本：2.5 及以后版本
+    zlib 模块为 GUN 项目 zlib 压缩库中的很多函数提供了一个底层接口。
+处理内存中数据
+    使用 zlib 最简单的方法要求把所有将要压缩或解压缩的数据存放在内存中：
+
+import zlib
+import binascii
+
+original_data = 'This is the original text.'
+print 'Original     :', len(original_data), original_data
+
+compressed = zlib.compress(original_data)
+print 'Compressed   :', len(compressed), binascii.hexlify(compressed)
+
+decompressed = zlib.decompress(compressed)
+print 'Decompressed :', len(decompressed), decompressed
+
+    compress() 和 decompress() 函数都取一个字符串参数，并返回一个字符串。
+    从前面的例子可以看出，对于简短的文本，一个串的压缩版本可能比未压缩的版本还要大。具体的结果取决于输入数据，观察小段文本的压缩开销很有意思。
+
+import zlib
+
+original_data = 'This is the original text.'
+
+fmt = '%15s  %15s'
+print fmt % ('len(data)', 'len(compressed)')
+print fmt % ('-' * 15, '-' * 15)
+
+for i in xrange(5):
+    data = original_data * i
+    compressed = zlib.compress(data)
+    highlight = '*' if len(data) < len(compressed) else ''
+    print fmt % (len(data), len(compressed)), highlight
+
+    输出中的 * 突出显示了哪些行的压缩数据比未压缩版本还会占用更多内存。
+增量压缩与解压缩
+    这种内存中压缩方法存在一些缺点，主要是系统需要足够的内存，能够在内存中同时驻留未压缩和压缩版本，因此对于真实世界的用例并不实用。另一种方法是使用 Compress 和 Decompress 对象以增量方式处理数据，这样就不需要将整个数据集都放在内存中。
+
+import zlib
+import binascii
+
+compressor = zlib.compressobj(1)
+
+with open('lorem.txt', 'r') as input:
+    while True:
+        block = input.read(64)
+        if not block:
+            break
+        compressed = compressor.compress(block)
+        if compressed:
+            print 'Compressed: %s' % binascii.hexlify(compressed)
+        else:
+            print 'buffering...'
+    remaining = compressor.flush()
+    print 'Flushed: %s' % binascii.hexlify(remaining)
+
+    这个例子从一个纯文本文件读取小数据块，并传至 compress()。压缩器维护压缩数据的一个内部缓冲区。由于压缩算法依赖于校验和以及最小块大小，所以压缩器每次接收更多输入时可能并没有准备好返回数据。如果它没有准备好一个完整的压缩块，就会返回一个空串。所有数据都已输入时，flush() 方法会强制压缩器结束最后一个块，并返回余下的压缩数据。
