@@ -57,3 +57,146 @@ with open('lorem.txt', 'r') as input:
     print 'Flushed: %s' % binascii.hexlify(remaining)
 
     这个例子从一个纯文本文件读取小数据块，并传至 compress()。压缩器维护压缩数据的一个内部缓冲区。由于压缩算法依赖于校验和以及最小块大小，所以压缩器每次接收更多输入时可能并没有准备好返回数据。如果它没有准备好一个完整的压缩块，就会返回一个空串。所有数据都已输入时，flush() 方法会强制压缩器结束最后一个块，并返回余下的压缩数据。
+混合内容流
+    如果压缩和未压缩数据混合在一起，还可以使用 decompressobj() 返回的 Decompress 类。
+
+import zlib
+
+lorem = open('lorem.txt', 'rt').read()
+compressed = zlib.compress(lorem)
+combined = compressed + lorem
+
+decompressor = zlib.decompressobj()
+decompressed = decompressor.decompress(combined)
+decompressed_matches = decompressed == lorem
+print 'Decompressed matches lorem:', decompressed_matches
+unused_matches = decompressor.unused_data == lorem
+print 'Unused data matches lorem :', unused_matches
+
+    解压缩所有数据后，unused_data 属性会包含未用的所有数据。
+校验和
+    除了压缩和解压缩函数，zlib 还包括两个函数来计算数据的校验和，分别是 adler32() 和 crc32()。这两个函数计算出的校验和都不能认为是密码安全的，它们只用于数据完整性验证。
+
+import zlib
+
+data = open('lorem.txt', 'r').read()
+
+cksum = zlib.adler32(data)
+print 'Adler32: %12d' % cksum
+print '       : %12d' % zlib.adler32(data, cksum)
+
+cksum = zlib.crc32(data)
+print 'CRC-32 : %12d' % cksum
+print '       : %12d' % zlib.crc32(data, cksum)
+
+    这两个函数取相同的参数，包括一个数据串和一个可选值，这个值用作为校验和的一个起点。函数会返回一个 32 位有符号整数值，可以作为一个新的起点参数再传回到后续的调用，来生成一个动态变化的校验和。
+压缩网络数据
+    下一代代码清单中的服务器使用流压缩器来响应包含文件名的请求，它将文件的一个压缩版本写至用来与客户通信的套接字。这里人为做了一些分块，以展示传递到 compress() 或 decompress() 的数据没有相应得到完整的压缩或未压缩输出块时，会进行缓冲处理。
+
+import zlib
+import logging
+import SocketServer
+import binascii
+
+BLOCK_SIZE = 64
+
+class ZlibRequestHandler(SocketServer.BaseRequestHandler):
+
+    logger = logging.getLogger('Server')
+
+    def handler(self):
+        compressor = zlib.compressobj(1)
+
+        # Find out what file the client wants
+        filename = self.request.recv(1024)
+        self.logger.debug('client asked for: "%s"', filename)
+
+        # Send chunks of the file as they are compressed
+        with open(filename, 'rb') as input:
+            while True:
+                block = input.read(BLOCK_SIZE)
+                if not block:
+                    break
+                self.logger.debug('RAW "%s"', block)
+                compressed = compressor.compress(block)
+                if compressed:
+                    self.logger.debug('SENDING "%s"',
+                                      binascii.hexlify(compressed))
+                    self.request.send(compressed)
+                else:
+                    self.logger.debug('BUFFERING')
+        # Send any data being buffered by the compressor
+        remaining = compressor.flush()
+        while remaining:
+            to_send = remaining[:BLOCK_SIZE]
+            remaining = remaining[BLOCK_SIZE:]
+            self.logger.debug('FLUSHING "%s"',
+                              binascii.hexlify(to_send))
+            self.request.send(to_send)
+        return
+
+if __name__ == '__main__':
+    import socket
+    import threading
+    from cStringIO import StringIO
+
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(name)s: %(message)s',
+                        )
+    logger = logging.getLogger('Client')
+
+    # Set up a server, running in a separate thread
+    address = ('localhost', 0) # let the kernel assign a port
+    server = SocketServer.TCPServer(address, ZlibRequestHandler)
+    ip, port = server.server_address # what port was assigned?
+
+    t = threading.Thread(target=server.serve_forever)
+    t.setDaemon(True)
+    t.start()
+
+    客户连接到套接字，并请求一个文件。然后循环，接收压缩数据块。由于一个块可能未包含足够的信息来完全解压缩，之前接收的剩余数据将与新数据结合，传递到解压缩器。解压缩数据时，会把它追加到一个缓冲区，处理循环结束时将与文件内容比较。
+
+# Connect to the server as a client
+logger.info('Contacting server on %s:%s', ip, port)
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect((ip, port))
+# Ask for a file
+requested_file = 'lorem.txt'
+logger.debug('sending filename: "%s"', requested_file)
+len_sent = s.send(requested_file)
+# Receive a response
+buffer = StringIO()
+decompressor = zlib.decompressobj()
+while True:
+    response = s.recv(BLOCK_SIZE)
+    if not response:
+        break
+    logger.debug('READ "%s"', binascii.hexlify(response))
+
+    # Include any unconsumed data when feeding the decompressor.
+    to_decompress = decompressor.unconsumed_tail + response
+    while to_decompressed:
+        decompressed = decompressor.decompress(to_decompress)
+        if decompressed:
+            logger.debug('DECOMPRESSED "%s"', decompressed)
+            buffer.write(decompressed)
+            # Look for unconsumed data due to buffer overflow
+            to_decompress = decompressor.unconsumed_tail
+        else:
+            logger.dubug('BUFFERING')
+            to_decompress = None
+
+# deal with data reamining inside the decompressor buffer
+remainder = decompressor.flush()
+if remainder:
+    logger.debug('FLUSHED "%s"', remainder)
+    buffer.write(remainder)
+
+full_response = buffer.getvalue()
+lorem = open('lorem.txt', 'rt').read()
+logger.debug('response matches file contents: %s',
+            full_response == lorem)
+
+# Clean up
+s.close()
+server.socket.close()
