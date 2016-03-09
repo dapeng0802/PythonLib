@@ -104,7 +104,7 @@ class ZlibRequestHandler(SocketServer.BaseRequestHandler):
 
     logger = logging.getLogger('Server')
 
-    def handler(self):
+    def handle(self):
         compressor = zlib.compressobj(1)
 
         # Find out what file the client wants
@@ -175,7 +175,7 @@ while True:
 
     # Include any unconsumed data when feeding the decompressor.
     to_decompress = decompressor.unconsumed_tail + response
-    while to_decompressed:
+    while to_decompress:
         decompressed = decompressor.decompress(to_decompress)
         if decompressed:
             logger.debug('DECOMPRESSED "%s"', decompressed)
@@ -183,7 +183,7 @@ while True:
             # Look for unconsumed data due to buffer overflow
             to_decompress = decompressor.unconsumed_tail
         else:
-            logger.dubug('BUFFERING')
+            logger.debug('BUFFERING')
             to_decompress = None
 
 # deal with data reamining inside the decompressor buffer
@@ -194,8 +194,10 @@ if remainder:
 
 full_response = buffer.getvalue()
 lorem = open('lorem.txt', 'rt').read()
+logger.debug(full_response)
+logger.debug(lorem)
 logger.debug('response matches file contents: %s',
-            full_response == lorem)
+             full_response == lorem)
 
 # Clean up
 s.close()
