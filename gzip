@@ -1,0 +1,117 @@
+[Python标准库]gzip——读写 GNU Zip 文件
+    作用：读写 gzip 文件。
+    Python 版本：1.5.2 及以后版本
+    gzip 模块为 GNU zip 文件提供了一个类文件的接口，它使用 zlib 来压缩和解压缩数据。
+写压缩文件
+    模块级函数 open() 创建类文件的类 GzipFile 的一个实例。它提供了读写数据的常用方法。
+
+import gzip
+import os
+
+outfilename = 'example.txt.gz'
+with gzip.open(outfilename, 'wb') as output:
+    output.write('Contents of the example file go here.\n')
+
+print outfilename, 'contains', os.stat(outfilename).st_size, 'bytes'
+os.system('file -b --mime %s' % outfilename)
+
+    要把数据写至一个压缩文件，需要以模式 'w' 打开文件。
+    通过传入一个压缩级别（compresslevel）参数，可以使用不同的压缩量。合法值为 1~9（包括 1 和 9）。值越小意味着压缩越快，得到的压缩程度越小。较大的值说明速度较慢，但压缩程度较大（直到某个上限）。
+
+import gzip
+import os
+import hashlib
+
+def get_hash(data):
+    return hashlib.md5(data).hexdigest()
+
+data = open('lorem.txt', 'r').read() * 1024
+cksum = get_hash(data)
+compresslevel = 10
+
+print 'Level  Size        Checksum'
+print '-----  ----------  --------------------------------'
+print 'data   %10d  %s' % (len(data), cksum)
+
+for i in xrange(1, 10):
+    filename = 'compress-level-%s.gz' % i
+    with gzip.open(filename, 'wb', compresslevel-i) as output:
+        output.write(data)
+    size = os.stat(filename).st_size
+    cksum = get_hash(open(filename, 'rb').read())
+    print '%5d  %10d  %s' % (i, size, cksum)
+
+    输出中，中间一列的数字显示了压缩输入所生成文件的大小（字节数）。对于这个输入数据，压缩值越高并不一定会使存储空间减少。取决于输入数据，结果会有变化。
+    GzipFile 实例还包括一个 writelines() 方法，可以用来写一个字符串序列。
+
+import gzip
+import itertools
+import os
+
+with gzip.open('example_lines.txt.gz', 'wb') as output:
+    output.writelines(
+        itertools.repeat('The same line, over and over.\n', 10)
+        )
+
+os.system('gzcat example_line.txt.gz')
+
+    与常规文件一样，输入行要包含一个换行符。
+读压缩数据
+    要从之前压缩的文件读回数据，可以用二进制读模式 ('rb') 打开文件，这样就不会对行尾结束字符完成基于文本的转换。
+
+import gzip
+
+with gzip.open('example.txt.gz', 'rb') as input_file:
+    print input_file.read()
+
+    这个例子读取前面例子所写的文件。
+    读文件时还可以用 seek 定位，只读取部分数据。
+
+import gzip
+
+with gzip.open('example.txt.gz', 'rb') as input_file:
+    print 'Entire file:'
+    all_data = input_file.read()
+    print all_data
+
+    expected = all_data[5:15]
+
+    # rewind to beginning
+    input_file.seek(0)
+    # move ahead 5 bytes
+    input_file.seek(5)
+    print 'Starting at position 5 for 10 bytes:'
+    partial = input_file.read(10)
+    print partial
+
+    print
+    print expected == partial
+
+    seek() 位置是相对未压缩数据的位置，所以调用者并不需要知道数据文件是压缩文件。
+处理流
+    GzipFile 类可以用来包装其他类型的数据流，使它们也能使用压缩。通过一个套接字或一个现有的（已经打开的）文件句柄传输数据时，这会很有用。还可以使用 StringIO 缓冲区。
+
+import gzip
+from cStringIO import StringIO
+import binascii
+
+uncompressed_data = 'The same line, over and over.\n' * 10
+print 'UNCOMPRESSED:', len(uncompressed_data)
+print uncompressed_data
+
+buf = StringIO()
+with gzip.GzipFile(mode='wb', fileobj=buf) as f:
+    f.write(uncompressed_data)
+compressed_data = buf.getvalue()
+print 'COMPRESSED:', len(compressed_data)
+print binascii.hexlify(compressed_data)
+
+inbuffer = StringIO(compressed_data)
+with gzip.GzipFile(mode='rb', fileobj=inbuffer) as f:
+    reread_data = f.read(len(uncompressed_data))
+
+print
+print 'REREAD:', len(reread_data)
+print reread_data
+
+    使用 GzipFile 而不是 zlib 的一个好处是，Gzipfile 支持文件 API。不过，重新读先前压缩的数据时，要向 read() 显式传递一个长度。如果没有这个长度，会导致一个 CRC 错误，这可能是因为 StringIO 报告 EOF 之前会返回一个空串。处理压缩数据流时，可以在数据前加一个整数作为前缀，表示要读取的具体数据量，或者也可以使用 zlib 中的增量解压缩 API。
