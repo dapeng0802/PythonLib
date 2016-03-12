@@ -1,0 +1,66 @@
+[Python标准库]bz2——bzip2 压缩
+    作用：完成 bzip2 压缩。
+    Python 版本：2.3 及以后版本
+    bz2 模块是 bzip2 库的一个接口，用于压缩数据以便存储或传输。它提供了 3 种 API：
+    1. “一次性”压缩/解压缩函数，用以处理大数据块（blob）
+    2. 迭代式压缩/解压缩对象，用来处理数据流
+    3. 一个类文件的类，支持像读写未压缩文件一样读写压缩文件
+内存中一次性操作
+    使用 bz2 最简单的方法是将所有要压缩或解压缩的数据加载到内存中，然后使用 compress() 和 decompress() 来完成转换。
+
+import bz2
+import binascii
+
+original_data = 'This is the original text.'
+print 'Original     : %d bytes' % len(original_data)
+print original_data
+print
+compressed = bz2.compress(original_data)
+print 'Compressed   : %d bytes' % len(compressed)
+hex_version = binascii.hexlify(compressed)
+for i in xrange(len(hex_version)/40 + 1):
+    print hex_version[i*40:(i+1)*40]
+print
+decompressed = bz2.decompress(compressed)
+print 'Decompressed : %d bytes' % len(decompressed)
+print decompressed
+
+    压缩数据包含非 ASCII 字符，所以在打印之前需要先转换为其十六进制表示。在这些例子的输出中，重新编排了十六进制表示，使每行最多有 40 个字符。
+    对于短文本，压缩版本的长度可能大大超过了原版本。具体的结果取决于输入数据，不过观察压缩开销会很有意思。
+
+import bz2
+
+original_data = 'This is the original text.'
+
+fmt = '%15s  %15s'
+print fmt % ('len(data)', 'len(compressed)')
+print fmt % ('-' * 15, '-' * 15)
+for i in xrange(5):
+    data = original_data * i
+    compressed = bz2.compress(data)
+    print fmt % (len(data), len(compressed)),
+    print '*' if len(data) < len(compressed) else ''
+
+    末尾是 * 字符的输出行显示了这一行压缩数据比原输入数据更长。
+增量压缩和解压缩
+    内存中压缩方法存在明显的缺点，对于实际用例并不实用。另一种方法是使用 BZ2Compressor 和 BZ2Decompressor 对象以增量方式处理数据，从而不必将整个数据集都放在内存中。
+
+import bz2
+import binascii
+
+compressor = bz2.BZ2Compressor()
+
+with open('lorem.txt', 'r') as input:
+    while True:
+        block = input.read(64)
+        if not block:
+            break
+        compressed = compressor.compress(block)
+        if compressed:
+            print 'Compressed: %s' % binascii.hexlify(compressed)
+        else:
+            print 'buffering...'
+    remaining = compressor.flush()
+    print 'Flushed: %s' % binascii.hexlify(remaining)
+
+    这个例子从一个纯文本文件读取小数据块，将它传至 compress()。压缩器维护压缩数据的一个内部缓冲区。由于压缩算法取决于校验和以及最小块大小，所以压缩器每次接收更多输入时可能并没有准备好返回数据。如果它没有准备好一个完整的压缩快，会返回一个空串。所有数据都已经输入时，flush() 方法强制压缩器结束最后一个数据块，并返回余下的压缩数据。
