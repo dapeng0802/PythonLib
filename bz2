@@ -64,3 +64,203 @@ with open('lorem.txt', 'r') as input:
     print 'Flushed: %s' % binascii.hexlify(remaining)
 
     这个例子从一个纯文本文件读取小数据块，将它传至 compress()。压缩器维护压缩数据的一个内部缓冲区。由于压缩算法取决于校验和以及最小块大小，所以压缩器每次接收更多输入时可能并没有准备好返回数据。如果它没有准备好一个完整的压缩快，会返回一个空串。所有数据都已经输入时，flush() 方法强制压缩器结束最后一个数据块，并返回余下的压缩数据。
+混合内容流
+    压缩和未压缩数据混合在一起的情况下，还可以使用 BZ2Decompressor。
+
+import bz2
+
+lorem = open('lorem.txt', 'rt').read()
+compressed = bz2.compress(lorem)
+combined = compressed + lorem
+
+decompressor = bz2.BZ2Decompressor()
+decompressed = decompressor.decompress(combined)
+
+decompressed_matches = decompressed == lorem
+print 'Decompressed matches lorem:', decompressed_matches
+unused_matches = decompressor.unused_data == lorem
+print 'Unused data matches lorem :', unused_matches
+
+    解压缩所有数据之后，unused_data 属性会包含所有未用的数据。
+写压缩文件
+    可以用 BZ2File 读写 bzip2 压缩文件，使用常用的方法读写数据。
+
+import bz2
+import contextlib
+import os
+
+with contextlib.closing(bz2.BZ2File('example.bz2', 'wb')) as output:
+    output.write('Contents of the example file go here.\n')
+
+os.system('file example.bz2')
+
+    要把数据写入一个压缩文件，需要用模式 'w' 打开文件。
+    通过传入一个 compresslevel 参数，可以使用不同的压缩级别。合法值为 1~9（包括 1 和 9）。值越小意味着压缩越快，压缩程度越小。较大的值说明压缩速度较慢，但压缩程度较大（直到某个上限）。
+
+import bz2
+import os
+
+data = open('lorem.txt', 'r').read() * 1024
+print 'Input contains %d bytes' % len(data)
+
+for i in xrange(1, 10):
+    filename = 'compress-level-%s.bz2' % i
+    with bz2.BZ2File(filename, 'wb', compresslevel=i) as output:
+        output.write(data)
+    os.system('cksum %s' % filename)
+
+    脚本输出中，中间一列数字显示了所生成文件的大小（字节数）。对于这个输入数据，更高的压缩值并不一定会减少存储空间。不过对于其他输入，结果可能有所不同。
+    BZ2File 实例还包括一个 writelines() 方法，可以用来写一个字符串序列。
+
+import bz2
+import contextlib
+import itertools
+import os
+
+with contextlib.closing(bz2.BZ2File('lines.bz2', 'wb')) as output:
+    output.writelines(
+        itertools.repeat('The same line, over and over.\n', 10),
+        )
+
+os.system('bzcat lines.bz2')
+
+    与写常规文件类似，这些行要以一个换行符结尾。
+读压缩文件
+    要从之前压缩的文件读回数据，需要用二进制读模式 ('rb') 打开文件，这样就不会对行末字符完成基于文本的转换。
+
+import bz2
+import contextlib
+
+with contextlib.closing(bz2.BZ2File('example.bz2', 'rb')) as input:
+    print input.read()
+
+    这个例子读取上一节所写的文件。
+    读文件时，还有可能用 seek 定位，只读部分数据。
+
+import bz2
+import contextlib
+
+with contextlib.closing(bz2.BZ2File('example.bz2', 'rb')) as input:
+    print 'Entire file:'
+    all_data = input.read()
+    print all_data
+
+    expected = all_data[5:15]
+    # rewind to beginning
+    input.seek(0)
+
+    # move ahead 5 bytes
+    input.seek(5)
+    print 'Starting at position 5 for 10 bytes:'
+    partial = input.read(10)
+    print partial
+
+    print
+    print expected == partial
+
+    seek() 位置是相对未压缩数据的位置，所以调用者并不需要知道数据文件是压缩文件。这就允许将一个 BZ2File 实例传入一个原本需要常规（未压缩）文件的函数。
+压缩网络数据
+    下一个例子中的代码会响应包含文件名的请求，它将文件的一个压缩版本写至用于与客户通信的套接字。这里人为做了一些分块，以展示传递到 compress() 或 decompress() 的数据没有相应得到一个完整的压缩或未压缩输出块时，会进行缓冲处理。
+
+import bz2
+import logging
+import SocketServer
+import binascii
+
+BLOCK_SIZE = 32
+
+class Bz2RequestHandler(SocketServer.BaseRequestHandler):
+    logger = logging.getLogger('Server')
+
+    def handle(self):
+        compressor = bz2.BZ2Compressor()
+
+        # Find out what file the client wants
+        filename = self.request.recv(1024)
+        self.logger.debug('client asked for: "%s"', filename)
+
+        # Send chunks of the file as they are compressed
+        with open(filename, 'rb') as input:
+            while True:
+                block = input.read(BLOCK_SIZE)
+                if not block:
+                    break
+                self.logger.debug('RAW "%s"', block)
+                compressed = compressor.compress(block)
+                if compressed:
+                    self.logger.debug('SENDING "%s"',
+                                      binascii.hexlify(compressed))
+                    self.request.send(compressed)
+                else:
+                    self.logger.debug('BUFFERING')
+        # Send any data being buffered by the compressor
+        remaining = compressor.flush()
+        while remaining:
+            to_send = remaining[:BLOCK_SIZE]
+            remaining = remaining[BLOCK_SIZE:]
+            self.logger.debug('FLUSHING "%s"',
+                              binascii.hexlify(to_send))
+            self.request.send(to_send)
+        return
+
+    主程序在一个线程中启动一个服务器，并组合 SocketServer 和 Bz2RequestHandler。
+
+if __name__ == '__main__':
+    import socket
+    import sys
+    from cStringIO import StringIO
+    import threading
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(name)s: %(message)s',
+                        )
+
+    # Set up a server, running in a separate thread
+    address = ('localhost', 0) # let the kernel assign a port
+    server = SocketServer.TCPServer(address, Bz2RequestHandler)
+    ip, port = server.server_address # what port was assign a port
+
+    t = threading.Thread(target=server.serve_forever)
+    t.setDaemon(True)
+    t.start()
+
+    logger = logging.getLogger('Client')
+
+    # Connect to the server
+    logger.info('Contacting server on %s:%s', ip, port)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((ip, port))
+
+    # Ask for a file
+    requested_file = (sys.argv[0]
+                      if len(sys.argv) > 1
+                      else 'lorem.txt')
+    logger.debug('sending filename: "%s"', requested_file)
+    len_sent = s.send(requested_file)
+
+    # Receive a response
+    buffer = StringIO()
+    decompressor = bz2.BZ2Decompressor()
+    while True:
+        response = s.recv(BLOCK_SIZE)
+        if not response:
+            break
+        logger.debug('READ "%s"', binascii.hexlify(response))
+
+        # Include any unconsumed data when feeding the decompressor.
+        decompressed = decompressor.decompress(response)
+        if decompressed:
+            logger.debug('DECOMPRESSED "%s"', decompressed)
+            buffer.write(decompressed)
+        else:
+            logger.debug('BUFFERING')
+        full_response = buffer.getvalue()
+        lorem = open(requested_file, 'rt').read()
+        logger.debug('response matches file contents: %s',
+                     full_response == lorem)
+
+        # Clean up
+        server.shutdown()
+        server.socket.close()
+        s.close()
+        
+    然后打开一个套接字，作为客户与服务器通信，并请求文件。
