@@ -1,0 +1,224 @@
+[Python标准库]tarfile——Tar 归档访问
+    作用：读写 tar 归档文件。
+    Python 版本：2.3 及以后版本
+    tarfile 模块提供了对 UNIX tar 归档文件（包括压缩文件）的读写访问。除 POSIX 标准外，还支持多个 GNU tar 扩展。另外还能处理一些 UNIX 特殊文件类型（如硬/软链接）以及设备节点。
+测试 Tar 文件
+    is_tarfile() 函数返回一个布尔值，指示作为参数传入的文件名是否指向一个合法的 tar 归档文件。
+
+import tarfile
+
+for filename in [ 'README.txt', 'example.tar',
+                  'bad_example.tar', 'notthere.tar' ]:
+    try:
+        print '%15s  %s' % (filename, tarfile.is_tarfile(filename))
+    except IOError, err:
+        print '%15s  %s' % (filename, err)
+
+    如果这个文件不存在，is_tarfile() 会产生一个 IOError。
+从归档文件读取元数据
+    可以使用 TarFile 类直接处理 tar 归档文件。它支持很多方法来读取现有归档文件的有关数据，还可以添加另外的文件来修改归档。
+    要读取一个现有归档中的文件名，可以使用 getnames()。
+
+import tarfile
+from contextlib import closing
+
+with closing(tarfile.open('example.tar', 'r')) as t:
+    print t.getnames()
+
+    这个函数的返回值是一个字符串列表，包含归档内容中的文件名。
+    除文件名外，还可以作为 TarInfo 对象实例得到归档成员的元数据。
+
+import tarfile
+import time
+from contextlib import closing
+
+with closing(tarfile.open('example.tar', 'r')) as t:
+    for member_info in t.getmembers():
+        print member_info.name
+        print '\tModified:\t', time.ctime(member_info.mtime)
+        print '\tMode    :\t', oct(member_info.mode)
+        print '\tType    :\t', member_info.type
+        print '\tSize    :\t', member_info.size, 'bytes'
+        print
+
+    可以通过 getmembers() 和 getmember() 加载元数据。
+    如果提前已经知道归档成员名，可以用 getmember() 获取其 TarInfo 对象。
+
+import tarfile
+import time
+from contextlib import closing
+
+with closing(tarfile.open('example.tar', 'r')) as t:
+    for filename in [ 'README.txt', 'notthere.txt' ]:
+        try:
+            info = t.getmember(filename)
+        except KeyError:
+            print 'ERROR: Did not find %s in tar archive' % filename
+        else:
+            print '%s is %d bytes' % (info.name, info.size)
+
+    如果归档成员不存在，getmember() 会产生一个 KeyError。
+从归档抽取文件
+    要在程序中访问一个归档成员的数据，可以使用 extractfile() 方法，并传入这个成员名。
+
+import tarfile
+from contextlib import closing
+
+with closing(tarfile.open('example.tar', 'r')) as t:
+    for filename in [ 'README.txt', 'notthere.txt' ]:
+        try:
+            f = t.extractfile(filename)
+        except KeyError:
+            print 'ERROR: Did not find %s in tar archive' % filename
+        else:
+            print filename
+            print f.read()
+
+    返回值是一个类文件的对象，可以从这个对象读取归档成员的内容。
+    要解开归档，将文件写至文件系统，可以使用 extract() 或 extractall()。
+
+import tarfile
+import os
+from contextlib import closing
+
+os.mkdir('outdir')
+with closing(tarfile.open('example.tar', 'r')) as t:
+    t.extract('README.txt', 'outdir')
+print os.listdir('outdir')
+
+    归档成员会从归档中读出，写至文件系统，从参数中指定的目录开始。
+    标准库文档中有一个说明，指出 extractall() 比 extract() 更安全，特别是处理流数据，因为对于流数据，无法回转输入返回去读之前的部分。大多数情况下都应该使用 extractall()。
+
+import tarfile
+import os
+from contextlib import closing
+
+os.mkdir('outdir')
+with closing(tarfile.open('example.tar', 'r')) as t:
+    t.extractall('outdir')
+print os.listdir('outdir')
+
+    使用 extractall() 时，第一个参数是一个目录名，文件将写至这个目录。
+    要从归档抽取特定的文件，可以把这个文件名或 TarInfo 元数据容器传递到 extractall()。
+
+import tarfile
+import os
+from contextlib import closing
+
+os.mkdir('outdir')
+with closing(tarfile.open('example.tar', 'r')) as t:
+    t.extractall('outdir',
+                 members=[t.getmember('README.txt')],
+                 )
+print os.listdir('outdir')
+
+    如果提供了一个成员列表，则只抽取指定的文件。
+创建新归档
+    要创建一个新归档，需要用模式 'w' 打开 TarFile。
+
+import tarfile
+from contextlib import closing
+
+print 'creating archive'
+with closing(tarfile.open('example.tar', mode='w')) as out:
+    print 'adding README.txt'
+    out.add('README.txt')
+
+print
+print 'Contents:'
+with closing(tarfile.open('example.tar', mode='r')) as t:
+    for member_info in t.getmembers():
+        print member_info.name
+
+    现有的文件会删除，重建一个新的归档。要添加文件，可以使用 add() 方法。
+使用候选归档成员名
+    向归档添加一个文件时，可以不用原始文件名而是用另外一个名字，由候选的 arcname 构造一个 TarInfo 对象，并把它传至 addfile()。
+
+import tarfile
+from contextlib import closing
+
+print 'creating archive'
+with closing(tarfile.open('tarfile_addfile.tar', mode='w')) as out:
+    print 'adding README.txt as README.txt'
+    info = out.gettarinfo('README.txt', arcname='README.txt')
+    out.addfile(info)
+
+print
+print 'Contents:'
+with closing(tarfile.open('tarfile_addfile.tar', mode='r')) as t:
+    for member_info in t.getmembers():
+        print member_info.name
+
+    归档只包含修改后的文件名。
+从非文件源写数据
+    有时，可能需要将数据从内存直接写至一个归档。并不是将数据先写入一个文件，然后再把这个文件添加到归档，这时可以使用 addfile() 从一个打开的类文件句柄添加数据。
+
+import tarfile
+from cStringIO import StringIO
+from contextlib import closing
+
+data = 'This is the data to write to the archive.'
+
+with closing(tarfile.open('addfile_string.tar', mode='w')) as out:
+    info = tarfile.TarInfo('made_up_file.txt')
+    info.size = len(data)
+    out.addfile(info, StringIO(data))
+
+print 'Contents:'
+with closing(tarfile.open('addfile_string.tar', mode='r')) as t:
+    for member_info in t.getmembers():
+        print member_info.name
+        f = t.extractfile(member_info)
+        print f.read()
+
+    首先构造一个 TarInfo 对象，可以为归档成员指定所需的任何名字。设置大小之后，以一个 StringIO 缓冲区作为数据源，可以使用 addfile() 把数据写至归档。
+追加到归档
+    除了创建新归档，还可以使用模式 'a' 追加到一个现有的文件。
+
+import tarfile
+from contextlib import closing
+
+print 'creating archive'
+with closing(tarfile.open('tarfile_append.tar', mode='w')) as out:
+    out.add('README.txt')
+
+print 'contents:'
+with closing(tarfile.open('tarfile_append.tar', mode='r')) as t:
+    print [m.name for m in t.getmembers()]
+
+print 'adding index.rst'
+with closing(tarfile.open('tarfile_append.tar', mode='a')) as out:
+    out.add('index.rst')
+
+print 'contents:'
+with closing(tarfile.open('tarfile_append.tar', mode='r')) as t:
+    print [m.name for m in t.getmembers()]
+
+    最后得到的归档将包含两个成员。
+处理压缩归档
+    处理常规的 tar 归档文件，tarfile 模块还可以处理通过 gzip 或 bzip2 协议压缩的归档。要打开一个压缩归档，可以修改传入 open() 的模式串，取决于所需的压缩方法，要在模式串中包含 ":gz" 或 ":bz2"。
+
+import tarfile
+import os
+
+fmt = '%-30s %-10s'
+print fmt % ('FILENAME', 'SIZE')
+print fmt % ('README.txt', os.stat('README.txt').st_size)
+
+for filename, write_mode in [
+    ('tarfile_compression.tar', 'w'),
+    ('tarfile_compression.tar.gz', 'w:gz'),
+    ('tarfile_compression.tar.bz2', 'w:bz2'),
+    ]:
+    out = tarfile.open(filename, mode=write_mode)
+    try:
+        out.add('README.txt')
+    finally:
+        out.close()
+
+    print fmt % (filename, os.stat(filename).st_size),
+    print [m.name
+           for m in tarfile.open(filename, 'r:*').getmembers()
+           ]
+
+    打开一个现有的归档读取数据时，可以指定 "r:*" 让 tarfile 自动确定要使用的压缩方法。
