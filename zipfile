@@ -1,0 +1,121 @@
+[Python标准库]zipfile——ZIP 归档访问
+    作用：读写 ZIP 归档文件。
+    Python 版本：1.6 及以后版本
+    zipfile 模块可以用来管理 ZIP 归档文件，这种格式因 PC 程序 PKZIP 得到普及。
+测试 ZIP 文件
+    is_zipfile() 函数返回一个布尔值，指示作为参数传入的文件名是否指向一个合法的 ZIP 归档。
+
+import zipfile
+
+for filename in [ 'README.txt', 'example.zip',
+                  'bad_example.zip', 'notthere.zip' ]:
+    print '%15s  %s' % (filename, zipfile.is_zipfile(filename))
+
+    如果这个文件不存在，则 is_zipfile() 返回 False。
+从归档读取元数据
+    使用 ZipFile 类可以直接处理一个 ZIP 归档。它支持一些方法来读取现有归档的有关数据，还可以增加额外的文件从而修改归档。
+
+import zipfile
+
+with zipfile.ZipFile('example.zip', 'r') as zf:
+    print zf.namelist()
+
+    namelist() 方法返回一个现有归档中的文件名。
+    不过，这个文件名列表只是从归档得到的信息的一部分。要访问有关 ZIP 内容的所有元数据，可以使用 infolist() 或 getinfo() 方法。
+
+import datetime
+import zipfile
+
+def print_info(archive_name):
+    with zipfile.ZipFile(archive_name) as zf:
+        for info in zf.infolist():
+            print info.filename
+            print '\tComment      :', info.comment
+            mod_date = datetime.datetime(*info.date_time)
+            print '\tModified     :', mod_date
+            if info.create_system == 0:
+                system = 'Windows'
+            elif info.create_system == 3:
+                system = 'Unix'
+            else:
+                system = 'UNKNOWN'
+            print '\tSystem       :', system
+            print '\tZIP version  :', info.create_version
+            print '\tCompressed   :', info.compress_size, 'bytes'
+            print '\tUncompressed :', info.file_size, 'bytes'
+            print
+
+if __name__ == '__main__':
+    print_info('example.zip')
+
+    除了这里打印的字段，元数据还包括另外一些字段，但是要把这些值解释为有用的信息，需要仔细阅读 ZIP 文件规范的 PKZIP 应用说明。
+    如果提前已经知道归档成员名，可以利用 getinfo() 直接获取其 ZipInfo 对象。
+
+import zipfile
+
+with zipfile.ZipFile('example.zip', 'r') as zf:
+    for filename in [ 'README.txt', 'notthere.txt' ]:
+        try:
+            info = zf.getinfo(filename)
+        except KeyError:
+            print 'ERROR: Did not find %s in zip file' % filename
+        else:
+            print '%s is %d bytes' % (info.filename, info.file_size)
+
+    如果归档成员不存在，getinfo() 会产生一个 KeyError。
+从归档抽取归档文件
+    要从一个归档成员访问数据，可以使用 read() 方法，并传入该成员名。
+
+import zipfile
+
+with zipfile.ZipFile('example.zip', 'r') as zf:
+    for filename in [ 'README.txt', 'notthere.txt' ]:
+        try:
+            data = zf.read(filename)
+        except KeyError:
+            print 'ERROR: Did not find %s in zip file' % filename
+        else:
+            print filename, ':'
+            print data
+        print
+
+    如果必要，数据会自动解压缩。
+创建新归档
+    要创建一个新归档，需要用模式 'w' 实例化 ZipFile。所有现有的文件会被删除，而开始创建一个新的归档。要增加文件，可以使用 write() 方法。
+
+from zipfile_infolist import print_info
+import zipfile
+
+print 'creating archive'
+with zipfile.ZipFile('example.zip', mode='w') as zf:
+    print 'adding README.txt'
+    zf.write('README.txt')
+
+print
+print_info('example.zip')
+
+    默认情况下，归档的内容不会压缩。
+    要想增加压缩，需要有 zlib 模块。如果 zlib 可用，可以使用 zipfile.ZIP_DEFLATED 设置单个文件的压缩模式，或者将归档作为整体设置其压缩模式。默认的压缩模式是 zipfile.ZIP_STORED，它会把输入数据增加到归档而不压缩。
+
+from zipfile_infolist import print_info
+import zipfile
+try:
+    import zlib
+    compression = zipfile.ZIP_DEFLATED
+except:
+    compression = zipfile.ZIP_STORED
+
+modes = { zipfile.ZIP_DEFLATED: 'deflated',
+          zipfile.ZIP_STORED:   'stored',
+          }
+
+print 'creating archive'
+with zipfile.ZipFile('example.zip', mode='w') as zf:
+    mode_name = modes[compression]
+    print 'adding README.txt with compression mode', mode_name
+    zf.write('README.txt', compress_type=compression)
+
+print
+print_info('example.zip')
+
+    这一次归档成员会压缩。
