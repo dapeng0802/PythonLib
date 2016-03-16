@@ -119,3 +119,98 @@ print
 print_info('example.zip')
 
     这一次归档成员会压缩。
+使用候选归档成员名
+    为文档增加文件时，可以向 write() 传入一个 arcname 值，这样可以使用另一个名字而非原始文件名。
+
+from zipfile_infolist import print_info
+import zipfile
+
+with zipfile.ZipFile('write_arcname.zip', mode='w') as zf:
+    zf.write('README.txt', arcname='NOT_README.txt')
+
+print_info('write_arcname.zip')
+
+    归档中不会再出现原始文件名。
+从非文件源写数据
+    有时，可能需要使用其他来源的数据写一个 ZIP 归档（而非来自一个现有文件）。并不是将数据先写入一个文件，然后再把这个文件添加到 ZIP 归档，可以使用 writestr() 直接向归档写入一个字节串。
+
+from zipfile_infolist import print_info
+import zipfile
+
+msg = 'This data did not exist in a file.'
+with zipfile.ZipFile('writestr.zip',
+                     mode='w',
+                     compression=zipfile.ZIP_DEFLATED,
+                     ) as zf:
+    zf.writestr('from_string.txt', msg)
+
+print_info('writestr.zip')
+
+with zipfile.ZipFile('writestr.zip', 'r') as zf:
+    print zf.read('from_string.txt')
+
+    在这里，要利用 ZipFile 的 compress_type 参数压缩数据，因为 writestr() 不接受参数来指定压缩。
+利用 ZipInfo 实例写
+    正常情况下，文件或串添加到归档时会计算修改日期。可以向 writestr() 传递一个 ZipInfo 实例，来定义修改日期和其他元数据。
+
+import time
+from zipfile_infolist import print_info
+import zipfile
+
+msg = 'This data did not exist in a file.'
+with zipfile.ZipFile('writestr_zipinfo.zip',
+                     mode='w',
+                     ) as zf:
+    info = zipfile.ZipInfo('from_string.txt',
+                           date_time=time.localtime(time.time()),
+                           )
+    info.compress_type=zipfile.ZIP_DEFLATED
+    info.comment='Remarks go here'
+    info.create_system=0
+    zf.writestr(info, msg)
+
+print_info('writestr_zipinfo.zip')
+
+    在这个例子中，修改时间设置为当前时间，并对数据进行了压缩，另外 create_system 使用了一个 false 值。还可以为这个新文件关联一个简单的注释。
+追加到文件
+    除了创建新归档，还可以追加到一个现有的归档，或者将一个归档添加到一个现有文件的末尾（如为一个自解压归档添加一个 .exe 文件）。要打开一个文件来完成追加，可以使用模式 'a'。
+
+from zipfile_infolist import print_info
+import zipfile
+
+print 'creating archive'
+with zipfile.ZipFile('append.zip', mode='w') as zf:
+    zf.write('README.txt')
+print
+print_info('append.zip')
+
+print 'appending to the archive'
+with zipfile.ZipFile('append.zip', mode='a') as zf:
+    zf.write('README.txt', arcname='README2.txt')
+
+print
+print_info('append.zip')
+
+    最后得到的归档将包含两个成员。
+Python ZIP 归档
+    如果归档出现在 sys.path 中，Python 可以使用 zipimport 从这些 ZIP 归档导入模块。PyZipFile 类可以用来构造一个适用于这种方式的模块。另一个方法 writepy() 会告诉 PyZipFile 扫描一个目录来查找 .py 文件，并把相应的 .pyo 或 .pyc 文件添加到归档。如果这两种编译形式都不存在，则创建并添加一个 .pyc 文件。
+
+import sys
+import zipfile
+
+if __name__ == '__main__':
+    with zipfile.PyZipFile('pyzipfile.zip', mode='w') as zf:
+        zf.debug = 3
+        print 'Adding python files'
+        zf.writepy('.')
+    for name in zf.namelist():
+        print name
+
+    print
+    sys.path.insert(0, 'pyzipfile.zip')
+    import zipfile_pyzipfile
+    print 'Imported from:', zipfile_pyzipfile.__file__
+
+    将 PyZipFile 的 debug 属性设置为 3，将启用 verbose 调试，会在编译所找到的各个 .py 文件时生成输出。
+限制
+    zipfile 模块不支持有追加注释或多磁盘归档的 ZIP 文件，但它确实支持使用 ZIP64 扩展的超过 4GB 的 ZIP 文件。
