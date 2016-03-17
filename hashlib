@@ -1,0 +1,89 @@
+[Python标准库]hashlib——密码散列
+    作用：生成密码散列和消息摘要。
+    Python 版本：2.5 及以后版本
+    hashlib 模块的出现使得不再使用单独的 md5 和 sha 模块，并使它们有了一致的 API。要使用一个特定的散列算法，可以用适当的构造函数创建一个散列对象。有了散列对象，不论使用哪一个具体的算法，对象都将使用相同的 API。
+    由于 hashlib 得到了 OpenSSL 的 “支持”，OpenSSL 库提供的所有算法都可用，包括：md5、sha1、sha224、sha256、sha384、sha512。
+示例数据
+    这一节的所有例子都使用相同的示例数据：
+
+import hashlib
+
+lorem = '''Lorem ipsum dolor sit amet, consectetur adipisicing elit,
+sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
+enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+ut aliquip ex ea commodo consequat. Duis aute irure dolor in
+reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla
+pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
+culpa qui officia deserunt mollit anim id est laborum.'''
+
+MD5 示例
+    要为一个数据块（在这里就是一个 ASCII 串）计算 MD5 散列或摘要，首先要创建散列对象，然后添加数据，并调用 digest() 或 hexdigest()。
+
+import hashlib
+from hashlib_data import lorem
+
+h = hashlib.md5()
+h.update(lorem)
+print h.hexdigest()
+
+    这个例子使用了 hexdigest() 方法而不是 digest()，因为要对输出格式化，以便清楚地打印。如果可以接受二进制摘要值，则使用 digest()。
+SHA1 示例
+    SHA1 摘要也采用同样的方式计算。
+
+import hashlib
+from hashlib_data import lorem
+
+h = hashlib.sha1()
+h.update(lorem)
+print h.hexdigest()
+
+    这个例子中的摘要值有所不同，因为 MD5 和 SHA1 算法不同。
+按名创建散列
+    有些情况下，用一个字符串按名指示算法比直接使用构造函数更为方便。例如，如果能够把散列类型存储在一个配置文件中，这会很有用。在这些情况下，可以使用 new() 来创建一个散列计数器。
+
+import hashlib
+import sys
+
+try:
+    hash_name = sys.argv[1]
+except IndexError:
+    print 'Specify the hash name as the first argument.'
+else:
+    try:
+        data = sys.argv[2]
+    except IndexError:
+        from hashlib_data import lorem as data
+
+    h = hashlib.new(hash_name)
+    h.update(data)
+    print h.hexdigest()
+
+    运行时可以提供不同的参数。
+增量更新
+    散列计数器的 update() 方法可以反复调用。每次调用时，都会根据提供的附加文本更新摘要。增量更新比将整个文件读入内存更高效，而且能生成相同的结果。
+
+import hashlib
+from hashlib_data import lorem
+
+h = hashlib.md5()
+h.update(lorem)
+all_at_once = h.hexdigest()
+
+def chunkize(size, text):
+    "Return parts of the text in size-based increments."
+    start = 0
+    while start < len(text):
+        chunk = text[start:start+size]
+        yield chunk
+        start += size
+    return
+
+h = hashlib.md5()
+for chunk in chunkize(64, lorem):
+    h.update(chunk)
+line_by_line = h.hexdigest()
+print 'All at once :', all_at_once
+print 'Line by line:', line_by_line
+print 'Same        :', (all_at_once == line_by_line)
+
+    这个例子展示了在读取生成数据时如何以增量方式更新一个摘要。
