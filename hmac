@@ -1,0 +1,142 @@
+[Python标准库]hmac——密码消息签名与验证
+    作用：hmac 模块实现密钥散列来完成消息认证，如 RFC 2014 所述。
+    Python 版本：2.2 及以后版本
+    HMAC 算法可以用于验证信息的完整性，这些信息可能在应用之间传递，或者存储在一个可能有安全威胁的位置上。基本思想是生成实际数据的一个密码散列，并提供一个共享的秘密密钥。然后使用得到的散列检查所传输或存储的消息，确定一个信任级别，而不再传输秘密密钥。
+消息签名
+    new() 函数会创建一个新对象来计算消息签名。下面这个例子使用了默认的 MD5 散列算法。
+
+import hmac
+
+digest_maker = hmac.new('secret-shared-key-goes-here')
+
+with open('lorem.txt', 'rb') as f:
+    while True:
+        block = f.read(1024)
+        if not block:
+            break
+        digest_maker.update(block)
+
+digest = digest_maker.hexdigest()
+print digest
+
+    运行这个代码时，会读取一个数据文件，为它计算一个 HMAC 签名。
+SHA 与 MD5
+    尽管 hmac 的默认密码算法是 MD5，但这并不是最安全的方法。MD5 散列有一些缺点，如冲突（两个不同的消息生成相同的散列）。一般认为 SHA1 算法更健壮，推荐使用。
+
+import hmac
+import hashlib
+
+digest_maker = hmac.new('secret-shared-key-goes-here',
+                        '',
+                        hashlib.sha1)
+
+with open('hmac_sha.py', 'rb') as f:
+    while True:
+        block = f.read(1024)
+        if not block:
+            break
+        digest_maker.update(block)
+
+digest = digest_maker.hexdigest()
+print digest
+
+    new() 函数有 3 个参数。第 1 个参数是秘密密钥，这个密钥会在通信双方之间共享，使两端都可以使用相同的值。第 2 个值时一个初始消息。如果需要认证的消息内容很小，如 1 个时间戳或 1 个 HTTP POST，则把消息的整个主体都传递到 new() 而不是使用 update() 方法。最后 1 个参数是要使用的摘要模块。默认为 hashlib.md5。这个例子将算法替换为 hashlib.has1。
+二进制摘要
+    前面的例子使用 hexdigest() 方法来生成可打印的摘要。hexdigest 是 digest() 方法计算出的值的一个不同表示，这是一个二进制值，可以包括不可打印的字符或非 ASCII 字符（包括 NUL）。有些 Web 服务（Google checkout、Amazon S3）会使用 Base64 编码版本的二进制摘要而不是 hexdigest。
+
+import base64
+import hmac
+import hashlib
+
+with open('lorem.txt', 'rb') as f:
+    body = f.read()
+
+hash = hmac.new('secret-shared-key-goes-here', body, hashlib.sha1)
+digest = hash.digest()
+print base64.encodestring(digest)
+
+    Base64 编码串以一个换行符结束，将这个串嵌在 http 首部或其他格式敏感的上下文中时通常需要去除这个换行符。
+消息签名的应用
+    对于所有公共网络服务，或者在安全性要求很高的位置存储数据，都应当使用 HMAC 认证。例如，通过一个管道或套接字发送数据时，应当对数据签名，在使用这个数据之前需要检查签名。
+    第一步是建立一个函数以计算一个串的摘要，另外实例化一个简单的类，并通过一个通信通道传递。
+
+import hashlib
+import hmac
+try:
+    import cPickle as pickle
+except:
+    import pickle
+import pprint
+from StringIO import StringIO
+
+def make_digest(message):
+    "Return a digest for the message."
+    hash = hmac.new('secret-shared-key-goes-here',
+                    message,
+                    hashlib.sha1)
+    return hash.hexdigest()
+
+class SimpleObject(object):
+    "A very simple class to demonstrate checking digests before unpickling."
+    def __init__(self, name):
+        self.name = name
+    def __str__(self):
+        return self.name
+
+    接下来，创建一个 StringIO 缓冲区来表示这个套接字或管道。这个例子对数据流使用了一种简单但易用解析的格式。首先写出摘要以及数据长度，后面是一个换行符。接下来是对象的串行化表示（由 pickle 生成）。实际的系统可能不希望依赖于一个长度值，因为如果摘要不正确，这个长度可能也是错误的。可能更合适的做法是使用真实数据中不太可能出现的某个终止符序列。
+    然后这个示例程序向流写两个对象。写第一个对象时使用正确地摘要值。
+
+# Simulate a writable socket or pipe with StringIO
+out_s = StringIO()
+
+# Write a valid object to the stream.
+#  digest\nlength\npickle
+o = SimpleObject('digest matches')
+pickled_data = pickle.dumps(o)
+digest = make_digest(pickled_data)
+header = '%s %s' % (digest, len(pickled_data))
+print 'WRITING:', header
+out_s.write(header + '\n')
+out_s.write(pickled_data)
+
+    再用一个不正确的摘要将第二个对象写至流，这是为另外某个数据计算的摘要，而不是由 pickle 生成。
+
+# Write an invalid object to the stream
+o = SimpleObject('digest does not match')
+pickled_data = pickle.dumps(o)
+digest = make_digest('not the pickled data at all')
+header = '%s %s' % (digest, len(pickled_data))
+print '\nWRITING:', header
+out_s.write(header + '\n')
+out_s.write(pickled_data)
+
+out_s.flush()
+
+    既然数据在 StringIO 缓冲区中，可以将它再次读出。首先读取包含摘要和数据长度的数据行。然后使用得到的长度值读取其余数据。pickle.load() 可以直接从流读数据，不过这有一个假设，认为它是一个可信的数据流，而这个数据还不能保证足够可信来解除 pickle。可以将 pickle 作为一个串从流读取，而不是具体将对象解除 pickle，这样会更为安全。
+
+# Simulate a readable socket or pipe with StringIO
+in_s = StringIO(out_s.getvalue())
+
+# Read the data
+while True:
+    first_line = in_s.readline()
+    if not first_line:
+        break
+    incoming_digest, incoming_length = first_line.split(' ')
+    incoming_length = int(incoming_length)
+    print '\nREAD:', incoming_digest, incoming_length
+
+    incoming_pickled_data = in_s.read(incoming_length)
+
+    pickle 数据一旦在内存中，可以重新计算摘要值，并与所读取的数据比较。如果摘要匹配，就可以信任这个数据，对其解除 pickle。
+
+	actual_digest = make_digest(incoming_pickled_data)
+    print 'ACTUAL:', actual_digest
+
+    if incoming_digest != actual_digest:
+        print 'WARNING: Data corruption'
+    else:
+        obj = pickle.loads(incoming_pickled_data)
+        print 'OK:', obj
+        
+    输出显示第一个对象通过验证，另外不出所料，认为第二个对象“已被破坏”。
