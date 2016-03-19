@@ -1,0 +1,154 @@
+[Python标准库]subprocess——创建附加进程
+    作用：创建附加进程，并与之通信。
+    Python 版本：2.4 及以后版本
+    subprocess 模块提供了一种一致的方法来创建和处理附加进程。与标准库中的其他模块相比，它提供了一个更高级的接口，用以替换 os.system()、os.spawnv()、os 和 popen2 模块中的 popen() 函数，以及 commands()。为了更易于比较 subprocess 和其他模块，本节中的很多例子将重新创建 os 和 popen2 中使用的例子。
+    subprocess 模块定义了一个类 Popen，还定义了使用这个类的一些包装器函数。Popen 的构造函数根据一些参数建立新进程，使父进程可以通过管道与之通信。相对于它替换的其他模块和函数，subprocess 能提供其全部功能，甚至更多。对于所有情况，这个 API 用法都一致，很多需要开销的额外步骤（如关闭额外的文件描述符，以及确保管道关闭）都已“内置”，而不需要由应用代码单独处理。
+运行外部命令
+    要运行一个外部命令，但不采用 os.system() 的方式与之交互，可以使用 call() 函数。
+
+import subprocess
+
+# Simple command
+subprocess.call(['ls', '-l'])
+
+    命令行参数作为一个字符串列表传入，这样就无须对引号或其他可能由 shell 解释的特殊字符转义。
+    将 shell 参数设置为 true 值会使 subprocess 创建一个中间 shell 进程，由这个进程运行命令。默认情况下会直接运行命令。
+
+import subprocess
+
+# Command with shell expansion
+subprocess.call('echo $HOME', shell=True)
+
+    使用一个中间 shell 意味着在运行命令之前会先处理命令串中的变量、glob 模式以及其他特殊 shell 特性。
+    1. 错误处理
+    call() 的返回值是程序的退出码。调用者要负责解释这个返回值来检测错误。check_call() 函数的工作类似于 call()，只不过除了检查退出码外，如果指示发生了一个错误，则会产生一个 CalledProcessError 异常。
+
+import subprocess
+
+try:
+    subprocess.check_call(['false'])
+except subprocess.CalledProcessError as err:
+    print 'ERROR:', err
+
+    false 命令退出时总有一个非 0 的状态码，check_call() 会把它解释为一个错误。
+    2. 捕获输出
+    对于 call() 启动的进程，其标准输入和输出通道会绑定到父进程的输入和输出。这说明调用程序无法捕获命令的输出。可以使用 check_output() 捕获输出，以备以后处理。
+
+import subprocess
+
+output = subprocess.check_output(['ls', '-l'])
+print 'Have %d bytes in output' % len(output)
+print output
+
+    ls -l 命令会成功运行，所以它打印到标准输出的文本会被捕获并返回。
+    下一个例子在一个子 shell 中运行一系列命令。在命令返回一个错误码并退出之前，消息会发送到标准输出和标准错误输出。
+
+import subprocess
+
+try:
+    output = subprocess.check_output(
+        'echo to stdout; echo to stderr 1>&2; exit 1',
+        shell=True
+        )
+except subprocess.CalledProcessError as err:
+    print 'ERROR:', err
+else:
+    print 'Have %d bytes in output' % len(output)
+    print output
+
+    发送到标准错误输出的消息会打印到控制台，不过发送到标准输出的消息会隐藏。
+    为了避免通过 check_output() 运行的命令将错误消息写至控制台，可以设置 stderr 参数为常量 STDOUT。
+
+import subprocess
+
+try:
+    output = subprocess.check_output(
+        'echo to stdout; echo to stderr 1>&2; exit 1',
+        shell=True,
+        stderr=subprocess.STDOUT,
+        )
+except subprocess.CalledProcessError as err:
+    print 'ERROR:', err
+else:
+    print 'Have %d bytes in output' % len(output)
+    print output
+
+    现在错误和标准输出通道合并在一起，所以如果命令打印错误消息，它们会被捕获，而不会发送至控制台。
+直接处理管道
+    函数 call()、check_call() 和 check_output() 都是 Popen 类的包装器。直接使用 Popen 会对如何运行命令以及如何处理其输入和输出流有更多控制。例如，通过为 stdin、stdout 和 stderr 传递不同的参数，可以模仿 os.popen() 的不同变种。
+    1. 与进程的单向通信
+    要运行一个进程并读取它的所有输出，可以设置 stdout 值为 PIPE 并调用 communicate()。
+
+import subprocess
+
+print 'read:'
+proc = subprocess.Popen(['echo', '"to stdout"'],
+                        stdout=subprocess.PIPE,
+                        )
+stdout_value = proc.communicate()[0]
+print '\tstdout:', repr(stdout_value)
+
+    这与 popen() 的工作类似，只不过 Popen 实例会在内部管理数据读取。
+    要建立一个管道，以便调用程序写数据，可以设置 stdin 为 PIPE。
+
+import subprocess
+
+print 'write:'
+proc = subprocess.Popen(['cat', '-'],
+                        stdin=subprocess.PIPE,
+                        )
+proc.communicate('\tstdin: to stdin\n')
+
+    要将数据一次性发送到进程的标准输入通道，可以把数据传递到 communicate()。这与基于模式 'w' 使用 popen() 类似。
+    2. 与进程的双向通信
+    要建立 Popen 实例同时完成读写，可以结合使用前面几项技术。
+
+import subprocess
+
+print 'popen2:'
+
+proc = subprocess.Popen(['cat', '-'],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        )
+msg = 'through stdin to stdout'
+stdout_value = proc.communicate(msg)[0]
+print '\tpass through:', repr(stdout_value)
+
+    这会建立管道，类似于 popen2()。
+    3. 捕获错误输出
+    还可以监视 stdout 和 stderr 数据流，类似于 popen3()。
+
+import subprocess
+
+print 'popen3:'
+proc = subprocess.Popen('cat  ; echo "to stderr" 1>&2',
+                        shell=True,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        )
+msg = 'through stdin to stdout'
+stdout_value, stderr_value = proc.communicate(msg)
+print '\tpass through:', repr(stdout_value)
+print '\tstderr      :', repr(stderr_value)
+
+    从 stderr 读取数据与读取 stdout 是一样的。传入 PIPE 则告诉 Popen 关联到通道，communicate() 在返回之前会从这个通道读取所有数据。
+    4. 结合常规和错误输出
+    要把错误输出从进程定向到标准输出通道，stderr 要使用 STDOUT 而不是 PIPE。
+
+import subprocess
+
+print 'popen4:'
+proc = subprocess.Popen('cat -; echo "to stderr" 1>&2',
+                        shell=True,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        )
+msg = 'through stdin to stdout'
+stdout_value, stderr_value = proc.communicate(msg)
+print '\combined output:', repr(stdout_value)
+print '\tstderr value  :', repr(stderr_value)
+
+    以这种方式结合输出类似于 popen4()。
