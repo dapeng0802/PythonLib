@@ -152,3 +152,82 @@ print '\combined output:', repr(stdout_value)
 print '\tstderr value  :', repr(stderr_value)
 
     以这种方式结合输出类似于 popen4()。
+连接管道段
+    多个命令可以连接为一个管线（pipeline），这类似于 UNIX shell 的做法，即创建单独的 Popen 实例，把它们的输入和输出串链在一起。一个 Popen 实例的 stdout 属性用作管线中下一个 Popen 实例的 stdin 参数，而不是常量 PIPE。输出从管线中最后一个命令的 stdout 句柄读取。
+
+import subprocess
+
+cat = subprocess.Popen(['cat', 'index.rst'],
+                        stdout=subprocess.PIPE,
+                       )
+
+grep = subprocess.Popen(['grep', '.. include::'],
+                        stdin=cat.stdout,
+                        stdout=subprocess.PIPE,
+                       )
+
+cut = subprocess.Popen(['cut', '-f', '3', '-d:'],
+                        stdin=grep.stdout,
+                        stdout=subprocess.PIPE,
+                       )
+
+end_of_pipe = cut.stdout
+print 'Included files:'
+for line in end_of_pipe:
+    print '\t', line.strip()
+
+    这个例子重新生成以下命令行。
+
+cat index.rst | grep ".. include" | cut -f 3 -d:
+
+    这个管线读取本节的 reStructureText 源文件，查找所有包含其他文件的文本行。然后打印出所包含的这些文件的文件名。
+与其他命令交互
+    前面的所有例子都假设交互量是有限的。communicate() 方法读取所有输出，返回之前要等待子进程退出。也可以在程序运行时从 Popen 实例使用的单个管道句柄增量地进行读写。这个技术可以用一个简单的应答程序来说明，这个程序从标准输入读，并写至标准输出。
+    下一个例子中使用脚本 repeater.py 作为子进程。它从 stdin 读取，将值写至 stdout，一次处理一行，直到再没有更多输入。开始和停止时它还会向 stderr 写一个消息，显示子进程的生命期。
+
+import sys
+
+sys.stderr.write('repeater.py: starting\n')
+sys.stderr.flush()
+
+while True:
+    next_line = sys.stdin.readline()
+    if not next_line:
+        break
+    sys.stdout.write(next_line)
+    sys.stdout.flush()
+
+sys.stderr.write('repeater.py: exiting\n')
+sys.stderr.flush()
+
+    下一个交互例子将采用不同方式使用 Popen 实例的 stdin 和 stdout 文件句柄。在第一个例子中，将把一组 5 个数写至进程的 stdin，每写一个数就读回下一行输出。第二个例子中仍然写同样的 5 个数，但要使用 communicate() 一次读取全部输出。
+
+import subprocess
+
+print 'One line at a time:'
+proc = subprocess.Popen('python repeater.py',
+                        shell=True,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        )
+for i in range(5):
+    proc.stdin.write('%d\n' % i)
+    output = proc.stdout.readline()
+    print output.rstrip()
+remainder = proc.communicate()[0]
+print remainder
+print
+print 'All output at once:'
+proc = subprocess.Popen('python repeater.py',
+                        shell=True,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        )
+
+for i in range(5):
+    proc.stdin.write('%d\n' % i)
+
+output = proc.communicate()[0]
+print output
+
+    对于这两种不同的循环，repeater.py: exiting 行出现在输出的不同位置上。
