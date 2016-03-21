@@ -231,3 +231,129 @@ output = proc.communicate()[0]
 print output
 
     对于这两种不同的循环，repeater.py: exiting 行出现在输出的不同位置上。
+进程间传递信号
+    os 模块的进程管理例子演示了如何使用 os.fork() 和 os.kill() 在进程间传递信号。由于每个 Popen 实例提供了一个 pid 属性，其中包含子进程的进程 id，所以可以完成类似于 subprocess 的工作。下一个例子结合了两个脚本。这个子进程为 USR 信号建立了一个处理程序。
+
+import os
+import signal
+import time
+import sys
+
+pid = os.getpid()
+received = False
+
+def signal_usrl(signum, frame):
+    "Callback invoked when a signal is received"
+    global received
+    received = True
+    print 'CHILD %6s: Received USR1' % pid
+    sys.stdout.flush()
+
+print 'CHILD %6s: Setting up signal handler' % pid
+sys.stdout.flush()
+signal.signal(signal.SIGUSR1, signal_usrl)
+print 'CHILD %6s: Pausing to wait for signal' % pid
+sys.stdout.flush()
+time.sleep(3)
+
+if not received:
+    print 'CHILD %6s: Never received signal' % pid
+
+    这个脚本作为父进程运行。它启动 signal_child.py，然后发送 USR1 信号。
+
+import os
+import signal
+import subprocess
+import time
+import sys
+
+pid = os.getpid()
+received = False
+
+proc = subprocess.Popen(['python', 'signal_child.py'])
+print 'PARENT      : Pausing before sending signal...'
+sys.stdout.flush()
+time.sleep(1)
+print 'PARENT      : Signaling child'
+sys.stdout.flush()
+os.kill(proc.pid, signal.SIGUSR1)
+
+    进程组/会话
+    如果 Popen 创建的进程创建了子进程，这些子进程不会接收发送给父进程的信号。这说明，使用 Popen 的 shell 参数时，很难通过发送 SIGINT 或 SIGTERM 来终止在 shell 中启动的命令。
+
+import os
+import signal
+import subprocess
+import tempfile
+import time
+import sys
+
+script = '''#!/bin/sh
+echo "Shell script in process $$"
+set -x
+python signal_child.py
+'''
+script_file = tempfile.NamedTemporaryFile('wt')
+script_file.write(script)
+script_file.flush()
+
+proc = subprocess.Popen(['sh', script_file.name], close_fds=True)
+print 'PARENT      : Pausing before sending signaling %s...' % proc.pid
+sys.stdout.flush()
+time.sleep(1)
+print 'PARENT      : Signaling child %s' % proc.pid
+sys.stdout.flush()
+os.kill(proc.pid, signal.SIGUSR1)
+time.sleep(3)
+
+    发送信号所用的 pid 与等待信号的 shell 脚本子进程的 pid 不匹配，因为在这个例子中，有 3 个不同的进程在交互。
+    1. 程序 subprocess_signal_parent_shell.py
+    2. shell 进程，它在运行主 Python 程序创建的脚本
+    3. 程序 signal_child.py
+    如果向子进程发送信号但不知道其进程 id，可以使用一个进程组（process group）关联这些子进程，使它们能一起收到信号。进程组用 os.setsid() 创建，将“会话 id”设置为当前进程的进程 id。所有子进程都会从其父进程继承会话 id，由于只能在由 Popen 及其子进程创建的 shell 中设置，所以不能在创建 Popen 的同一个进程中调用 os.setsid()。实际上，这个函数要作为 preexec_fn 参数传至 Popen，从而在 fork()  之后在新进程中运行这个函数，之后才能使用 exec() 运行 shell。要向整个进程组发送信号，可以提供 Popen 实例的 pid 值来使用 os.killpg()。
+
+import os
+import signal
+import subprocess
+import tempfile
+import time
+import sys
+
+script = '''#!/bin/sh
+echo "Shell script in process $$"
+set -x
+python signal_child.py
+'''
+script_file = tempfile.NamedTemporaryFile('wt')
+script_file.write(script)
+script_file.flush()
+
+def show_setting_sid():
+    print 'Calling os.setsid() from %s' % os.getpid()
+    sys.stdout.flush()
+    os.setsid()
+
+proc = subprocess.Popen(['sh', script_file.name],
+                        close_fds=True,
+                        preexec_fn=show_setting_sid,
+                        )
+print 'PARENT      : Pausing before sending signaling %s...' % proc.pid
+sys.stdout.flush()
+time.sleep(1)
+print 'PARENT      : Signaling child %s' % proc.pid
+sys.stdout.flush()
+os.kill(proc.pid, signal.SIGUSR1)
+time.sleep(3)
+
+    事件序列如下：
+    1. 父程序实例化 Popen。
+    2. Popen 实例创建一个新进程。
+    3. 这个新进程运行 os.setsid()。
+    4. 这个新进程运行 exec() 启动 shell。
+    5. shell 运行 shell 脚本。
+    6. shell 脚本再次创建新进程，该进程执行启动 Python。
+    7. Python 运行 signal_child.py。
+    8. 父进程使用 shell 的 pid 向进程组传送信号。
+    9. shell 和 Python 进程接收到信号。
+    10. shell 忽略这个信号。
+    11. 运行 signal_child.py 的 Python 进程调用信号处理程序。
