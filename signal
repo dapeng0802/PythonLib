@@ -10,7 +10,7 @@ import os
 import signal
 import time
 
-def receive_signal(signal, stack):
+def receive_signal(signum, stack):
     print 'Received:', signum
 
 # Register signal handlers
