@@ -1,0 +1,159 @@
+[Python标准库]signal——异步系统事件
+    作用：发送和接收异步系统事件。
+    Python 版本：1.4 及以后版本
+    信号是一个操作系统特性，它提供了一个途径可以通知程序发生了一个事件并异步处理这个事件。信号可以由系统本身生成，也可以从一个进程发送到另一个进程。由于信号会中断程序的正常控制流，如果在中间接收到信号，有些操作（特别是 I/O 操作）可能会产生错误。
+    信号由整数标识，在操作系统 C 首部中定义。Python 在 signal 模块中作为符号提供了适合不同平台的多种信号。本节中的例子使用 SIGINT 和 SIGUSR1。这两个信号一般是为所有 UNIX 和类 UNIX 系统定义的。
+接收信号
+    与其他形式基于事件的编程一样，要通过建立一个回调函数来接收信号，这个回调函数称为信号处理程序（signal handler），它会在出现信号时调用。信号处理程序的参数包括信号编号以及程序被信号中断那一时刻的栈帧。
+
+import os
+import signal
+import time
+
+def receive_signal(signal, stack):
+    print 'Received:', signum
+
+# Register signal handlers
+signal.signal(signal.SIGUSR1, receive_signal)
+signal.signal(signal.SIGUSR2, receive_signal)
+
+# Print the process ID so it can be used with 'kill'
+# to send this program signals.
+print 'My PID is:', os.getpid()
+
+while True:
+    print 'Waiting...'
+    time.sleep(3)
+
+    这个示例脚本会无限循环，每次暂停几秒时间。一个信号到来时，sleep() 调用被中断，信号处理程序 receive_signal() 打印信号编号。信号处理程序返回时，循环继续。
+    可以使用 os.kill() 或 UNIX 命令行程序 kill 向正在运行的程序发送信号。
+获取注册的处理程序
+    要查看为一个信号注册了哪些信号处理程序，可以使用 getsignal()。要将信号编号作为参数传入。返回值是已注册的处理程序，或者是以下某个特殊值：SIG_INT（如果信号被忽略）、SIG_DFL（如果使用默认行为）或 None（如果从 C 而不是从 Python 注册现有信号处理程序）。
+
+import signal
+
+def alarm_received(n, stack):
+    return
+
+signal.signal(signal.SIGALRM, alarm_received)
+
+signals_to_names = dict(
+    (getattr(signal, n), n)
+    for n in dir(signal)
+    if n.startswith('SIG') and '-' not in n
+    )
+
+for s, name in sorted(signals_to_names.items()):
+    handler = signal.getsignal(s)
+    if handler is signal.SIG_DFL:
+        handler = 'SIG_DFL'
+    elif handler is signal.SIG_IGN:
+        handler = 'SIG_IGN'
+    print '%-10s (%2d):' % (name, s), handler
+
+    同样地，由于每个操作系统可能定义了不同的信号，其他系统上的输出可能有所不同。
+发送信号
+    在 Python 中发送信号的函数是 os.kill()。
+闹铃
+    闹铃（Alarm）是一种特殊的信号，程序要求操作系统在过去一段时间之后再发出这个信号通知。os 的标准模块文档指出，这对于避免一个 I/O 操作或其他系统调用无限阻塞很有用。
+
+import signal
+import time
+
+def receive_alarm(signum, stack):
+    print 'Alarm :', time.ctime()
+    
+# Call receive_alarm in 2 seconds
+signal.signal(signal.SIGALRM, receive_alarm)
+signal.alarm(2)
+
+print 'Before:', time.ctime()
+time.sleep(4)
+print 'After :', time.ctime()
+
+    在这个例子中，sleep() 调用不会完整地持续 4 秒。
+忽略信号
+    要忽略一个信号，需要注册 SIG_IGN 作为处理程序。下面这个脚本将 SIGINT 的默认处理程序替换为 SIG_IGN，并为 SIGUSR1 注册一个处理程序。然后使用 signal.pause() 等待接收一个信号。
+
+import signal
+import os
+import time
+
+def do_exit(sig, stack):
+    raise SystemExit('Exiting')
+    
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+signal.signal(signal.SIGUSR1, do_exit)
+
+print 'My PID:', os.getpid()
+
+signal.pause()
+
+    正常情况下，SIGINT（用户按下 Ctrl-C 时 shell 会向程序发送这个信号）会产出一个 KeyboardInterrupt。这个例子将忽略 SIGINT，并在发现 SIGUSR1 时产生一个 SystemExit。输出中的每个 ^C 表示每一次尝试使用 Ctrl-C 从终端结束脚本。从另一个终端使用 kill -USR1 72598 才最终退出脚本。
+信号和线程
+    信号和线程通常不能很好地结合，因为只有进程的主线程可以接收信号。下面的例子建立了一个信号处理程序，它在一个线程中等待信号，而从另一个线程发送信号。
+
+import signal
+import threading
+import os
+import time
+
+def signal_handler(num, stack):
+    print 'Received signal %d in %s' % \
+          (num, threading.currentThread().name)
+    
+signal.signal(signal.SIGUSR1, signal_handler)
+
+def wait_for_signal():
+    print 'Waiting for signal in', threading.currentThread().name
+    signal.pause()
+    print 'Done waiting'
+
+# Start a thread that will not receive the signal
+receiver = threading.Thread(target=wait_for_signal, name='receiver')
+receiver.start()
+time.sleep(0.1)
+
+def send_signal():
+    print 'Sending signal in', threading.currentThread().name
+    os.kill(os.getpid(), signal.SIGUSR1)
+
+sender = threading.Thread(target=send_signal, name='sender')
+sender.start()
+sender.join()
+
+# Wait for the thread to see the signal (not going to happen!)
+print 'Waiting for', receiver.name
+signal.alarm(2)
+receiver.join()
+
+    信号处理程序都在主线程序中注册，因为这是 signal 模块 Python 实现的一个要求，不论底层平台对于结合线程和信号提供怎样的支持都有这个要求。尽管接收者线程调用了 signal.pause()，但它不会接收信号。这个例子接近结束时的 signal.alarm(2) 调用避免了无限阻塞，因为接收者线程永远不会退出。
+    尽管在任何线程中都能设置闹铃，但总是由主线程接收。
+
+import signal
+import threading
+import time
+
+def signal_handler(num, stack):
+    print time.ctime(), 'Alarm in', threading.currentThread().name
+    
+signal.signal(signal.SIGALRM, signal_handler)
+
+def use_alarm():
+    t_name = threading.currentThread().name
+    print time.ctime(), 'Setting alarm in', t_name
+    signal.alarm(1)
+    print time.ctime(), 'Sleeping in', t_name
+    time.sleep(3)
+    print time.ctime(), 'Done with sleep in', t_name
+
+# Start a thread that will not receive the signal
+alarm_thread = threading.Thread(target=use_alarm, name='alarm_thread')
+alarm_thread.start()
+time.sleep(0.1)
+
+# Wait for the thread to see the signal (not going to happen!)
+print time.ctime(), 'Waiting for', alarm_thread.name
+alarm_thread.join()
+
+    闹铃不会终止 use_alarm() 中的 sleep() 调用。
