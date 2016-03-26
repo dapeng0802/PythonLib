@@ -458,3 +458,203 @@ worker = threading.Thread(target=worker,
 worker.start()
 
     worker() 需要超过 3 次迭代才能得到 3 次锁。
+    1. 再入锁
+    正常的 Lock 对象不能请求多次，即使是由同一个线程请求。如果一个锁被同一调用链中的多个函数访问，这个限制可能会引入我们不希望的副作用。
+
+import threading
+
+lock = threading.Lock()
+
+print 'First try :', lock.acquire()
+print 'Second try:', lock.acquire(0)
+
+    在这里，对第二个 acquire() 调用给定超时值为 0，以避免阻塞，因为锁已经被第一个调用获得。
+    如果同一个线程的不同代码需要“重新获得”锁，在这种情况下则要使用 RLock。
+
+import threading
+
+lock = threading.RLock()
+
+print 'First try :', lock.acquire()
+print 'Second try:', lock.acquire(0)
+
+    与前面的例子相比，对代码唯一的修改就是用 RLock 替换 Lock。
+    2. 锁作为上下文管理器
+    锁实现了上下文管理器 API，并与 with 语句兼容。使用 with 则不再需要显式地获得和释放锁。
+
+import threading
+import logging
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='(%(threadName)-10s) %(message)s',
+                    )
+
+def worker_with(lock):
+    with lock:
+        logging.debug('Lock acquired via with')
+def worker_no_with(lock):
+    lock.acquire()
+    try:
+        logging.debug('Lock acquired directly')
+    finally:
+        lock.release()
+
+lock = threading.Lock()
+w = threading.Thread(target=worker_with, args=(lock,))
+nw = threading.Thread(target=worker_no_with, args=(lock,))
+
+w.start()
+nw.start()
+
+    函数 worker_with() 和 worker_no_with() 分别用相应的方式管理锁。
+同步线程
+    处理使用 Event，还可以通过使用一个 Condition 对象来同步线程。由于 Condition 使用了一个 Lock，它可以绑定到一个共享资源，允许多个线程等待资源更新。在这个例子中，consumer() 线程要等待设置了 Condition 才能继续。producer() 线程负责设置条件，并通知其他线程可以继续。
+
+import threading
+import logging
+import time
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='(asctime)s (%(threadName)-2s) %(message)s',
+                    )
+
+def consumer(cond):
+    """wait for the condition and use the resource"""
+    logging.debug('Starting consumer thread')
+    t = threading.currentThread()
+    with cond:
+        cond.wait()
+        logging.debug('Resource is avaliable to consumer')
+
+def producer(cond):
+    """set up the resource to be used by the consumer"""
+    logging.debug('Starting producer thread')
+    with cond:
+        logging.debug('Making resource avaliable')
+        cond.notifyAll()
+
+condition = threading.Condition()
+c1 = threading.Thread(name='c1', target=consumer, args=(condition,))
+c2 = threading.Thread(name='c2', target=consumer, args=(condition,))
+p = threading.Thread(name='p', target=producer, args=(condition,))
+
+c1.start()
+time.sleep(2)
+c2.start()
+time.sleep(2)
+p.start()
+
+    这些线程使用 with 来获得与 Condition 关联的锁。也可以显式地使用 acquire() 和 release() 方法。
+限制资源的并发访问
+    有时可能需要允许多个工作线程同时访问一个资源，但要限制总数。例如，连接池支持同时连接，但数目可能是固定的，或者一个网络可能支持固定数目的并发下载。这些连接就可以使用 Semaphore 来管理。
+
+import threading
+import logging
+import time
+import random
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='(asctime)s (%(threadName)-2s) %(message)s',
+                    )
+
+class ActivePool(object):
+    def __init__(self):
+        super(ActivePool, self).__init__()
+        self.active = []
+        self.lock = threading.Lock()
+    def makeActive(self, name):
+        with self.lock:
+            self.active.append(name)
+            logging.debug('Running: %s', self.active)
+    def makeInactive(self, name):
+        with self.lock:
+            self.active.remove(name)
+            logging.debug('Running: %s', self.active)
+
+def worker(s, pool):
+    logging.debug('Waiting to join the pool')
+    with s:
+        name = threading.currentThread().getName()
+        pool.makeActive(name)
+        time.sleep(0.1)
+        pool.makeInactive(name)
+
+pool = ActivePool()
+s = threading.Semaphore(2)
+for i in range(4):
+    t = threading.Thread(target=worker,
+                         name=str(i),
+                         args=(s, pool))
+    t.start()
+
+    在这个例子中，ActivePool 类只作为一种便利方法，用来跟踪某个给定时刻哪些线程能够运行。真正的资源池会为新的活动线程分配一个连接或另外某个值，这些线程工作完成时再回收这个值。在这里，资源池只是用来保存活动线程的名称，以显示至少有两个线程在并发运行。
+线程特定数据
+    有些资源需要锁定以便多个线程来使用，另外一些资源则需要保护，使它们对并非这些资源“所有者”的线程隐藏。local() 函数会创建一个对象，它能够隐藏值，不让单个线程看到。
+
+import threading
+import random
+import logging
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='(%(threadName)-10s) %(message)s',
+                    )
+
+def show_value(data):
+    try:
+        val = data.value
+    except AttributeError:
+        logging.debug('No value yet')
+    else:
+        logging.debug('value=%s', val)
+
+def worker(data):
+    show_value(data)
+    data.value = random.randint(1, 100)
+    show_value(data)
+
+local_data = threading.local()
+show_value(local_data)
+local_data.value = 1000
+show_value(local_data)
+
+for i in range(2):
+    t = threading.Thread(target=worker, args=(local_data,))
+    t.start()
+
+    属性 local_data.value 对所有线程都不可见，除非它在某个线程中设置才能被该线程看到。
+    要初始化设置，使所有线程开始时都有相同的值，可以使用一个子类，并在 __init__() 中设置这些属性。
+
+import threading
+import random
+import logging
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='(%(threadName)-10s) %(message)s',
+                    )
+
+def show_value(data):
+    try:
+        val = data.value
+    except AttributeError:
+        logging.debug('No value yet')
+    else:
+        logging.debug('value=%s', val)
+
+def worker(data):
+    show_value(data)
+    data.value = random.randint(1, 100)
+    show_value(data)
+
+class MyLocal(threading.local):
+    def __init__(self, value):
+        logging.debug('Initializing %r', self)
+        self.value = value
+
+local_data = MyLocal(1000)
+show_value(local_data)
+
+for i in range(2):
+    t = threading.Thread(target=worker, args=(local_data,))
+    t.start()
+
+    这会在相同的对象上调用 __init__()（注意 id() 值），每个线程中调用一次来设置默认值。
