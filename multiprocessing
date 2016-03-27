@@ -1,0 +1,124 @@
+[Python标准库]multiprocessing——像线程一样管理进程
+    作用：提供一个 API 来管理进程。
+    Python 版本：2.6 及以后版本
+    multiprocessing 模块包含一个 API，它基于 threading API 可以在多个进程间划分工作。有些情况下，multiprocessing 可以作为临时替换，取代 threading 来利用多个 CPU 内核，避免 Python 全局解释器锁所带来的计算瓶颈。
+    由于这种类似性，这里的前几个例子都由 threading 例子修改得来。multiprocessing 中有而 threading 未提供的特性将在后面介绍。
+multiprocessing 基础
+    要创建第二个进程，最简单的方法是用一个目标函数实例化一个 Process 对象，并调用 start() 让它开始工作。
+
+import multiprocessing
+
+def worker():
+    """Worker function"""
+    print 'Worker'
+    return
+
+if __name__ == '__main__':
+    jobs = []
+    for i in range(5):
+        p = multiprocessing.Process(target=worker)
+        jobs.append(p)
+        p.start()
+
+    输出中单词“Worker”将打印 5 次，不过不能清楚地看出孰先孰后，这取决于具体的执行顺序，因为每个进程都在竞争访问输出流。
+    更有用的做法是，创建一个进程时可以提供参数来告诉它要做什么。与 threading 不同，要向一个 multiprocessing Process 传递参数，这个参数必须能够使用 pickle 串行化。下面这个例子向各个工作进程传递一个要打印的数。
+
+import multiprocessing
+
+def worker(num):
+    """Worker function"""
+    print 'Worker', num
+    return
+
+if __name__ == '__main__':
+    jobs = []
+    for i in range(5):
+        p = multiprocessing.Process(target=worker, args=(i,))
+        jobs.append(p)
+        p.start()
+
+    现在整数参数会包含在各个工作进程打印的消息中。
+可导入的目标函数
+    threading 与 multiprocessing 例子之间有一个区别，multiprocessing 例子中对 __main__ 使用了额外的保护。由于新进程启动的方式，要求子进程能够导入包含目标函数的脚本。可以将应用的主要部分包装在一个 __main__ 检查中，确保模块导入时不会在各个子进程中递归地运行。另一种方法是从一个单独的脚本导入目标函数。例如，multiprocessing_import_main.py 使用了第二个模块中定义的一个工作函数。
+
+import multiprocessing
+import multiprocessing_import_worker
+
+if __name__ == '__main__':
+    jobs = []
+    for i in range(5):
+        p = multiprocessing.Process(
+            target=multiprocessing_import_worker.worker,
+            )
+        jobs.append(p)
+        p.start()
+
+    这个工作函数在 multiprocessing_import_worker.py 中定义。
+    调用主程序会生成与第一个例子类似的输出。
+确定当前进程
+    传递参数来标识或命名进程很麻烦，也没有必要。每个 Process 实例都有一个名称，其默认值可以在创建进程时改变。给进程命名对于跟踪进程很有用，特别是当应用中有多种类型的进程在同时运行时。
+
+import multiprocessing
+import time
+
+def worker():
+    name = multiprocessing.current_process().name
+    print name, 'Starting'
+    time.sleep(2)
+    print name, 'Exiting'
+
+def my_service():
+    name = multiprocessing.current_process().name
+    print name, 'Starting'
+    time.sleep(3)
+    print name, 'Exiting'
+
+if __name__ == '__main__':
+    service = multiprocessing.Process(name='my_service',
+                                      target=my_service)
+    worker_1 = multiprocessing.Process(name='worker_1',
+                                       target=worker)
+    worker_2 = multiprocessing.Process(target=worker) # default name
+
+    worker_1.start()
+    worker_2.start()
+    service.start()
+
+    调试输出中，每行都包含当前进程的名称。进程名称列为 Process-3 的行对应未命名的进程 worker_2。
+守护进程
+    默认情况下，在所有子进程退出之前主程序不会退出。有些情况下，可能需要启动一个后台进程，它可以一直运行而不阻塞主程序退出，如果一个服务无法用一种容易地方法来中断进程，或者希望进程工作到一半时中止而不损失或破坏数据（如为一个服务监控工具生成“心跳”的任务），对于这些服务，使用守护进程就很有用。
+    要标志一个进程为守护进程，可以将其 daemon 属性设置为 True。默认情况下进程不作为守护进程。
+
+import multiprocessing
+import time
+import sys
+
+def daemon():
+    p = multiprocessing.current_process()
+    print 'Starting:', p.name, p.pid
+    sys.stdout.flush()
+    time.sleep(2)
+    print 'Exiting :', p.name, p.pid
+    sys.stdout.flush()
+
+def non_daemon():
+    p = multiprocessing.current_process()
+    print 'Starting:', p.name, p.pid
+    sys.stdout.flush()
+    time.sleep(2)
+    print 'Exiting :', p.name, p.pid
+    sys.stdout.flush()
+
+if __name__ == '__main__':
+    d = multiprocessing.Process(name='daemon', target=daemon)
+    d.daemon = True
+
+    n = multiprocessing.Process(name='non-daemon', target=non_daemon)
+    n.daemon = False
+
+    d.start()
+    time.sleep(1)
+    n.start()
+
+    输出中没有守护进程的“Exiting”消息，因为在守护进程从其 2 秒的睡眠时间唤醒之前，所有非守护进程（包括主程序）已经退出。
+    守护进程会在主进程退出之前自动终止，以避免留下“孤”进程继续运行。要验证这一点，可以查找程序运行时打印的进程 id 值，然后用一个类似 ps 的命令检查该进程。
