@@ -1,10 +1,10 @@
-[Python��׼��]multiprocessing�������߳�һ����������
-    ���ã��ṩһ�� API ���������̡�
-    Python �汾��2.6 ���Ժ�汾
-    multiprocessing ģ�����һ�� API�������� threading API �����ڶ�����̼仮�ֹ�������Щ����£�multiprocessing ������Ϊ��ʱ�滻��ȡ�� threading �����ö�� CPU �ںˣ����� Python ȫ�ֽ��������������ļ���ƿ����
-    �������������ԣ������ǰ�������Ӷ��� threading �����޸ĵ�����multiprocessing ���ж� threading δ�ṩ�����Խ��ں�����ܡ�
-multiprocessing ����
-    Ҫ�����ڶ������̣���򵥵ķ�������һ��Ŀ�꺯��ʵ����һ�� Process ���󣬲����� start() ������ʼ������
+[Python标准库]multiprocessing——像线程一样管理进程
+    作用：提供一个 API 来管理进程。
+    Python 版本：2.6 及以后版本
+    multiprocessing 模块包含一个 API，它基于 threading API 可以在多个进程间划分工作。有些情况下，multiprocessing 可以作为临时替换，取代 threading 来利用多个 CPU 内核，避免 Python 全局解释器锁所带来的计算瓶颈。
+    由于这种类似性，这里的前几个例子都由 threading 例子修改得来。multiprocessing 中有而 threading 未提供的特性将在后面介绍。
+multiprocessing 基础
+    要创建第二个进程，最简单的方法是用一个目标函数实例化一个 Process 对象，并调用 start() 让它开始工作。
 
 import multiprocessing
 
@@ -20,8 +20,8 @@ if __name__ == '__main__':
         jobs.append(p)
         p.start()
 
-    ����е��ʡ�Worker������ӡ 5 �Σ�������������ؿ������������ȡ���ھ����ִ��˳����Ϊÿ�����̶��ھ��������������
-    �����õ������ǣ�����һ������ʱ�����ṩ������������Ҫ��ʲô���� threading ��ͬ��Ҫ��һ�� multiprocessing Process ���ݲ�����������������ܹ�ʹ�� pickle ���л��������������������������̴���һ��Ҫ��ӡ������
+    输出中单词“Worker”将打印 5 次，不过不能清楚地看出孰先孰后，这取决于具体的执行顺序，因为每个进程都在竞争访问输出流。
+    更有用的做法是，创建一个进程时可以提供参数来告诉它要做什么。与 threading 不同，要向一个 multiprocessing Process 传递参数，这个参数必须能够使用 pickle 串行化。下面这个例子向各个工作进程传递一个要打印的数。
 
 import multiprocessing
 
@@ -37,9 +37,9 @@ if __name__ == '__main__':
         jobs.append(p)
         p.start()
 
-    ������������������ڸ����������̴�ӡ����Ϣ�С�
-�ɵ����Ŀ�꺯��
-    threading �� multiprocessing ����֮����һ������multiprocessing �����ж� __main__ ʹ���˶���ı����������½��������ķ�ʽ��Ҫ���ӽ����ܹ��������Ŀ�꺯���Ľű������Խ�Ӧ�õ���Ҫ���ְ�װ��һ�� __main__ ����У�ȷ��ģ�鵼��ʱ�����ڸ����ӽ����еݹ�����С���һ�ַ����Ǵ�һ�������Ľű�����Ŀ�꺯�������磬multiprocessing_import_main.py ʹ���˵ڶ���ģ���ж����һ������������
+    现在整数参数会包含在各个工作进程打印的消息中。
+可导入的目标函数
+    threading 与 multiprocessing 例子之间有一个区别，multiprocessing 例子中对 __main__ 使用了额外的保护。由于新进程启动的方式，要求子进程能够导入包含目标函数的脚本。可以将应用的主要部分包装在一个 __main__ 检查中，确保模块导入时不会在各个子进程中递归地运行。另一种方法是从一个单独的脚本导入目标函数。例如，multiprocessing_import_main.py 使用了第二个模块中定义的一个工作函数。
 
 import multiprocessing
 import multiprocessing_import_worker
@@ -53,10 +53,10 @@ if __name__ == '__main__':
         jobs.append(p)
         p.start()
 
-    ������������� multiprocessing_import_worker.py �ж��塣
-    ������������������һ���������Ƶ������
-ȷ����ǰ����
-    ���ݲ�������ʶ���������̺��鷳��Ҳû�б�Ҫ��ÿ�� Process ʵ������һ�����ƣ���Ĭ��ֵ�����ڴ�������ʱ�ı䡣�������������ڸ��ٽ��̺����ã��ر��ǵ�Ӧ�����ж������͵Ľ�����ͬʱ����ʱ��
+    这个工作函数在 multiprocessing_import_worker.py 中定义。
+    调用主程序会生成与第一个例子类似的输出。
+确定当前进程
+    传递参数来标识或命名进程很麻烦，也没有必要。每个 Process 实例都有一个名称，其默认值可以在创建进程时改变。给进程命名对于跟踪进程很有用，特别是当应用中有多种类型的进程在同时运行时。
 
 import multiprocessing
 import time
@@ -84,10 +84,10 @@ if __name__ == '__main__':
     worker_2.start()
     service.start()
 
-    ��������У�ÿ�ж�������ǰ���̵����ơ�����������Ϊ Process-3 ���ж�Ӧδ�����Ľ��� worker_2��
-�ػ�����
-    Ĭ������£��������ӽ����˳�֮ǰ�����򲻻��˳�����Щ����£�������Ҫ����һ����̨���̣�������һֱ���ж��������������˳������һ�������޷���һ�����׵ط������жϽ��̣�����ϣ�����̹�����һ��ʱ��ֹ������ʧ���ƻ����ݣ���Ϊһ�������ع������ɡ������������񣩣�������Щ����ʹ���ػ����̾ͺ����á�
-    Ҫ��־һ������Ϊ�ػ����̣����Խ��� daemon ��������Ϊ True��Ĭ������½��̲���Ϊ�ػ����̡�
+    调试输出中，每行都包含当前进程的名称。进程名称列为 Process-3 的行对应未命名的进程 worker_2。
+守护进程
+    默认情况下，在所有子进程退出之前主程序不会退出。有些情况下，可能需要启动一个后台进程，它可以一直运行而不阻塞主程序退出，如果一个服务无法用一种容易地方法来中断进程，或者希望进程工作到一半时中止而不损失或破坏数据（如为一个服务监控工具生成“心跳”的任务），对于这些服务，使用守护进程就很有用。
+    要标志一个进程为守护进程，可以将其 daemon 属性设置为 True。默认情况下进程不作为守护进程。
 
 import multiprocessing
 import time
@@ -120,5 +120,297 @@ if __name__ == '__main__':
     time.sleep(1)
     n.start()
 
-    �����û���ػ����̵ġ�Exiting����Ϣ����Ϊ���ػ����̴��� 2 ���˯��ʱ�份��֮ǰ�����з��ػ����̣������������Ѿ��˳���
-    �ػ����̻����������˳�֮ǰ�Զ���ֹ���Ա������¡��¡����̼������С�Ҫ��֤��һ�㣬���Բ��ҳ�������ʱ��ӡ�Ľ��� id ֵ��Ȼ����һ������ ps ��������ý��̡�
+    输出中没有守护进程的“Exiting”消息，因为在守护进程从其 2 秒的睡眠时间唤醒之前，所有非守护进程（包括主程序）已经退出。
+    守护进程会在主进程退出之前自动终止，以避免留下“孤”进程继续运行。要验证这一点，可以查找程序运行时打印的进程 id 值，然后用一个类似 ps 的命令检查该进程。
+等待进程
+    要等待一个进程完成工作并退出，可以使用 join() 方法。
+
+import multiprocessing
+import time
+import sys
+
+def daemon():
+    name = multiprocessing.current_process().name
+    print 'Starting:', name
+    time.sleep(2)
+    print 'Exiting :', name
+
+def non_daemon():
+    name = multiprocessing.current_process().name
+    print 'Starting:', name
+    print 'Exiting :', name
+
+if __name__ == '__main__':
+    d = multiprocessing.Process(name='daemon', target=daemon)
+    d.daemon = True
+
+    n = multiprocessing.Process(name='non-daemon', target=non_daemon)
+    n.daemon = False
+
+    d.start()
+    time.sleep(1)
+    n.start()
+
+    d.join()
+    n.join()
+
+    由于主进程使用 join() 等待守护进程退出，所以这一次会打印“Exiting”消息。
+    默认情况下，join() 会无限阻塞。可以传入一个超时参数（这是一个浮点数，表示在进程变为不活动之前所等待的秒数）。即使进程在这个超时期限内没有完成，join() 也会返回。
+
+import multiprocessing
+import time
+import sys
+
+def daemon():
+    name = multiprocessing.current_process().name
+    print 'Starting:', name
+    time.sleep(2)
+    print 'Exiting :', name
+
+def non_daemon():
+    name = multiprocessing.current_process().name
+    print 'Starting:', name
+    print 'Exiting :', name
+
+if __name__ == '__main__':
+    d = multiprocessing.Process(name='daemon', target=daemon)
+    d.daemon = True
+
+    n = multiprocessing.Process(name='non-daemon', target=non_daemon)
+    n.daemon = False
+
+    d.start()
+    n.start()
+    d.join(1)
+    print 'd.is_alive()', d.is_alive()
+    n.join()
+
+    由于传入的超时值小于守护进程睡眠的时间，所以 join() 返回之后这个进程仍“存活”。
+终止进程
+    尽管最好使用“毒丸”（poison pill）方法向进程发出信号告诉它应当退出，但是如果一个进程看起来已经挂起或陷入死锁，则需要能够强制性地将其结束。对一个进程对象调用 terminate() 会结束子进程。
+
+import multiprocessing
+import time
+
+def slow_worker():
+    print 'Starting worker'
+    time.sleep(0.1)
+    print 'Finished worker'
+    
+if __name__ == '__main__':
+    p = multiprocessing.Process(target=slow_worker)
+    print 'BEFORE:', p, p.is_alive()
+
+    p.start()
+    print 'DURING:', p, p.is_alive()
+
+    p.terminate()
+    print 'TERMINATED:', p, p.is_alive()
+
+    p.join()
+    print 'JOINED:', p, p.is_alive()
+
+进程退出状态
+    进程退出时生成的状态码可以通过 exitcode 属性访问。下表列出了可用的退出码范围。
+    --------------------------------------------------------
+        退出码    |                 含义
+    --------------------------------------------------------
+        == 0      |    未生成任何错误
+    --------------------------------------------------------
+        > 0       |    进程有一个错误，并以该错误码退出
+    --------------------------------------------------------
+        < 0       |    进程由一个 -1 * exitcode 信号结束
+    --------------------------------------------------------
+
+import multiprocessing
+import sys
+import time
+
+def exit_error():
+    sys.exit(1)
+
+def exit_ok():
+    return
+
+def return_value():
+    return 1
+
+def raises():
+    raise RuntimeError('There was an error!')
+
+def terminated():
+    time.sleep(3)
+
+if __name__ == '__main__':
+    jobs = []
+    for f in [exit_error, exit_ok, return_value, raises, terminated]:
+        print 'Starting process for', f.func_name
+        j = multiprocessing.Process(target=f, name=f.func_name)
+        jobs.append(j)
+        j.start()
+
+    jobs[-1].terminate()
+
+    for j in jobs:
+        j.join()
+        print '%15s.exitcode = %s' % (j.name, j.exitcode)
+
+    产生异常的进程会自动得到 exitcode 为 1。
+日志
+    调试并发问题时，能够访问 multiprocessing 提供的对象的内部状态会很有用。可以使用一个方便的模块级函数来启用日志记录，名为 log_to_stderr()。它使用 logging 建立一个日志记录器对象，并增加一个处理程序，使得日志消息将发送到标准错误通道。
+
+import multiprocessing
+import sys
+import logging
+
+def worker():
+    print 'Doing some work'
+    sys.stdout.flush()
+
+if __name__ == '__main__':
+    multiprocessing.log_to_stderr(logging.DEBUG)
+    p = multiprocessing.Process(target=worker)
+    p.start()
+    p.join()
+
+    默认情况下，日志级别设置为 NOTSET，即不产生任何消息。通过传入一个不同的日志级别，可以初始化日志记录器，指定所需的消息程度。
+    要直接处理日志记录器（修改其日志级别或添加处理程序），可以使用 get_logger()。
+
+import multiprocessing
+import sys
+import logging
+
+def worker():
+    print 'Doing some work'
+    sys.stdout.flush()
+
+if __name__ == '__main__':
+    multiprocessing.log_to_stderr()
+    logger = multiprocessing.get_logger()
+    logger.setLevel(logging.INFO)
+    p = multiprocessing.Process(target=worker)
+    p.start()
+    p.join()
+
+    使用名称 multiprocessing，还可以通过 logging 配置文件 API 来配置日志记录器。
+派生进程
+    要在一个单独的进程中开始工作，尽管最简单的方法是使用 Process 并传入一个目标函数，不过也可以使用一个定制子类。
+
+import multiprocessing
+
+class Worker(multiprocessing.Process):
+
+    def run(self):
+        print 'In %s' % self.name
+        return
+    
+if __name__ == '__main__':
+    jobs = []
+    for i in range(5):
+        p = Worker()
+        jobs.append(p)
+        p.start()
+    for j in jobs:
+        j.join()
+
+    派生类应当覆盖 run() 来完成工作。
+向进程传递消息
+    类似于线程，对于多个进程，一种常用的模式是将一个工作划分到多个工作进程中并行地运行。要想有效地使用多个进程，通常要求它们之间有某种通信，这样才能分解工作，并完成结果的汇总。利用 multiprocessing 完成进程间通信的一种简单方法是使用一个 Queue 来回传递消息。能够用 pickle 串行化的任何对象都可以通过 Queue 传递。
+
+import multiprocessing
+
+class MyFancyClass(object):
+
+    def __init__(self, name):
+        self.name = name
+
+    def do_something(self):
+        proc_name = multiprocessing.current_process().name
+        print 'Doing something fancy in %s for %s!' % \
+              (proc_name, self.name)
+
+def worker(q):
+    obj = q.get()
+    obj.do_something()
+
+if __name__ == '__main__':
+    queue = multiprocessing.Queue()
+    p = multiprocessing.Process(target=worker, args=(queue,))
+    p.start()
+
+    queue.put(MyFancyClass('Fancy Dan'))
+
+    # Wait for the worker to finish
+    queue.close()
+    queue.join_thread()
+    p.join()
+
+    这个小例子只是向一个工作进程传递一个消息，然后主进程等待这个工作进程完成。
+    来看一个更复杂的例子，这里展示了如何管理多个工作进程，它们都利用一个 JoinableQueue 的数据，并把结果传递回父进程。这里使用“毒丸”技术来停止工作进程。建立具体任务后，主程序会在作业队列中为每个工作进程添加一个“stop”值。当一个工作进程遇到这个特定值时，就会退出其处理循环。子进程使用任务队列的 join() 方法等待所有任务都完成后才开始处理结果。
+
+import multiprocessing
+import time
+
+class Consumer(multiprocessing.Process):
+
+    def __init__(self, task_queue, result_queue):
+        multiprocessing.Process.__init__(self)
+        self.task_queue = task_queue
+        self.result_queue = result_queue
+
+    def run(self):
+        proc_name = self.name
+        while True:
+            next_task = self.task_queue.get()
+            if next_task is None:
+                # Poison pill means shutdown
+                print '%s: Exiting' % proc_name
+                self.task_queue.task_done()
+                break
+            print '%s: %s' % (proc_name, next_task)
+            answer = next_task()
+            self.task_queue.task_done()
+            self.result_queue.put(answer)
+        return
+
+class Task(object):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+    def __call__(self):
+        time.sleep(0.1) # pretend to take some time to do the work
+        return '%s * %s = %s' % (self.a, self.b, self.a * self.b)
+    def __str__(self):
+        return '%s * %s' % (self.a, self.b)
+
+if __name__ == '__main__':
+    # Establish communication queues
+    tasks = multiprocessing.JoinableQueue()
+    results = multiprocessing.Queue()
+
+    # Start consumers
+    num_consumers = multiprocessing.cpu_count() * 2
+    print 'Creating %d consumers' % num_consumers
+    consumers = [ Consumer(tasks, results)
+                  for i in xrange(num_consumers) ]
+    for w in consumers:
+        w.start()
+
+    # Enqueue jobs
+    num_jobs = 10
+    for i in xrange(num_jobs):
+        tasks.put(Task(i, i))
+
+    # Add a poison pill for each consumer
+    for i in xrange(num_consumers):
+        tasks.put(None)
+    # Wait for all the tasks to finish
+    tasks.join()
+
+    # Start printing results
+    while num_jobs:
+        result = results.get()
+        print 'Result:', result
+        num_jobs -= 1
+
+    尽管作业按顺序进入队列，但它们的执行却是并行的，所以不能保证它们完成的顺序。
