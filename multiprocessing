@@ -548,7 +548,7 @@ class ActivePool(object):
             return str(self.active)
 
 def worker(s, pool):
-    name = multiprocessing.currentThread().getName()
+    name = multiprocessing.current_process().name
     with s:
         pool.makeActive(name)
         print 'Now running: %s' % str(pool)
