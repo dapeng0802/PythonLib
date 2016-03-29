@@ -414,3 +414,162 @@ if __name__ == '__main__':
         num_jobs -= 1
 
     尽管作业按顺序进入队列，但它们的执行却是并行的，所以不能保证它们完成的顺序。
+进程间信号传输
+    Event 类提供了一种简单的方法，可以在进程之间传递状态信息。事件可以切换设置和未设置状态。通过使用一个可选的超时值，事件对象的用户可以等待其状态从未设置变为设置。
+
+import multiprocessing
+import time
+
+def wait_for_event(e):
+    """Wait for the event to be set before doing anything"""
+    print 'wait_for_event: starting'
+    e.wait()
+    print 'wait_for_event: e.is_set()->', e.is_set()
+
+def wait_for_event_timeout(e, t):
+    """Wait t seconds and then timeout"""
+    print 'wait_for_event_timeout: starting'
+    e.wait(t)
+    print 'wait_for_event_timeout: e.is_set()->', e.is_set()
+
+if __name__ == '__main__':
+    e = multiprocessing.Event()
+    w1 = multiprocessing.Process(name='block',
+                                 target=wait_for_event,
+                                 args=(e,))
+    w1.start()
+
+    w2 = multiprocessing.Process(name='nonblock',
+                                 target=wait_for_event_timeout,
+                                 args=(e, 2))
+    w2.start()
+
+    print 'main: waiting before calling Event.set()'
+    time.sleep(3)
+    e.set()
+    print 'main: event is set'
+
+    wait() 到时间时就会返回，而没有任何错误。调用者负责使用 is_set() 检查事件的状态。
+控制资源访问
+    如果需要在多个进程间共享一个资源，在这种情况下，可以使用一个 Lock 来避免访问冲突。
+
+import multiprocessing
+import sys
+
+def worker_with(lock, stream):
+    with lock:
+        stream.write('Lock acquired via with\n')
+
+def worker_no_with(lock, stream):
+    lock.acquire()
+    try:
+        stream.write('Lock acquired directly\n')
+    finally:
+        lock.release()
+
+lock = multiprocessing.Lock()
+w = multiprocessing.Process(target=worker_with,
+                            args=(lock, sys.stdout))
+nw = multiprocessing.Process(target=worker_no_with,
+                             args=(lock, sys.stdout))
+w.start()
+nw.start()
+
+w.join()
+nw.join()
+
+    在这个例子中，如果这两个进程没有用锁同步其输出流访问，打印到控制台的消息可能会纠结在一起。
+同步操作
+    Condition 对象可以用来同步一个工作流的各个部分，使其中一些部分并行运行，而另外一些顺序运行，即使它们在单独的进程中。
+
+import multiprocessing
+import time
+
+def stage_1(cond):
+    """perform first stage of work,
+    then notify stage_2 to continue
+    """
+    name = multiprocessing.current_process().name
+    print 'Starting', name
+    with cond:
+        print '%s done and ready for stage 2' % name
+        cond.notify_all()
+
+def stage_2(cond):
+    """wait for the condition telling us stage_1 is done"""
+    name = multiprocessing.current_process().name
+    print 'Starting', name
+    with cond:
+        cond.wait()
+        print '%s running' % name
+
+if __name__ == '__main__':
+    condition = multiprocessing.Condition()
+    s1 = multiprocessing.Process(name='s1',
+                                 target=stage_1,
+                                 args=(condition,))
+    s2_clients = [
+        multiprocessing.Process(name='stage_2[%d]' % i,
+                                target=stage_2,
+                                args=(condition,))
+        for i in range(1, 3)
+        ]
+    for c in s2_clients:
+        c.start()
+        time.sleep(1)
+    s1.start()
+
+    s1.join()
+    for c in s2_clients:
+        c.join()
+
+    在这个例子中，两个进程并行地运行一个作业的第二阶段，但前提是第一阶段已经完成。
+控制资源的并发访问
+    有时可能需要运行多个工作进程同时访问一个资源，但要限制总数。例如，连接池支持同时连接，但数目可能是固定的，或者一个网络应用可能支持固定数目的并发下载。这些连接就可以使用 Semaphore 来管理。
+
+import multiprocessing
+import time
+import random
+
+class ActivePool(object):
+    def __init__(self):
+        super(ActivePool, self).__init__()
+        self.mgr = multiprocessing.Manager()
+        self.active = self.mgr.list()
+        self.lock = multiprocessing.Lock()
+    def makeActive(self, name):
+        with self.lock:
+            self.active.append(name)
+    def makeInactive(self, name):
+        with self.lock:
+            self.active.remove(name)
+    def __str__(self):
+        with self.lock:
+            return str(self.active)
+
+def worker(s, pool):
+    name = multiprocessing.currentThread().getName()
+    with s:
+        pool.makeActive(name)
+        print 'Now running: %s' % str(pool)
+        time.sleep(random.random())
+        pool.makeInactive(name)
+
+if __name__ == '__main__':
+    pool = ActivePool()
+    s = multiprocessing.Semaphore(3)
+    jobs = [
+        multiprocessing.Process(name=str(i),
+                                target=worker,
+                                args=(s, pool))
+        for i in range(10)
+        ]
+
+    for j in jobs:
+        j.start()
+
+    for j in jobs:
+        j.join()
+        print 'Now running: %s' % str(pool)
+
+    在这个例子中，ActivePool 类只作为一种便利方法，用来跟踪某个给定时刻哪些进程能够运行。真正的资源池会为新的活动进程分配一个连接或另外某个值，这些进程工作完成时再回收这个值。在这里，资源池只是用来保存活动进程的名称，以显示至少有三个进程在并发运行。
