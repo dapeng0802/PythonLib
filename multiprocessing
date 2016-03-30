@@ -573,3 +573,258 @@ if __name__ == '__main__':
         print 'Now running: %s' % str(pool)
 
     在这个例子中，ActivePool 类只作为一种便利方法，用来跟踪某个给定时刻哪些进程能够运行。真正的资源池会为新的活动进程分配一个连接或另外某个值，这些进程工作完成时再回收这个值。在这里，资源池只是用来保存活动进程的名称，以显示至少有三个进程在并发运行。
+管理共享状态
+    在前面的例子中，ActivePool 实例通过一个由 Manager 创建的特殊类型列表对象集中维护活动进程列表。Manager 负责协调其所有用户之间的共享信息状态。
+
+import multiprocessing
+
+def worker(d, key, value):
+    d[key] = value
+
+if __name__ == '__main__':
+    mgr = multiprocessing.Manager()
+    d = mgr.dict()
+    jobs = [ multiprocessing.Process(target=worker, args=(d, i, i*2))
+             for i in range(10)
+             ]
+    for j in jobs:
+        j.start()
+    for j in jobs:
+        j.join()
+    print 'Results:', d
+
+    通过管理器来创建列表，这个列表将会共享，所有进程都能看到列表更新。除了列表，管理器还支持字典。
+共享命名空间
+    除了字典和列表之外，Manager 还可以创建一个共享 Namespace。
+
+import multiprocessing
+
+def producer(ns, event):
+    ns.value = 'This is the value'
+    event.set()
+
+def consumer(ns, event):
+    try:
+        value = ns.value
+    except Exception, err:
+        print 'Before event, error:', str(err)
+    event.wait()
+    print 'After event:', ns.value
+
+if __name__ == '__main__':
+    mgr = multiprocessing.Manager()
+    namespace = mgr.Namespace()
+    event = multiprocessing.Event()
+    p = multiprocessing.Process(target=producer,
+                                args=(namespace, event))
+    c = multiprocessing.Process(target=consumer,
+                                args=(namespace, event))
+    c.start()
+    p.start()
+    c.join()
+    p.join()
+
+    添加到 Namespace 的所有命名值对所有接收 Namespace 实例的客户都可见。
+    要知道重要的一点，对命名空间中可变值内容的更新不会自动传播。
+
+import multiprocessing
+
+def producer(ns, event):
+    # DOES NOT UPDATE GLOBAL VALUE!
+    ns.my_list.append('This is the value')
+    event.set()
+
+def consumer(ns, event):
+    print 'Before event:', ns.my_list
+    event.wait()
+    print 'After event:', ns.my_list
+
+if __name__ == '__main__':
+    mgr = multiprocessing.Manager()
+    namespace = mgr.Namespace()
+    namespace.my_list = []
+    
+    event = multiprocessing.Event()
+    p = multiprocessing.Process(target=producer,
+                                args=(namespace, event))
+    c = multiprocessing.Process(target=consumer,
+                                args=(namespace, event))
+    c.start()
+    p.start()
+    c.join()
+    p.join()
+
+    要更新这个列表，需要将它再次关联到命名空间对象。
+进程池
+    有些情况下，所要完成的工作可以分解并独立地分布到多个工作进程，对于这种简单的情况，可以用 Pool 类来管理固定数目的工作进程。作业的返回值会收集并作为一个列表返回。池（pool）参数包括进程数以及启动任务进程时要运行的函数（对每个子进程调用一次）。
+
+import multiprocessing
+
+def do_calculation(data):
+    return data * 2
+
+def start_process():
+    print 'Starting', multiprocessing.current_process().name
+
+if __name__ == '__main__':
+    inputs = list(range(10))
+    print 'Input   :', inputs
+
+    builtin_outputs = map(do_calculation, inputs)
+    print 'Built-in:', builtin_outputs
+
+    pool_size = multiprocessing.cpu_count() * 2
+    pool = multiprocessing.Pool(processes=pool_size,
+                                initializer=start_process,
+                                )
+    pool_outputs = pool.map(do_calculation, inputs)
+    pool.close() # no more tasks
+    pool.join()  # wrap up current tasks
+
+    print 'Pool    :', pool_outputs
+
+    map() 方法在功能上等价于内置 map()，只不过单个任务会并行运行。由于进程池并行地处理输入，可以用 close() 和 join() 使任务进程与主进程同步，以确保完成适当的清理。
+    默认情况下，Pool 会创建固定数目的工作进程，并向这些工作进程传递作业，直到再没有更多作业为止。设置 maxtasksperchild 参数可以告诉池在完成一些任务之后要重新启动一个工作进程，来避免运行时间很长的工作进程消耗太多的系统资源。
+
+import multiprocessing
+
+def do_calculation(data):
+    return data * 2
+
+def start_process():
+    print 'Starting', multiprocessing.current_process().name
+
+if __name__ == '__main__':
+    inputs = list(range(10))
+    print 'Input   :', inputs
+
+    builtin_outputs = map(do_calculation, inputs)
+    print 'Built-in:', builtin_outputs
+
+    pool_size = multiprocessing.cpu_count() * 2
+    pool = multiprocessing.Pool(processes=pool_size,
+                                initializer=start_process,
+                                maxtasksperchild=2,
+                                )
+    pool_outputs = pool.map(do_calculation, inputs)
+    pool.close() # no more tasks
+    pool.join()  # wrap up current tasks
+
+    print 'Pool    :', pool_outputs
+
+    池完成其所分配的任务时，即使并没有更多工作要做，也会重新启动工作进程。从这个输出可以看到，尽管只有 10 个任务，而且每个工作进程一次可以完成两个任务，但是这里创建了 8 个工作进程。
+实现 MapReduce
+    Pool 类可以用于创建一个简单的单服务器 MapReduce 实现。尽管它无法充分提供分布处理的好处，但确实展示了将一些问题分解到可分布的工作单元是何等容易。
+    在基于 MapReduce 的系统中，输入数据分解为块，由不同的工作进程实例处理。首先使用一个简单的转换将各个输入数据块映射到一个中间状态。然后将中间数据汇集在一起，基于一个键值分区，使所有相关的值都在一起。最后，将分区的数据归约为一个结果集。
+
+import collections
+import itertools
+import multiprocessing
+
+class SimpleMapReduce(object):
+    def __init__(self, map_func, reduce_func, num_workers=None):
+        """
+        map_func
+        Function to map inputs to intermediate data. Takes as
+        argument one input value and returns a tuple with the key
+        and a value to be reduced.
+
+        reduce_func
+        Function to reduce partitioned version of intermediate data
+        to final output. Takes as argument a key as produced by
+        map_func and a sequence of the values associated with that
+        key.
+        num_workers
+        The number of workers to create in the pool. Defaults to
+        the number of CPUs available on the current host.
+        """
+        self.map_func = map_func
+        self.reduce_func = reduce_func
+        self.pool = multiprocessing.Pool(num_workers)
+
+    def partition(self, mapped_values):
+        """Organize the mapped values by their key.
+        Returns an unsorted sequence of tuples with a key
+        and a sequence of values.
+        """
+
+        partitioned_data = collections.defaultdict(list)
+        for key, value in mapped_values:
+            partitioned_data[key].append(value)
+        return partitioned_data.items()
+
+    def __call__(self, inputs, chunksize=1):
+        """Process the inputs through the map and reduce functions given.
+        inputs
+        An iterable containing the input data to be processed.
+        chunksize=1
+        The portion of the input data to hand to each worker. This
+        can be used to tune performance during the mapping phase.
+        """
+        map_responses = self.pool.map(self.map_func,
+                                      inputs,
+                                      chunksize=chunksize)
+        partitioned_data = self.partition(
+            itertools.chain(*map_responses)
+            )
+        reduced_values = self.pool.map(self.reduce_func,
+                                      partitioned_data)
+        return reduced_values
+
+    以下示例脚本使用 SimpleMapReduce 统计这篇文章 reStructureText 源中的“单词”数，这里要忽略其中的一些标记。
+
+import multiprocessing
+import string
+
+from multiprocessing_mapreduce import SimpleMapReduce
+
+def file_to_words(filename):
+    """Read a file and return a sequence of
+    (word, occurrences) values.
+    """
+    STOP_WORDS = set([
+        'a', 'an', 'and', 'are', 'as', 'be', 'by', 'for', 'if',
+        'in', 'is', 'it', 'of', 'or', 'py', 'rst', 'that', 'the',
+        'to', 'with',
+        ])
+    TR = string.maketrans(string.punctuation,
+                          ' ' * len(string.punctuation))
+    print multiprocessing.current_process().name, 'reading', filename
+    output = []
+
+    with open(filename, 'rt') as f:
+        for line in f:
+            if line.lstrip().startswith('..'): # Skip comment lines
+                continue
+            line = line.translate(TR)  # Strip punctuation
+            for word in line.split():
+                word = word.lower()
+                if word.isalpha() and word not in STOP_WORDS:
+                    output.append( (word, 1) )
+    return output
+
+def count_words(item):
+    """Convert the partitioned data for a word to a
+    tuple containing the word and the number of occurrences.
+    """
+    word, occurrences = item
+    return (word, sum(occurrences))
+
+if __name__ == '__main__':
+    import operator
+    import glob
+
+    input_files = glob.glob('*.rst')
+
+    mapper = SimpleMapReduce(file_to_words, count_words)
+    word_counts = mapper(input_files)
+    word_counts.sort(key=operator.itemgetter(1))
+    word_counts.reverse()
+
+    print '\nTOP 20 WORDS BY FREQUENCY\n'
+    top20 = word_counts[:20]
+    longest = max(len(word) for word, count in top20)
+    for word, count in top20:
+        print '%-*s: %5s' % (longest+1, word, count)
+
+    file_to_words() 函数将各个输入文件转换为一个元组序列，各元组包含单词和数字1（表示一次出现）。partition() 使用单词作为键来划分数据，所以得到的结构包括一个键和一个 1 值序列（表示单词的各次出现）。分区数据转换为一组元组，元组中包含一个单词和归约阶段中 count_words() 统计得出的这个单词的出现次数。
