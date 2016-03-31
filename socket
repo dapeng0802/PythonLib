@@ -1,0 +1,65 @@
+[Python标准库]socket——网络通信
+    作用：提供对网络通信的访问。
+    Python 版本：1.4 及以后版本
+    socket 模块提供了一个底层 C API，可以使用 BSD 套接字接口实现网络通信。它包括 socket 类，用于处理具体的数据通道，还包括用于完成网络相关任务的函数，如将一个服务器名称转换为一个地址，以及格式化数据以便在网络上发送。
+寻址、协议簇和套接字类型
+    套接字（socket）是程序在本地或者通过互联网来回传递数据时所用通信通道的一个端点。套接字有两个主要属性来控制如何发送数据：地址簇（address family）控制所用的 OSI 网络层协议，套接字类型（socket type）控制传输层协议。
+    Python 支持 3 个地址簇。最常用的是 AF_INET，用于 IPv4 Internet 寻址。IPv4 地址长度为 4 个字节，通常表示为 4 个数的序列，每个字节对应一个数，用点号分隔（如 10.1.1.5 和 127.0.0.1）。这些值通常称为“IP 地址”。目前几乎所有互联网网络应用都使用 IPv4。
+    AF_INET6 用于 IPv6 Internet 寻址。IPv6 是“下一代” Internet 协议。它支持 128 位地址和通信流调整，还支持 IPv4 所不支持的一些路由特性。目前采用 IPv6 的应用还很有限，不过在不断增长。
+    AF_UNIX 是 UNIX 域套接字（UNIX Domain Sockets, UDS）的地址簇，这是一种 POSIX 兼容系统上的进程间通信协议。UDS 的实现通常允许操作系统直接从进程向进程传递数据，而不用通过网络栈。这比使用 AF_INET 更高效，但是由于要用文件系统作为寻址的命名空间，UDS 仅限于同一个系统上的进程。相比其他的 IPC 机制（如命名管道或共享内存），使用 UDS 的优势在于，它与 IP 网络应用的编程接口是一样的。这说明，应用在单个主机上运行时可以利用高效的通信，在网络上发送数据时仍然可以使用同样的代码。
+    套接字类型往往是 SOCK_DGRAM 或 SOCK_STREAM，SOCK_DGRAM 对应用户数据报协议（user datagram protocol, UDP），SOCK_STREAM 对应传输控制协议（transmission control protocol, TCP）。UDP 不需要传输握手过程或其他设置过程（setup），但是提供的传输可靠性较低。UDP 消息可能乱序传送，也可能传送多次，或者根本不传送。TCP 则相反，可以确保每个消息只传送一次，而且按正确地顺序传送。不过，由于增加了可靠性，可能会引入额外的延迟，因为数据包可能需要重新传输。大多数传送大量数据的应用协议（如 HTTP）都建立在 TCP 基础上。UDP 通常用于顺序不太重要的协议（因为消息可以放在一个数据包中，例如 DNS），或者用于广播（向多个主机发送相同的数据）。
+    1. 在网络上查找主机
+    socket 包含一些函数与网络上的域名服务交互，使得程序可以将服务器的主机名转换为其数字网络地址。应用使用地址来连接一个服务器之前并不需要显式地转换地址，不过报告错误时除了报告所用的名字之外，还包含这个数字地址会很有用。
+    要查找当前主机的正式名字，可以使用 gethostname()。
+
+import socket
+
+print socket.gethostname()
+
+    所返回的名字取决于当前系统的网络设置，在不同的网络上返回的名字可能有变化（如一个连接到 WLAN 的笔记本电脑）。
+    这里使用 gethostname() 访问操作系统主机名解析 API，将服务器名字转换为其数字地址。
+
+import socket
+
+for host in [ 'homer', 'www', 'www.python.org', 'nonsuchname' ]:
+    try:
+        print '%s : %s' % (host, socket.gethostbyname(host))
+    except socket.error, msg:
+        print '%s : %s' % (host, msg)
+
+    如果当前系统的 DNS 配置在搜索中包括一个或多个域，名字（name）参数不要求是完全限定名（也就是说，不需要包含域名以及基名）。如果一个名字无法找到，会产生一个 socket error 类型的异常。
+    要访问有关服务器的更多命名信息，可以使用函数 gethostbyname_ex()。它会返回服务器的标准主机名、所有别名，以及可以用来到达这个主机的所有可用 IP 地址。
+
+import socket
+
+for host in [ 'homer', 'www', 'www.python.org', 'nonsuchname' ]:
+    print host
+    try:
+        hostname, aliases, addresses = socket.gethostbyname_ex(host)
+        print '  Hostname:', hostname
+        print '  Aliases :', aliases
+        print ' Addresses:', addresses
+    except socket.error as msg:
+        print 'ERROR:', msg
+    print
+
+    如果能得到一个服务器的所有已知 IP 地址，客户就可以实现其自己的负载平衡或故障恢复算法。
+    使用 getfqdn() 可以将一个部分名转换为完全限定域名。
+
+import socket
+
+for host in [ 'homer', 'www', 'www.python.org', 'nonsuchname' ]:
+    print '%6s : %s' % (host, socket.getfqdn(host))
+
+    如果输入是一个别名（如这里的 www），返回的名字不一定与输入参数一致。
+    如果得到一个服务器的地址，可以使用 gethostbyaddr() 完成一个“逆向”查找来得到主机名。
+
+import socket
+
+hostname, aliases, addresses = socket.gethostbyaddr('127.0.0.1')
+
+print 'Hostname :', hostname
+print 'Aliases  :', aliases
+print 'Addresses:', addresses
+
+    返回值是一个元组，其中包括完全主机名、所有别名，以及与这个名字关联的所有 IP 地址。
