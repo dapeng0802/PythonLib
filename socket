@@ -63,3 +63,153 @@ print 'Aliases  :', aliases
 print 'Addresses:', addresses
 
     返回值是一个元组，其中包括完全主机名、所有别名，以及与这个名字关联的所有 IP 地址。
+    2. 查找服务信息
+    除了 IP 地址之外，每个套接字地址还包括一个整数端口号（port number）。很多应用可以在同一个端口上运行并监听一个 IP 地址，不过一次只有一个套接字可以使用该地址的端口。通过结合 IP 地址、协议和端口号，可以唯一地标识一个通信通道，确保通过一个套接字发送的消息可以到达正确的目标。
+    有些端口号已经预先分配给某个特定协议。例如，使用 SMTP 的 email 服务器使用 TCP 在端口 25 相互通信，Web 客户和服务器使用 80 作为 HTTP 的端口号。网络服务的端口号和标准名可以使用 getservbyname() 查找。
+
+import socket
+from urlparse import urlparse
+
+for url in [ 'http://www.python.org',
+             'https://www.mybank.com',
+             'ftp://prep.ai.mit.edu',
+             'gopher://gopher.micro.umn.edu',
+             'smtp://mail.example.com',
+             'imaps://mail.example.com',
+             'pop3://pop.example.com',
+             'pop3s://pop.example.com',
+             ]:
+    parsed_url = urlparse(url)
+    port = socket.getservbyname(parsed_url.scheme)
+    print '%6s : %s' % (parsed_url.scheme, port)
+
+    尽管标准化服务不太可能改变端口，不过最好用一个系统调用查找端口值，而不是在程序中硬编码写出端口号，这样在增加新服务时会更为灵活。
+    要逆向完成服务端口查找，可以使用 getservbyport()。
+
+import socket
+import urlparse
+
+for port in [ 80, 443, 21, 70, 25, 143, 993, 110, 995 ]:
+    print urlparse.urlunparse(
+        (socket.getservbyport(port), 'example.com', '/', '', '', '')
+        )
+
+    要从任意的地址构造服务 URL，这个逆向查找就很有用。
+    可以使用 getprotobyname() 获取分配给一个传输协议的端口号。
+
+import socket
+
+def get_constants(prefix):
+    """Create a dictionary mapping socket module
+    constants to their names.
+    """
+    return dict( (getattr(socket, n), n)
+                 for n in dir(socket)
+                 if n.startswith(prefix)
+                 )
+
+protocols = get_constants('IPPROTO_')
+for name in [ 'icmp', 'udp', 'tcp' ]:
+    proto_num = socket.getprotobyname(name)
+    const_name = protocols[proto_num]
+    print '%4s -> %2d (socket.%-12s = %2d)' % \
+          (name, proto_num, const_name, getattr(socket, const_name))
+
+    协议码值是标准化的，作为常量在 socket 中定义，这些协议码都有前缀 IPPROTO_。
+    3. 查找服务器地址
+    getaddrinfo() 将一个服务器的基本地址转换为一个元组列表，其中包含建立一个连接所需的全部信息。每个元组的内容会有变化，包含不同的网络簇或协议。
+
+import socket
+
+def get_constants(prefix):
+    """Create a dictionary mapping socket module
+    constants to their names.
+    """
+    return dict( (getattr(socket, n), n)
+                 for n in dir(socket)
+                 if n.startswith(prefix)
+                 )
+
+families = get_constants('AF_')
+types = get_constants('SOCK_')
+protocols = get_constants('IPPROTO_')
+
+for response in socket.getaddrinfo('www.python.org', 'http'):
+
+    # Unpack the response tuple
+    familiy, socktype, proto, canonname, sockaddr = response
+
+    print 'Family        :', families[familiy]
+    print 'Type          :', types[socktype]
+    print 'Protocol      :', protocols[proto]
+    print 'Canonical name:', canonname
+    print 'Socket address:', sockaddr
+    print
+
+    这个程序展示了如何查找 www.python.org 的连接信息。
+    getaddrinfo() 有多个参数来过滤结果列表。例子中给出的主机（host）和端口（port）值是必要参数。可选参数包括 familiy、socktype、proto 和 flags。这些可选值可以取 0 或 socket 定义的某个常量。
+
+import socket
+
+def get_constants(prefix):
+    """Create a dictionary mapping socket module
+    constants to their names.
+    """
+    return dict( (getattr(socket, n), n)
+                 for n in dir(socket)
+                 if n.startswith(prefix)
+                 )
+
+families = get_constants('AF_')
+types = get_constants('SOCK_')
+protocols = get_constants('IPPROTO_')
+
+for response in socket.getaddrinfo('www.doughellmann.com', 'http',
+                                   socket.AF_INET,      # familiy
+                                   socket.SOCK_STREAM,  # socktyoe
+                                   socket.IPPROTO_TCP,  # protocol
+                                   socket.AI_CANONNAME, # flags
+                                   ):
+
+    # Unpack the response tuple
+    familiy, socktype, proto, canonname, sockaddr = response
+
+    print 'Family        :', families[familiy]
+    print 'Type          :', types[socktype]
+    print 'Protocol      :', protocols[proto]
+    print 'Canonical name:', canonname
+    print 'Socket address:', sockaddr
+    print
+
+    这一次由于标志（flags）包括 AI_CANONNAME，如果这个主机有别名，结果中会包含服务器的标准名（可能与查找所用的值不同）。如果没有这个标志，标准名值仍为空。
+    4. IP 地址表示
+    用 C 编写的网络程序使用数据类型 struct sockaddr 将 IP 地址表示为二进制值（而不是 Python 程序中常见的地址）。要在 Python 表示和 C 表示之间转换 IPv4 地址，可以使用 inet_aton() 和 inet_ntoa()。
+
+import binascii
+import socket
+import struct
+import sys
+
+for string_address in [ '192.168.1.1', '127.0.0.1' ]:
+    packed = socket.inet_aton(string_address)
+    print 'Original:', string_address
+    print 'Packed  :', binascii.hexlify(packed)
+    print 'Unpacked:', socket.inet_ntoa(packed)
+    print
+
+    数据包格式中的 4 个字可以传递到 C 库、通过网络安全地传输，或者紧凑地保存在一个数据库。
+    相关函数 inet_pton() 和 inet_ntop() 都能处理 IPv4 和 IPv6 地址，根据传入的地址簇参数生成适当的格式。
+
+import binascii
+import socket
+import struct
+import sys
+
+string_address = '2002:ac10:10a:1234:21e:52ff:fe74:40e'
+packed = socket.inet_pton(socket.AF_INET6, string_address)
+
+print 'Original:', string_address
+print 'Packed  :', binascii.hexlify(packed)
+print 'Unpacked:', socket.inet_ntop(socket.AF_INET6, packed)
+
+    IPv4 地址已经是十六进制值，所以将打包版本转换为一个十六进制数系列时会生成一个与原值类似的串。
