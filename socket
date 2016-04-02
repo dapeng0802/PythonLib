@@ -213,3 +213,137 @@ print 'Packed  :', binascii.hexlify(packed)
 print 'Unpacked:', socket.inet_ntop(socket.AF_INET6, packed)
 
     IPv4 地址已经是十六进制值，所以将打包版本转换为一个十六进制数系列时会生成一个与原值类似的串。
+TCP/IP 客户和服务器
+    套接字可以配置为一个服务器，监听到来的消息，或者也可以配置为客户，连接到其他应用。TCP/IP 套接字的两段连接后，可以完成双向通信。
+    1. 回应服务器
+    下面这个示例程序以标准库文档中的一个例子为基础，它接收到来的消息，再回复给发送者。首先创建一个 TCP/IP 套接字。
+
+import socket
+import sys
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    然后使用 bind() 将这个套接字与服务器地址关联。在这里，地址是 localhost（指示当前服务器），端口号为 10000。
+
+# Bind the socket to the port
+server_address = ('localhost', 10000)
+print >>sys.stderr, 'starting up on %s port %s' % server_address
+sock.bind(server_address)
+
+    调用 listen() 将这个套接字置为服务器模式，调用 accept() 等待到来的连接。整数参数是在后台排队的连接数，达到这个连接数后，系统会拒绝连接新客户。这个例子希望一次只处理一个连接。
+
+# Listen for incoming connections
+sock.listen(1)
+
+while True:
+    # Wait for a connection
+    print >>sys.stderr, 'waiting for a connection'
+    connection, client_address = sock.accept()
+
+    accept() 返回服务器和客户之间的一个打开的连接，并返回客户地址。这个连接实际上是另一个端口上的一个不同的套接字（由内核分配）。数据使用 recv() 从连接读取，并用 sendall() 传输。
+
+    try:
+        print >>sys.stderr, 'connection from', client_address
+
+        # Receive the data in small chunks and retransmit it
+        while True:
+            data = connection.recv(16)
+            print >>sys.stderr, 'received "%s"' % data
+            if data:
+                print >>sys.stderr, 'sending data back to the client'
+                connection.sendall(data)
+            else:
+                print >>sys.stderr, 'no data from', client_address
+                break
+
+    finally:
+        # Clean up the connection
+        connection.close()
+
+    与一个客户的通信完成时，需要用 close() 清理这个连接。这个例子使用了一个 try:finally 块来确保 close() 总会被调用，即使出现了一个错误也不例外。
+    2. 回应客户
+    与服务器不同，客户程序采用另外一种方式建立 socket。它不绑定到一个端口并监听，而是使用 connect() 将套接字直接关联到远程地址。
+
+import socket
+import sys
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Connect the socket to the port where the server is listening
+server_address = ('localhost', 10000)
+print >>sys.stderr, 'connecting to %s port %s' % server_address
+sock.connect(server_address)
+
+    建立连接之后，可以通过 socket 利用 sendall() 发送数据，并用 recv() 接收数据，这与服务器中是一样的。
+
+try:
+    # Send data
+    message = 'This is the message.  It will be repeated.'
+    print >>sys.stderr, 'sending "%s"' % message
+    sock.sendall(message)
+
+    # Look for the response
+    amout_received = 0
+    amout_expected = len(message)
+
+    while amout_received < amout_expected:
+        data = sock.recv(16)
+        amout_received += len(data)
+        print >>sys.stderr, 'received "%s"' % data
+
+finally:
+    print >>sys.stderr, 'closing socket'
+    sock.close()
+
+    发送了整个消息并接收到一个副本时，套接字会关闭，以释放端口。
+    3. 客户与服务器
+    要在不同的终端窗口运行客户和服务器，使它们能够相互通信。服务器输出显示了到来的连接和数据，以及发回给客户的响应。客户输出显示了发出的消息和来自服务器的响应。
+    4. 简易客户连接
+    如果使用便利函数 create_connection() 来连接服务器，TCP/IP 客户可以省去几步。这个函数只有一个参数，这是一个包含服务器地址的二值元组，函数将由这个参数推导出用于连接的最佳地址。
+
+import socket
+import sys
+
+def get_constants(prefix):
+    """Create a dictionary mapping socket module
+    constants to their names.
+    """
+    return dict( (getattr(socket, n), n)
+                 for n in dir(socket)
+                 if n.startswith(prefix)
+                 )
+
+families = get_constants('AF_')
+types = get_constants('SOCK_')
+protocols = get_constants('IPPROTO_')
+
+# Create a TCP/IP socket
+sock = socket.create_connection(('localhost', 10000))
+
+print >>sys.stderr, 'Family  :', families[sock.family]
+print >>sys.stderr, 'Type    :', types[sock.type]
+print >>sys.stderr, 'Protocol:', protocols[sock.proto]
+print >>sys.stderr
+
+try:
+
+    # Send data
+    message = 'This is the message.  It will be repeated.'
+    print >>sys.stderr, 'sending "%s"' % message
+    sock.sendall(message)
+
+    amout_received = 0
+    amout_expected = len(message)
+
+    while amout_received < amout_expected:
+        data = sock.recv(16)
+        amout_received += len(data)
+        print >>sys.stderr, 'received "%s"' % data
+
+finally:
+    print >>sys.stderr, 'closing socket'
+    sock.close()
+
+    create_connection() 使用 getaddrinfo() 来查找候选连接参数，并返回一个打开的 socket，它的第一个配置可以成功创建一个连接。可以检查 family、type 和 proto 属性确定返回的 socket 类型。
