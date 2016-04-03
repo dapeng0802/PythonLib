@@ -347,3 +347,105 @@ finally:
     sock.close()
 
     create_connection() 使用 getaddrinfo() 来查找候选连接参数，并返回一个打开的 socket，它的第一个配置可以成功创建一个连接。可以检查 family、type 和 proto 属性确定返回的 socket 类型。
+    5. 选择监听地址
+    将服务器绑定到正确的地址很重要，这样客户才能与之通信。前面的例子都使用 'localhost' 作为 IP 地址，这会限制为只能连接在同一服务器上运行的客户。可以使用服务器的一个公共地址，如 gethostname() 返回的值，从而允许其他主机连接。下面这个例子修改了回应服务器，让它监听到一个命令行参数指定的地址。
+
+import socket
+import sys
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Bind the socket to the address given on the command line
+server_name = sys.argv[1]
+server_address = (server_name, 10000)
+print >>sys.stderr, 'starting up on %s port %s' % server_address
+sock.bind(server_address)
+sock.listen(1)
+
+while True:
+    print >>sys.stderr, 'waiting for a connection'
+    connection, client_address = sock.accept()
+    try:
+        print >>sys.stderr, 'client connected:', client_address
+        while True:
+            data = connection.recv(16)
+            print >>sys.stderr, 'received "%s"' % data
+            if data:
+                connection.sendall(data)
+            else:
+                break
+    finally:
+        connection.close()
+
+    测试这个服务器之前，需要对客户程序做类似的修改。
+
+import socket
+import sys
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Connect the socket to the port on the server given by the caller
+server_address = (sys.argv[1], 10000)
+print server_address
+print >>sys.stderr, 'connecting to %s port %s' % server_address
+sock.connect(server_address)
+
+try:
+    # Send data
+    message = 'This is the message.  It will be repeated.'
+    print >>sys.stderr, 'sending "%s"' % message
+    sock.sendall(message)
+
+    # Look for the response
+    amout_received = 0
+    amout_expected = len(message)
+
+    while amout_received < amout_expected:
+        data = sock.recv(16)
+        amout_received += len(data)
+        print >>sys.stderr, 'received "%s"' % data
+
+finally:
+    print >>sys.stderr, 'closing socket'
+    sock.close()
+
+    启动服务器并提供参数 farnsworth.hellfly.net 之后，netstat 命令显示出它在监听指定的主机地址。
+
+host farnsworth.hellfly.net
+netstat -an
+
+    在另一个主机上运行这个客户时，传入 farnsworth.hellfly.net 作为运行服务器的主机。
+    很多服务器有不止一个网络接口，相应的会有不止一个 IP 地址。并不需要运行服务的不同副本分别绑定到各个 IP 地址，可以使用一个特殊的地址 INADDR_ANY 同时监听所有地址。socket 为 INADDR_ANY 定义了一个常量，这是一个整数值，但在传递到 bind() 之前必须将它转换为采用点记法的地址字符串。作为一种快捷方式，可以使用 "0.0.0.0" 或空串 ('') 而不是完成转换。
+
+import socket
+import sys
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Bind the socket to the address given on the command line
+server_address = ('', 10000)
+sock.bind(server_address)
+print >>sys.stderr, 'starting up on %s port %s' % sock.getsockname()
+sock.listen(1)
+
+while True:
+    print >>sys.stderr, 'waiting for a connection'
+    connection, client_address = sock.accept()
+    try:
+        print >>sys.stderr, 'client connected:', client_address
+        while True:
+            data = connection.recv(16)
+            print >>sys.stderr, 'received "%s"' % data
+            if data:
+                connection.sendall(data)
+            else:
+                break
+    finally:
+        connection.close()
+
+    要看一个套接字使用的具体地址，可以调用 getsockname() 方法。启动服务后，再次运行 netstat，可以显示出它在监听所有地址的传入连接。
+用户数据报客户和服务器
+    用户数据协议（user datagram protocol, UDP）的工作方式与 TCP/IP 不同。TCP 是一个面向流（stream-oriented）的协议，确保所有数据以正确的顺序传输，而 UDP 是一个面向消息（message-oriented）的协议。
