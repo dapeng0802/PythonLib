@@ -448,4 +448,335 @@ while True:
 
     要看一个套接字使用的具体地址，可以调用 getsockname() 方法。启动服务后，再次运行 netstat，可以显示出它在监听所有地址的传入连接。
 用户数据报客户和服务器
-    用户数据协议（user datagram protocol, UDP）的工作方式与 TCP/IP 不同。TCP 是一个面向流（stream-oriented）的协议，确保所有数据以正确的顺序传输，而 UDP 是一个面向消息（message-oriented）的协议。
+    用户数据协议（user datagram protocol, UDP）的工作方式与 TCP/IP 不同。TCP 是一个面向流（stream-oriented）的协议，确保所有数据以正确的顺序传输，而 UDP 是一个面向消息（message-oriented）的协议。UDP 不需要一个长期活动的连接，所以建立 UDP 套接字稍简单一些。另一方面，UDP 消息必须放在一个数据包（对于 IPv4，这意味着它们可以包含 65507 字节，因为 65535 字节大小的数据包还包括首部信息），而且无法得到 TCP 提供的传输保障。
+    1. 回应服务器
+    由于实际上并没有连接，服务器并不需要监听和接受连接。它只需要使用 bind() 将其套接字与一个端口关联，然后等待各个消息。
+
+import socket
+import sys
+
+# Create a UDP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Bind the socket to the port
+server_address = ('localhost', 10000)
+print >>sys.stderr, 'starting up on %s port %s' % server_address
+sock.bind(server_address)
+
+    使用 recvfrom() 从套接字读取消息，这个函数会返回数据，还会返回发出这个数据的客户地址。
+
+while True:
+    print >>sys.stderr, '\nwaiting to receive message'
+    data, address = sock.recvfrom(4096)
+
+    print >>sys.stderr, 'received %s bytes from %s' % \
+          (len(data), address)
+    print >>sys.stderr, data
+
+    if data:
+        sent = sock.sendto(data, address)
+        print >>sys.stderr, 'sent %s bytes back to %s' % \
+              (sent, address)
+
+    2. 回应客户
+    UDP 回应客户与服务器类似，但是不使用 bind() 将套接字关联到一个地址。它使用 sendto() 将消息直接传送到服务器，并不使用 recvfrom() 接收响应。
+
+import socket
+import sys
+
+# Create a UDP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+server_address = ('localhost', 10000)
+message = 'This is the message.  It will be repeated.'
+
+try:
+    # Send data
+    print >>sys.stderr, 'sending "%s"' % message
+    sent = sock.sendto(message, server_address)
+
+    # Receive response
+    print >>sys.stderr, 'waiting to receive'
+    data, server = sock.recvfrom(4096)
+    print >>sys.stderr, 'received "%s"' % data
+
+finally:
+    print >>sys.stderr, 'closing socket'
+    sock.close()
+
+UNIX 域套接字
+    从程序员的角度来看，使用 UNIX 域套接字和 TCP/IP 套接字存在两个根本区别。首先，套接字的地址是文件系统上的一个路径，而不是一个包含服务器名和端口的元组。其次，文件系统中创建的表示套接字的节点会持久保存，即使套接字关闭也仍然存在，所以每次服务器启动时都需要将其删除。只需在设置部分做一些修改，就可以把前面的回应服务器例子更新为使用 UDS。
+
+import socket
+import sys
+import os
+
+server_address = './uds_socket'
+
+# Make sure the socket does not already exist
+try:
+    os.unlink(server_address)
+except OSError:
+    if os.path.exists(server_address):
+        raise
+
+    需要基于地址簇 AF_UNIX 创建 socket。
+
+# Create a UDS socket
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+    套接字的绑定和到来连接的管理与 TCP/IP 套接字的做法相同。
+
+# Bind the socket to the address
+print >>sys.stderr, 'starting up on %s' % server_address
+sock.bind(server_address)
+# Listen for incoming connections
+sock.listen(1)
+
+while True:
+    # Waiting for a connection
+    print >>sys.stderr, 'waiting to connection'
+    connection, client_address = sock.accept()
+    try:
+        print >>sys.stderr, 'connection from', client_address
+
+        # Receive the data in small chunks and retransmit it
+        while True:
+            data = connection.recv(16)
+            print >>sys.stderr, 'received "%s"' % data
+            if data:
+                print >>sys.stderr, 'sending data back to the client'
+                connection.sendall(data)
+            else:
+                print >>sys.stderr, 'no data from', client_address
+                break
+
+    finally:
+        # Clean up the connection
+        connection.close()
+
+    还需要修改客户设置来使用 UDS。要假设套接字的相应文件系统节点存在，因为服务器要通过绑定这个地址来创建套接字。
+
+import socket
+import sys
+
+# Create a UDS socket
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+# Connection the socket to the port where the server is listening
+server_address = './uds_socket'
+print >>sys.stderr, 'connecting to %s' % server_address
+try:
+    sock.connect(server_address)
+except socket.error, msg:
+    print >>sys.stderr, msg
+    sys.exit(1)
+
+    UDS 客户中发生和接收数据的做法与前面的 TCP/IP 客户是一样的。
+
+try:
+
+    # Send data
+    message = 'This is the message.  It will be repeated.'
+    print >>sys.stderr, 'sending "%s"' % message
+    sock.sendall(message)
+
+    amout_received = 0
+    amout_expected = len(message)
+
+    while amout_received < amout_expected:
+        data = sock.recv(16)
+        amout_received += len(data)
+        print >>sys.stderr, 'received "%s"' % data
+
+finally:
+    print >>sys.stderr, 'closing socket'
+    sock.close()
+
+    程序输出基本上相同，但对地址信息有适当的更新。服务器显示接收的消息，并发回给客户。客户立即发送所有消息，并采用增量方式逐部分接收消息。
+    1. 权限
+    由于 UDS 套接字由文件系统上的一个节点表示，所以可以使用标准文件系统权限来控制对服务器的访问。
+
+sudo chown root ./uds_socket
+
+    如果客户作为一个用户运行而不是作为 root，现在会导致一个错误，因为进程没有打开套接字的权限。
+    2. 父进程与子进程间通信
+    在 UNIX 下，socketpair() 函数对于建立 UDS 套接字完成进程间通信很有用。它会创建一对连接的套接字，在创建子进程之后，可以用来在父进程和子进程之间通信。
+
+import socket
+import os
+
+parent, child = socket.socketpair()
+
+pid = os.fork()
+
+if pid:
+	print 'in parent, sending message'
+	child.close()
+	parent.sendall('ping')
+	response = parent.recv(1024)
+	print 'response from child:', response
+	parent.close()
+
+else:
+	print 'in child, waiting for message'
+	parent.close()
+	message = child.recv(1024)
+	print 'message from parent:', message
+	child.sendall('pong')
+	child.close()
+
+    默认地会创建一个 UDS 套接字，不过调用者还可以传递地址簇、套接字类型，甚至协议选项来控制如何创建套接字。
+组播
+    点对点连接可以处理很多通信需求，不过随着直接连接数的增加，在多对通信方之间传递相同的消息会变得越来越困难。单独地向各个接收方发送消息会耗费额外的处理和带宽，这对于流视频或音频等应用会带来问题。使用组播（multicast）向多个端点同时发送消息则可以得到更好的效率，因为网络基础设施可以确保数据包会传送到所有接收方。
+    组播消息总是使用 UDP 发送，因为 TCP 需要一个端对端通信通道。组播的地址称为组播组（multicast group），这是常规的 IPv4 地址范围的一个子集（224.0.0.0 到 230.255.255.255），专门为组播通信预留。这些地址会由网络路由器和交换机特殊处理，所以发送到组的消息可以在互联网上分发到加入这个组的所有接收方。
+    1. 发送组播消息
+    修改后的这个回应客户会向一个组播组发送一个消息，然后报告它收到的所有响应。由于无法知道会收到多少响应，它对套接字使用了一个超时值，以避免等待回答时无限阻塞。
+
+import socket
+import struct
+import sys
+
+message = 'very important data'
+multicast_group = ('224.3.29.71', 10000)
+
+# Create the datagram socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Set a timeout so the socket does not block indefinitely when trying
+# to receive data.
+sock.settimeout(0.2)
+
+    配置这个套接字时还需要提供消息的一个生存时间值（time-to-live value, TTL）。TTL 会控制多少网络接收这个数据包。使用 IP_MULTICAST_TTL 选项和 setsockopt() 来设置 TTL。默认值 1 表示路由器不会把数据包转发到当前网段之外。这个值取值范围最大为 255，应当包装到一个字节中。
+
+# Set the time-to-live for messages to 1 so they do not go past the
+# local network segment.
+ttl = struct.pack('b', 1)
+sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+
+    发送者程序的其余代码类似于 UDP 回应客户，只是它会接收多个响应，所以这里使用一个循环来调用 recvfrom()，直到超时。
+
+try:
+
+	# Send data to the multicast group
+	print >>sys.stderr, 'sending "%s"' % message
+	sent = sock.sendto(message, multicast_group)
+
+	# Look for responses from all recipients
+	while True:
+		print >>sys.stderr, 'waiting to receive'
+		try:
+			data, server = sock.recvfrom(16)
+		except socket.timeout:
+			print >>sys.stderr, 'timed out, no more responses'
+			break
+		else:
+			print >>sys.stderr, 'received "%s" from %s' % \
+			    (data, server)
+
+finally:
+	print >>sys.stderr, 'closing socket'
+	sock.close()
+
+    2. 接收组播消息
+    建立组播接收者的第一步是创建 UDP 套接字。
+
+import socket
+import struct
+import sys
+
+multicast_group = '224.3.29.71'
+server_address = ('', 10000)
+
+# Create the socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Bind to the server address
+sock.bind(server_address)
+
+    创建常规的套接字并绑定到一个端口后，可以使用 setsockopt() 改变 IP_ADD_MEMBERSHIP 选项，把它添加到组播组。这个选项值是一个 8 字节的打包表示，包括组播组地址，后面是服务器监听通信流的网络接口（由其 IP 地址标识）。在这里，接收者使用 INADDR_ANY 监听所有借口。
+
+# Tell the operating system to add the socket to the multicast group
+# on all interfaces.
+group = socket.inet_aton(multicast_group)
+mreq = struct.pack('4sL', group, socket.INADDR_ANY)
+sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+    接收者的主循环与常规 UDP 回应服务器类似。
+
+# Receive/respond loop
+while True:
+	print >>sys.stderr, '\nwaiting to receive message'
+	data, address = sock.recvfrom(1024)
+
+	print >>sys.stderr, 'received %s bytes from %s' % \
+	    (len(data), address)
+	print >>sys.stderr, data
+
+	print >>sys.stderr, 'sending acknowledgement to', address
+	sock.sendto('ack', address)
+
+    分别在两个不同主机上运行，消息只发送一次，但是会接收到对发出消息的两个应答，分别来自两个主机。
+发送二进制数据
+    套接字可以传输字节流。这些字节可能包含文本消息，或者它们也可能由二进制数据构成，这些二进制数据已经编码以便传输。为了完成二进制数据值的传输，要用 struct 把它们打包到一个缓冲区。
+    下面这个客户程序将一个整数、一个包含两字符的字符串和一个浮点数值编码为一个字节序列，以便传递到套接字完成传输。
+
+import binascii
+import socket
+import struct
+import sys
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_address = ('localhost', 10000)
+sock.connect(server_address)
+
+values = (1, 'ab', 2.7)
+packer = struct.Struct('I 2s f')
+packed_data = packer.pack(*values)
+
+print 'values =', values
+
+try:
+
+	# Send data
+	print >>sys.stderr, 'sending %r' % binascii.hexlify(packed_data)
+	sock.sendall(packed_data)
+
+finally:
+	print >>sys.stderr, 'closing socket'
+	sock.close()
+
+    在两个系统之间发送多字节的二进制数据时，有一点很重要，要确保连接的两端都知道采用哪一种字节顺序，以及如何把它们重新组装为适合本地体系结构的正确顺序。服务器程序使用了相同的 Struct 指示工具（specifier）来解开接收到的字节，从而以正确的顺序解释。
+
+import binascii
+import socket
+import struct
+import sys
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_address = ('localhost', 10000)
+sock.bind(server_address)
+sock.listen(1)
+
+unpacker = struct.Struct('I 2s f')
+
+while True:
+	print >>sys.stderr, '\nwaiting for a connection'
+	connection, client_address = sock.accept()
+
+	try:
+		data = connection.recv(unpacker.size)
+		print >>sys.stderr, 'received %r' % binascii.hexlify(data)
+		unpacked_data = unpacker.unpack(data)
+		print >>sys.stderr, 'unpacked:', unpacked_data
+		
+	finally:
+		connection.close()
+
+    浮点数值在打包和解包时会损失一些精度，不过数据确实能按期望的方式传输。有一点要记住，取决于整数的值，有时将它转换为文本然后再传输可能更为高效，而不是使用 struct。整数 1 表示为字符串时占用一个字节，而打包到结构中时会占用 4 个字节。
+非阻塞通信和超时
+    默认情况下，socket 配置为发送或接收数据时会阻塞，在套接字准备就绪之前将停止程序的执行。send() 调用等待有缓冲区空间来存放发出的数据，recv() 则等待其他程序发出数据以供读取。这种形式的 I/O 操作很容易理解，不过可能导致操作很低效，如果两个程序最后都在等待对方发送或接收数据，甚至会导致死锁。
+    有很多中方法来绕开这种情况。一种做法是对各个套接字分别使用单独的线程完成通信。不过，这可能引入线程间通信的其他复杂性。另一种选择是将套接字改为根本不阻塞，即使没有准备好来处理操作，也会立即返回。可以使用 setblocking() 方法改变一个套接字的阻塞标志。默认值为 1，这表示会阻塞。传入值 0 则会关闭阻塞。如果套接字将阻塞关闭，而且没有为处理操作做好准备，则会产生一个 socket.err。
+    一种折衷的解决方案是为套接字操作设置一个超时值。可以使用 settimeout() 将一个 socket 的超时值改为一个浮点数值，表示在确定这个套接字未做好操作准备之前阻塞的时间（秒数）。超过这个超时期限时，会产生一个 timeout 异常。
