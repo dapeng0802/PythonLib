@@ -1,0 +1,151 @@
+[Python标准库]select——高效等待 I/O
+    作用：等待输入或输出通道已经准备就绪的通知。
+    Python 版本：1.4 及以后版本
+    select 模块允许访问特定与平台的 I/O 监视函数。最可移植的接口是 POSIX 函数 select()，UNIX 和 Windows 都提供了这个函数。这个函数还包括函数 poll()（这个 API 只适用于 UNIX），另外还提供了很多只适用于 UNIX 特定变种的选项。
+使用 select()
+    Python 的 select() 函数是底层操作系统实现的一个直接接口。它会监视套接字、打开的文件和管道（可以是任何有 fileno() 方法的对象，这个方法会返回一个合法的文件描述符），直到这个对象可读或可写，或者出现一个通信错误。利用 select() 可以更为容易地同时监视多个连接，这比在 Python 中使用套接字超时编写一个轮询更为高效，因为监视发生在操作系统网络层而不是在解释器中完成。
+    可以扩展 socket 一节的回应服务器例子，通过使用 select() 来同时监视多个连接。这个新版本首先创建一个非阻塞的 TCP/IP 套接字，将它配置为监听一个地址。
+
+import select
+import socket
+import sys
+import Queue
+
+# Create a TCP/IP socket
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setblocking(0)
+
+# Bind the socket to the port
+server_address = ('localhost', 10000)
+print >>sys.stderr, 'starting up on %s port %s' % server_address
+server.bind(server_address)
+
+# Listen for incoming connections
+server.listen(5)
+
+    select() 的参数是 3 个列表，包含要监视的通信通道。将检查第一个对象列表中的对象来得到要读取的数据，第二个列表中包含的对象将接收发出的数据（如果缓冲区有空间），第三个列表包含那些可能有错误的对象（通常是输入和输出通道对象的组合）。在服务器中，下一步是建立这些列表，其中包含要传至 select() 的输入源和输出目标。
+
+# Sockets from which we expect to read
+inputs = [ server ]
+
+# Sockets to which we expect to write
+outputs = [ ]
+
+    由服务器主循环向这些列表添加或删除连接。由于这个版本的服务器在发送数据之前要等待一个套接字变为可写（而不是立即发送应答），所以每个输出连接都需要一个队列，作为通过这个套接字发送的数据的缓冲区。
+
+# Outgoing message queues (socket:Queue)
+message_queues = {}
+
+    服务器程序的主要部分是一个循环，调用 select() 来阻塞，并等待网络活动。
+
+while inputs:
+
+	# Wait for at least one of the sockets to be ready for processing
+	print >>sys.stderr, 'waiting for the next event'
+	readable, writable, exceptional = select.select(inputs, outputs, inputs)
+
+    select() 返回 3 个新列表，包含所传入列表内容的子集。readable 列表中的所有套接字会缓存到来的数据，可供读取。writable 列表中所有套接字的缓冲区中有自由空间，可以写入数据。exceptional 中返回的套接字都有一个错误（“异常条件”的具体定义取决于平台）。
+    “可读”套接字表示 3 种可能的情况。如果套接字是主“服务器”套接字，即用来监听连接的套接字，“可读”条件则意味着它已经准备就绪，可以接受另一个到来的连接。除了将新连接添加到要监视的输入列表之外，这一部分还将客户套接字设置为非阻塞。
+
+        # Handle inputs
+	for s in readable:
+		if s is server:
+			# A "readable" socket is ready to accept a connection
+			connection, client_address = s.accept()
+			print >>sys.stderr, '  connection from', client_address
+			connection.setblocking(0)
+			inputs.append(connection)
+
+			# Give the connection a queue for data we want to send
+			message_queues[connection] = Queue.Queue()
+
+    下一种情况是一个已建立的连接，客户已经发送了数据。数据用 resv() 读取，然后放置在队列中，以便通过套接字发送并返回给客户。
+
+                else:
+			data = s.recv(1024)
+			if data:
+				# A readable client socket has data
+				print >>sys.stderr, '  received "%s" from %s' % (data, s.getpeername())
+				message_queues[s].put(data)
+				# Add output channel for response
+				if s not in outputs:
+					outputs.append(s)
+			else:
+				# Interpret empty result as closed connection
+				print >>sys.stderr, '  closing', client_address
+				# Stop listening for input on the connection
+				if s in outputs:
+					outputs.remove(s)
+				inputs.remove(s)
+				s.close()
+
+				# Remove message queue()
+				del message_queues[s]
+
+    没有可用数据的可读套接字来自已经断开连接的客户，此时可以关闭流。
+
+	# Handle outputs
+	for s in writable:
+		try:
+			next_msg = message_queues[s].get_nowait()
+		except Queue.Empty:
+			# No messages waiting so stop checking for writability.
+			print >>sys.stderr, '  ', s.getpeername(), 'queue empty'
+			outputs.remove(s)
+		else:
+			print >>sys.stderr, '  sending "%s" to %s' % (next_msg, s.getpeername())
+			s.send(next_msg)
+
+    对于可写连接，情况要少一些。如果对应一个连接的队列中有数据，则发送下一个消息。否则，将这个连接从输出连接列表中删除，下一次循环时，select() 不再指示这个套接字已准备就绪可以发送数据。
+
+	# Handle "exceptional conditions"
+	for s in exceptional:
+		print >>sys.stderr, 'exception condition on', s.getpeername()
+		# Stop listening for input on the connection
+		inputs.remove(s)
+		if s in outputs:
+			outputs.remove(s)
+		s.close()
+
+		# Remove message queue
+		del message_queues[s]
+
+    最后一点，如果一个套接字有错误，则会关闭。
+    这个示例客户程序使用了两个套接字来展示服务器如何利用 select() 同时管理多个连接。客户首先将各个 TCP/IP 套接字连接到服务器。
+
+import socket
+import sys
+
+messages = [ 'This is the message. ',
+             'It will be sent ',
+             'in parts.',
+             ]
+server_address = ('localhost', 10000)
+# Create a TCP/IP socket
+socks = [ socket.socket(socket.AF_INET, socket.SOCK_STREAM),
+          socket.socket(socket.AF_INET, socket.SOCK_STREAM),
+          ]
+
+# Connect the socket to the port where the server is listening
+print >>sys.stderr, 'connecting to %s port %s' % server_address
+for s in socks:
+	s.connect(server_address)
+
+    然后通过各个套接字一次发送一段消息，写新数据之后再读取得到的所有响应。
+
+for message in messages:
+
+	# Send messages on both sockets
+	for s in socks:
+		print >>sys.stderr, '%s: sending "%s"' % (s.getsockname(), message)
+		s.send(message)
+
+	# Read responses on both sockets
+	for s in socks:
+		data = s.recv(1024)
+		print >>sys.stderr, '%s: received "%s"' % (s.getsockname(), data)
+		if not data:
+			print >>sys.stderr, 'closing socket', s.getsockname()
+			s.close()
+
+    在一个窗口中运行服务器，在另一个窗口中运行客户程序。
