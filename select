@@ -149,3 +149,212 @@ for message in messages:
 			s.close()
 
     在一个窗口中运行服务器，在另一个窗口中运行客户程序。
+有超时的非阻塞 I/O
+    select() 还可以有第 4 个参数（可选），如果没有活动通道，它在停止监视之前会等待一定时间，这个参数就是在此之前等待的秒数。通过使用一个超时值，可以让主程序在一个更大的处理循环中调用 select()，在检查网络输入的间隙接受其他动作。
+    超过这个超时期限时，select() 会返回 3 个空列表。更新前面的服务器示例，使用一个超时值，这需要向 select() 调用添加一个额外的参数，并在 select() 返回后处理空列表。
+
+# Wait for at least one of the sockets to be ready for processing
+	print >>sys.stderr, 'waiting for the next event'
+	timeout = 1
+	readable, writable, exceptional = select.select(inputs, outputs, inputs, timeout)
+
+	if not (readable or writable or exceptional):
+		print >>sys.stderr, '  timed out, do some other work here'
+		continue
+
+    客户程序的这个“慢”版本会在发送各个消息之后暂停，模拟传输中的时延或其他延迟。
+
+import socket
+import sys
+import time
+
+# Create a TCP/IP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Connect the socket to the port where the server is listening
+server_address = ('localhost', 10000)
+print >>sys.stderr, 'connecting to %s port %s' % server_address
+sock.connect(server_address)
+time.sleep(1)
+
+messages = [ 'Part one of the message.',
+             'Part tew of the message.',
+             ]
+amout_expected = len(''.join(messages))
+
+try:
+
+	# Send data
+	for message in messages:
+		print >>sys.stderr, 'sending "%s"' % message
+		sock.sendall(message)
+		time.sleep(1.5)
+
+	# Look for the response
+	amout_received = 0
+
+	while amout_received < amout_expected:
+		data = sock.recv(16)
+		amout_received += len(data)
+		print >>sys.stderr, 'received "%s"' % data
+
+finally:
+	print >>sys.stderr, 'closing socket'
+	sock.close()
+
+使用 poll()
+    poll() 函数提供的特性与 select() 类似，不过底层实现更为高效。其缺点是 poll() 在 Windows 下不支持，所以使用 poll() 的程序可移植性较差。
+    利用 poll() 建立的回应服务器最前面与其他例子一样，也使用了相同的套接字配置代码。
+
+import select
+import socket
+import sys
+import Queue
+
+# Create a TCP/IP socket
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setblocking(0)
+
+# Bind the socket to the port
+server_address = ('localhost', 10000)
+print >>sys.stderr, 'starting up on %s port %s' % server_address
+server.bind(server_address)
+
+# Listen for incoming connections
+server.listen(5)
+# Keep up with the queues of outgoing messages
+message_queues = {}
+
+    传入 poll() 的超时值用毫秒表示，而不是秒，所以如果要暂停 1 秒，超时值必须设置为 1000。
+
+# Do not block forever (millseconds)
+TIMEOUT = 1000
+
+    Python 用一个类来实现 poll()，由这个类管理所监视的注册数据通道。通道通过调用 register() 添加，同时利用标志指示该通道关注哪些事件。下表列出了所有标志。
+                    poll() 的事件标志
+    -----------------------------------------------
+        事件    |               描述
+    -----------------------------------------------
+      POLLIN    |    输入准备就绪
+    -----------------------------------------------
+      POLLPRI   |    优先级输入准备就绪
+    -----------------------------------------------
+      POLLOUT   |    能够接收输出
+    -----------------------------------------------
+      POLLERR   |    错误
+    -----------------------------------------------
+      POLLHUP   |    通道关闭
+    -----------------------------------------------
+      POLLNVAL  |    通道未打开
+    -----------------------------------------------
+    回应服务器将建立一些只用于读的套接字，另外一些套接字可以读或写。局部变量 READ_ONLY 和 READ_WRITE 中保存了相应的标志组合。
+
+# Commonly used flag sets
+READ_ONLY = ( select.POLLIN |
+	      select.POLLPRI |
+	      select.POLLHUP |
+	      select.POLLERR )
+READ_WRITE = READ_ONLY | select.POLLOUT
+
+    这里注册了 server 套接字，到来的连接或数据会触发一个事件。
+
+# Set up the poller
+poller = select.poll()
+poller.register(server, READ_ONLY)
+
+
+    由于 poll() 返回一个元组列表，元组中包含套接字的文件描述符和事件标志，因此需要一个文件描述符编号到对象的映射来获取 socket，以便读取或写入。
+
+# Map file descriptors to socket objects
+fd_to_socket = { server.fileno(): server, }
+
+    服务器的循环调用 poll()，然后处理通过查找套接字返回的“事件”，并根据事件中的标志采取行动。
+
+while True:
+	
+	# Wait for at least one of the sockets to be ready for processing
+	print >>sys.stderr, 'waiting for the next event'
+	events = poller.poll(TIMEOUT)
+
+	for fd, flag in events:
+
+		# Retrieve the actual socket from its file descriptor
+		s = fd_to_socket[fd]
+
+    与 select() 类似，如果主服务器套接字是“可读的”，实际上这表示有一个来自客户的连接。这个新连接用 READ_ONLY 标志注册，用来监视通过它的新数据。
+
+		# Handle inputs
+		if flag & (select.POLLIN | select.POLLPRI):
+			if s is server:
+				# A readable socket is ready to accept a connection
+				connection, client_address = s.accept()
+				print >>sys.stderr, '  connection', client_address
+				connection.setblocking(0)
+				fd_to_socket[ connection.fileno() ] = connection
+				poller.register(connection, READ_ONLY)
+
+				# Give the connection a queue for data to send
+				message_queues[connection] = Queue.Queue()
+
+    除了服务器以外，其他套接字都是现有的客户，其数据已经缓存，并等待读取。可以使用 recv() 从缓冲区获取数据。
+
+			else:
+				data = s.recv(1024)
+
+    如果 recv() 返回了数据，会放置在这个套接字的相应发出队列中，套接字的标志使用 modify() 改变，使 poll() 监视这个套接字是否准备好接收数据。
+
+				if data:
+					# A readable client socket has data
+					print >>sys.stderr, '  received "%s" from %s' % (data, s.getpeername())
+					message_queues[s].put(data)
+					# Add output channel for response
+					poller.modify(s, READ_WRITE)
+
+    recv() 返回的空串表示客户已经断开连接，所以使用 unregister() 告诉 poll 对象忽略这个套接字。
+
+				else:
+					# Interpret empty result as closed connection
+					print >>sys.stderr, '  closing', client_address
+					# Stop listening for input on the connection
+					poller.unregister(s)
+					s.close()
+
+					# Remove message queue
+					del message_queues[s]
+
+    POLLHUP 标志指示一个客户“挂起”连接而没有将其妥善地关闭。服务器不会轮询消失的客户。
+
+		elif flag & select.POLLHUP:
+			# Client hung up
+			print >>sys.stderr, '  closing', client_address, '(HUP)'
+			# Stop listening for input on the connection
+			poller.unregister(s)
+			s.close()
+
+    可写套接字的处理看起来与 select() 例子中的版本类似，不过使用了 modify() 来改变轮询服务器中套接字的标志，而不是将其从输出列表中删除。
+
+		elif flag & select.POLLOUT:
+			# Socket is ready to send data, if there is any to send.
+			try:
+				next_msg = message_queues[s].get_nowait()
+			except Queue.Empty:
+				# No messages waiting so stop checking
+				print >>sys.stderr, s.getpeername(), 'queue empty'
+				poller.modify(s, READ_ONLY)
+			else:
+				print >>sys.stderr, '  sending "%s" to %s' % (next_msg, s.getpeername())
+				s.send(next_msg)
+
+    最后一点，任何有 POLLERR 标志的事件会导致服务器关闭套接字。
+
+		elif flag & select.POLLERR:
+			print >>sys.stderr, '  exception on', s.getpeername()
+			# Stop listening for input on the connection
+			poller.unregister(s)
+			s.close()
+
+			# Remove message queue
+			del message_queues[s]
+
+平台待定选项
+    select 还提供了一些可移植性较差的选项，包括 epoll（Linux 支持的边界轮询 API）、kqueue（使用了 BSD 的内核队列）和 kevent（BSD 的内核事件接口）。
