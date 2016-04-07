@@ -1,0 +1,197 @@
+[Python标准库]SocketServer——创建网络服务器
+    作用：创建网络服务器。
+    Python 版本：1.4 及以后版本
+    SocketServer 模块是创建网络服务器的一个框架。它定义了一些类来处理 TCP、UDP、UNIX 流和 UNIX 数据报之上的同步网络请求（服务器请求处理器会阻塞，直至请求完成）。它还提供了一些“混入”类（mix-in），可以很容易地转换服务器，为每个请求使用一个单独的线程或进程。
+    处理请求的责任划分到一个服务器类和一个请求处理器。服务器处理通信问题，如监听一个套接字并接受连接，请求处理器处理“协议”问题，如解释到来的数据、处理数据并把数据发回给客户。这种责任划分意味着很多应用可以使用某个现有的服务器类，而不需要任何修改，另外可以提供一个请求与各个其他处理器类通信，由这些处理器类处理定制协议。
+服务器类型
+    SocketServer 中定义了 5 个不同的服务器类。BaseServer 定义了 API，这个类不应实例化，也不能直接使用。TCPServer 使用 TCP/IP 套接字通信，UDPServer 使用数据报套接字。UnixStreamServer 和 UnixDatagramServer 使用 UNIX 域套接字，只适用于 UNIX 平台。
+服务器对象
+    要构造一个服务器，需要向它传递一个地址（服务器将在这个地址监听请求），以及一个请求处理类（而非实例）。地址格式取决于所使用的服务器类型和套接字簇。可以参考 socket 模块文档来了解有关的详细内容。
+    一旦实例化服务器对象，可以使用 handle_request() 或 server_forever() 处理请求。server_forever() 方法在一个无限循环中调用 handle_request()，不过如果应用需要将服务器与另一个事件循环集成，或者使用 select() 来监视对应不同服务器的多个套接字，也可以直接调用 handle_request()。
+实现服务器
+    创建一个服务器时，通常重用某个现有的类并提供一个定制请求处理器类就足够了。但针对另外一些情况，BaseServer 还包含了一些可以在子类中覆盖的方法。
+    verify_request(request, client_address)：返回 True 表示要处理请求，返回 False 则忽略请求。例如，一个服务器可能拒绝来自一个 IP 段的请求，或者因为服务器负载过重而拒绝请求。
+    process_request(request, client_address)：调用 finish_request() 具体完成处理请求的工作。它还可以创建一个单独的线程或进程，就像 mix-in 类的做法一样。
+    finish_request(request, client_address)：使用提供给服务器构造函数的类创建一个请求处理器实例。在这个请求处理器上调用 handle() 来处理请求。
+请求处理器
+    要接收到来的请求以及确定采取什么行为，其中大部分工作都由请求处理器完成。处理器负责在套接字层之上实现协议（即 HTTP、XML-RPC 或 AMQP）。请求处理器从到来数据通道读取请求，处理这个请求，并写回一个响应。要覆盖 3 个方法。
+    setup()：为请求准备请求处理器。在 StreamRequestHandler 中，setup() 方法会创建类文件的对象来读写套接字。
+    handle()：对请求完成具体工作。解析到来的请求，处理数据，并发出一个响应。
+    finish()：清理 setup() 期间创建的所有数据。
+    很多处理器实现时可以只有一个 handle() 方法。
+回应示例
+    下面这个例子实现了一对简单的服务器/请求处理器，将接受 TCP 连接，并回应客户发送的所有数据。首先来看请求处理器。
+
+import logging
+import SocketServer
+import sys
+logging.basicConfig(level=logging.DEBUG,
+	            format='%(name)s: %(message)s',
+	            )
+
+class EchoRequestHandler(SocketServer.BaseRequestHandler):
+
+	def __init__(self, request, client_address, server):
+		self.logger = logging.getLogger('EchoRequestHandler')
+		self.logger.debug('__init__')
+		SocketServer.BaseRequestHandler.__init__(self, request,
+			                                     client_address,
+			                                     server)
+		return
+
+	def setup(self):
+		self.logger.debug('setup')
+		return SocketServer.BaseRequestHandler.setup(self)
+
+	def handle(self):
+		self.logger.debug('handle')
+		# Echo the back to the client
+		data = self.request.recv(1024)
+		self.logger.debug('recv()->"%s"', data)
+		self.request.send(data)
+		return
+
+	def finish(self):
+		self.logger.debug('finish')
+		return SocketServer.BaseRequestHandler.finish(self)
+
+    真正需要实现的只有一个方法，即 EchoRequestHandler.handle()，不过这里包含了前面提到的所有方法（setup()、handle() 和 finish()），以展示调用顺序。EchoServer 类的工作与 TCPServer 相同，只不过在调用各个方法时会记录日志。
+
+class EchoServer(SocketServer.TCPServer):
+
+	def __init__(self, server_address,
+		     handler_class=EchoRequestHandler,
+		     ):
+	    self.logger = logging.getLogger('EchoServer')
+	    self.logger.debug('__init__')
+	    SocketServer.TCPServer.__init__(self, server_address,
+	    	                            handler_class)
+	    return
+
+	def server_active(self):
+		self.logger.debug('server_active')
+		SocketServer.TCPServer.server_active(self)
+		return
+
+	def serve_forever(self, poll_interval=0.5):
+		self.logger.debug('serve_forever')
+		self.logger.info('Handling requests, press <Ctrl-C> to quit')
+		SocketServer.TCPServer.serve_forever(self, poll_interval)
+		return
+
+	def handle_request(self):
+		self.logger.debug('handle_request')
+		return SocketServer.TCPServer.handle_request(self)
+
+	def verify_request(self, request, client_address):
+		self.logger.debug('verify_request(%s, %s)',
+			          request, client_address)
+		return SocketServer.TCPServer.verify_request(self, request, client_address)
+
+	def process_request(self, request, client_address):
+		self.logger.debug('process_request(%s, %s)',
+			          request, client_address)
+		return SocketServer.TCPServer.process_request(self, request, client_address)
+
+	def server_close(self):
+		self.logger.debug('server_close')
+		return SocketServer.TCPServer.server_close(self)
+
+	def finish_request(self, request, client_address):
+		self.logger.debug('finish_request(%s, %s)',
+			          request, client_address)
+		return SocketServer.TCPServer.finish_request(self, request, client_address)
+
+	def close_request(self, request_address):
+		self.logger.debug('close_request(%s)', request_address)
+		return SocketServer.TCPServer.close_request(self, request_address)
+
+	def shutdown(self):
+		self.logger.debug('shutdown()')
+		return SocketServer.TCPServer.shutdown(self)
+
+    最后一步是增加一个主程序，它会建立服务器，使之在一个线程中运行，并向这个服务器发送数据，来展示回应数据时会调用哪些方法。
+
+if __name__ == '__main__':
+	import socket
+	import threading
+
+	address = ('localhost', 0) # let the kernel assign a port
+	server = EchoServer(address, EchoRequestHandler)
+	ip, port = server.server_address # what port was assigned?
+
+	# Start the server in a thread
+	t = threading.Thread(target=server.serve_forever)
+	t.setDaemon(True) # don't hang on exit
+	t.start()
+
+	logger = logging.getLogger('client')
+	logger.info('Server on %s:%s', ip, port)
+
+	# Connect to the server
+	logger.debug('creating socket')
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	logger.debug('connecting to server')
+	s.connect((ip, port))
+
+	# Send the data
+	message = 'Hello, world'
+	logger.debug('sending data: "%s"', message)
+	len_sent = s.send(message)
+
+	# Receive a response
+	logger.debug('waiting for response')
+	response = s.recv(len_sent)
+	logger.debug('response from server: "%s"', response)
+
+	# Clean up
+	server.shutdown()
+	logger.debug('closing socket')
+	s.close()
+	logger.debug('done')
+	server.socket.close()
+
+    以下是这个服务器的“压缩”版本，这里没有日志记录调用。请求处理器类中只需要提供 handle() 方法。
+
+import SocketServer
+
+class EchoRequestHandler(SocketServer.BaseRequestHandler):
+
+	def handle(self):
+		# Echo the back to the client
+		data = self.request.recv(1024)
+		self.request.send(data)
+		return
+
+if __name__ == '__main__':
+	import socket
+	import threading
+
+	address = ('localhost', 0) # let the kernel assign a port
+	server = SocketServer.TCPServer(address, EchoRequestHandler)
+	ip, port = server.server_address # what port was assigned?
+
+	# Start the server in a thread
+	t = threading.Thread(target=server.serve_forever)
+	t.setDaemon(True) # don't hang on exit
+	t.start()
+
+	# Connect to the server
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((ip, port))
+
+	# Send the data
+	message = 'Hello, world'
+	print 'Sending : "%s"' % message
+	len_sent = s.send(message)
+
+	# Receive a response
+	response = s.recv(len_sent)
+	print 'Received: "%s"' % response
+
+	# Clean up
+	server.shutdown()
+	s.close()
+	server.socket.close()
+
+    这里不需要特殊的服务器类，因为 TCPServer 会处理所有服务器需求。
