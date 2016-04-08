@@ -195,3 +195,111 @@ if __name__ == '__main__':
 	server.socket.close()
 
     这里不需要特殊的服务器类，因为 TCPServer 会处理所有服务器需求。
+线程和进程
+    要为一个服务器增加线程或进程（forking）支持，需要在服务器的类层次结构中包括适当的 mix-in 类。这些 mix-in 类要覆盖 process_request()，从而当准备处理一个请求时开始一个新的线程或进程，具体工作则在这个新的子线程或进程中完成。
+    对于线程，要使用 ThreadingMixIn。
+
+import SocketServer
+import threading
+
+class ThreadedEchoRequestHandler(SocketServer.BaseRequestHandler):
+
+	def handle(self):
+		# Echo the back to the client
+		data = self.request.recv(1024)
+		cur_thread = threading.currentThread()
+		response = '%s: %s' % (cur_thread.getName(), data)
+		self.request.send(response)
+		return
+
+class ThreadedEchoServer(SocketServer.ThreadingMixIn,
+	                     SocketServer.TCPServer,
+	                     ):
+    pass
+
+if __name__ == '__main__':
+	import socket
+	import threading
+
+	address = ('localhost', 0) # let the kernel assign a port
+	server = ThreadedEchoServer(address, ThreadedEchoRequestHandler)
+	ip, port = server.server_address # what port was assigned?
+
+	# Start the server in a thread
+	t = threading.Thread(target=server.serve_forever)
+	t.setDaemon(True) # don't hang on exit
+	t.start()
+	print 'Server loop running in thread:', t.getName()
+
+	# Connect to the server
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((ip, port))
+
+	# Send the data
+	message = 'Hello, world'
+	print 'Sending : "%s"' % message
+	len_sent = s.send(message)
+
+	# Receive a response
+	response = s.recv(1024)
+	print 'Received: "%s"' % response
+
+	# Clean up
+	server.shutdown()
+	s.close()
+	server.socket.close()
+
+    对于这个使用线程的服务器，其响应包含了处理请求的线程的标识符。
+    对于不同的进程，要使用 ForkingMixIn。
+
+import SocketServer
+import os
+
+class ForkingEchoRequestHandler(SocketServer.BaseRequestHandler):
+
+	def handle(self):
+		# Echo the back to the client
+		data = self.request.recv(1024)
+		cur_pid = os.getpid()
+		response = '%s: %s' % (cur_pid, data)
+		self.request.send(response)
+		return
+
+class ForkingEchoServer(SocketServer.ForkingMixIn,
+	                     SocketServer.TCPServer,
+	                     ):
+    pass
+
+if __name__ == '__main__':
+	import socket
+	import threading
+
+	address = ('localhost', 0) # let the kernel assign a port
+	server = ForkingEchoServer(address, ForkingEchoRequestHandler)
+	ip, port = server.server_address # what port was assigned?
+
+	# Start the server in a thread
+	t = threading.Thread(target=server.serve_forever)
+	t.setDaemon(True) # don't hang on exit
+	t.start()
+	print 'Server loop running in thread:', t.getName()
+
+	# Connect to the server
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((ip, port)) 
+
+	# Send the data
+	message = 'Hello, world'
+	print 'Sending : "%s"' % message
+	len_sent = s.send(message)
+
+	# Receive a response
+	response = s.recv(1024)
+	print 'Received: "%s"' % response
+
+	# Clean up
+	server.shutdown()
+	s.close()
+	server.socket.close()
+
+    在这里，服务器的响应中包含了子进程的进程 id。
