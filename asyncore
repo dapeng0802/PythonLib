@@ -1,0 +1,160 @@
+[Python标准库]asyncore——异步 I/O
+    作用：异步 I/O 处理器。
+    Python 版本：1.5.2 及以后版本
+    asyncore 模块包括一些工具来处理 I/O 对象，如套接字，从而能异步地管理这些对象（而不是使用多个线程或进程）。其中包括的主要的类是 dispatcher，这是套接字的一个包装器，提供了一些 hook（钩子），从主循环函数 loop() 调用时可以处理连续以及读写事件。
+服务器
+    下面这个例子展示了如何在服务器和客户中使用 asyncore，这里重新实现了 SocketServer 示例中的 EchoServer。这个新实现中使用了 3 个类。第一个类是 EchoServer，它从客户接收到来的连接。一旦接受第一个连接，这个演示实现就关闭，这样一来，尝试运行代码时可以更容易地开始和停止服务器。
+
+import logging
+import asyncore
+
+class EchoServer(asyncore.dispatcher):
+	"""Receives connections and establishes handlers for each client."""
+
+	def __init__(self, address):
+	    self.logger = logging.getLogger('EchoServer')
+	    asyncore.dispatcher.__init__(self)
+	    self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+	    self.bind(address)
+	    self.address = self.socket.getsockname()
+	    self.logger.debug('binding to %s', self.address)
+	    self.listen(1)
+	    return
+
+	def handle_accept(self):
+		# Called when a client connects to the socket
+		client_info = self.accept()
+		self.logger.debug('handle_accept() -> %s', client_info[1])
+		EchoHandler(sock=client_info[0])
+		# Only deal with one client at a time,
+		# so close as soon as the handler is set up.
+		# Under normal conditions, the server
+		# would run forever or until it received
+		# instructions to stop.
+		self.handle_close()
+		return
+
+	def handle_close(self):
+		self.logger.debug('handle_close()')
+		self.close()
+		return
+
+    handle_accept() 中每次接受一个新连接时，EchoServer 会创建一个新的 EchoHandler 实例来管理这个连接。EchoServer 和 EchoHandler 在不同的类中定义，因为它们完成不同的工作。EchoServer 接受一个连接时会建立一个新的套接字。并非在 EchoServer 中将这个套接字分派到单个客户，而是会创建一个 EchoHandler，从而充分利用由 asyncore 维护的套接字映射。
+
+class EchoHandler(asyncore.dispatcher):
+	"""Handles echoing messages from a single client"""
+
+	def __init__(self, sock, chunk_size=256):
+		self.chunk_size = chunk_size
+		logger_name = 'EchoHandler'
+		self.logger = logging.getLogger(logger_name)
+		asyncore.dispatcher.__init__(slef, sock=sock)
+		self.data_to_write = []
+
+	def writable(self):
+		"""Write if data has been received."""
+		response = bool(self.data_to_write)
+		self.logger.debug('writable() -> %s', response)
+		return response
+
+	def handle_write(self):
+		"""Write as much as possible of the most recent message received."""
+		data = self.data_to_write.pop()
+		sent = self.send(data[:self.chunk_size])
+		if sent < len(data):
+			remaining = data[sent:]
+			self.data.to_write.append(remaining)
+		self.logger.debug('handle_write() -> ("%d") %r', sent, data[:sent])
+		if not self.writable():
+			self.handle_close()
+
+	def handle_read(self):
+		"""Read an incoming message from the client and put it into the outgoing queue."""
+		data = self.recv(self.chunk_size)
+		self.logger.debug('handle_read() -> ("%d") %r', len(data), data)
+		self.data_to_write.insert(0, data)
+
+	def handle_close(self):
+		self.logger.debug('handle_close()')
+		self.close()
+
+客户
+    要基于 asyncore 创建一个客户，需要派生 dispatcher，并提供实现来完成套接字创建和读写。对于 EchoClient，可以使用基类方法 create_socket() 在 __init__() 中创建套接字。也可以提供这个方法的其他实现，不过在这里我们需要一个 TCP/IP 套接字，所以这个基类版本就足够了。
+
+class EchoClient(asyncore.dispatcher):
+	"""Sends message to the server and receives responses."""
+
+	def __init__(self, host, port, message, chunk_size=128):
+		self.message = message
+		self.to_send = message
+		self.received_data = []
+		self.chunk_size = chunk_size
+		self.logger = logging.getLogger('EchoClient')
+		asyncore.dispatcher.__init__(self)
+		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.logger.debug('connecting to %s', (host, port))
+		self.connect((host, port))
+		return
+
+    这里有 handle_connect() hook 只是为了显示它何时得到调用。其他类型的客户如果需要实现连接握手或协议协商，则应当在 handle_connect() 中完成这个协商工作。
+
+	def handle_connect(self):
+		self.logger.debug('handle_connect()')
+
+    这里有 hendle_close() 方法同样是为了显示它在处理期间何时得到调用。基类中的这个方法正确地关闭了套接字，所以如果应用不需要在关闭时做额外的清理工作，就不需要覆盖这个方法。
+
+	def handle_close(self):
+		self.logger.debug('handle_close()')
+		self.close()
+		received_message = ''.join(self.received_data)
+		if received_message == self.message:
+			self.logger.debug('RECEIVED COPY OF MESSAGE')
+		else:
+			self.logger.debug('ERROR IN TRANSMISSION')
+			self.logger.debug('EXPECTED "%s"', self.message)
+			self.logger.debug('RECEIVED "%s"', received_message)
+		return
+
+    asyncore 循环使用 writable() 和它的对应方法 readable() 来确定对每个分派器做何处理。对于各个分派器管理的套接字或文件描述符，poll() 或 select() 的具体使用就在 asyncore 代码中处理，不需要在程序中使用 asyncore 实现。这个程序只需要指示分派器希望读还是写数据。在这个客户中，只要有数据发送到服务器，writable() 就返回 True。readable() 总是返回 True，因为客户需要读取所有数据。
+
+	def writable(self):
+		self.logger.debug('writable() -> %s', bool(self.to_send))
+		return bool(self.to_send)
+
+	def readable(self):
+		self.logger.debug('readable() -> True')
+		return True
+
+    每次通过处理循环时，如果 writable() 做出肯定响应，就会调用 handle_write()。EchoClient 根据给定的大小限制将消息划分为多个部分，来展示一个相当大的多部分消息如何通过循环使用多次迭代进行传输。每次调用 handle_write() 时，会写下一部分消息，直至消息完全利用完毕。
+
+	def handle_write(self):
+		sent = self.send(self.to_send[:self.chunk_size])
+		self.logger.debug('handle_write() -> (%d) %r', sent, self.to_send[:sent])
+		self.to_send = self.to_send[sent:]
+
+    类似地，readable() 做出肯定响应，说明有数据可以读取，则会调用 handle_read()。
+
+	def handle_read(self):
+		data = self.recv(self.chunk_size)
+		self.logger.debug('handle_read() -> (%d) %r', len(data), data)
+		self.received_data.append(data)
+
+事件循环
+    这个模块中包括一个简短的测试脚本。它建立了一个服务器和客户，然后运行 asyncore.loop() 处理通信。创建客户时，会向由 asyncore 在内部维护的一个“映射”注册。随着循环迭代处理客户，开始出现通信。客户从一个看上去可读的套接字读取 0 字节时，这个条件会解释为连接关闭，相应地调用 handle_close()。
+
+if __name__ == '__main__':
+	import socket
+
+	logging.basicConfig(level=logging.DEBUG, format='%(name)-11s: %(message)s')
+
+	address = ('localhost', 0) # let the kernel assign a port
+	server = EchoServer(address)
+	ip, port = server.address # find out which port was assigned
+	message = open('lorem.txt', 'r').read()
+	logging.info('Total message length: %s bytes', len(message))
+
+	client = EchoClient(ip, port, message=message)
+
+	asyncore.loop()
+
+    在这个例子中，服务器、处理器和客户对象都在一个进程中由 asyncore 在同一个套接字映射中维护。为了区分服务器和客户，这里从不同的脚本分别实例化服务器和客户，并分别运行 asyncore.loop()。关闭一个分派器时，会把它从 asyncore 维护的映射中删除，映射为空时循环退出。
