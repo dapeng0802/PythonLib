@@ -158,3 +158,95 @@ if __name__ == '__main__':
 	asyncore.loop()
 
     在这个例子中，服务器、处理器和客户对象都在一个进程中由 asyncore 在同一个套接字映射中维护。为了区分服务器和客户，这里从不同的脚本分别实例化服务器和客户，并分别运行 asyncore.loop()。关闭一个分派器时，会把它从 asyncore 维护的映射中删除，映射为空时循环退出。
+处理其他事件循环
+    有时有必要将 asyncore 事件循环与父应用的事件循环集成。例如，一个 GUI 应用可能不希望 UI 阻塞直到所有异步传输都处理完——这有违异步的本来意图。为了轻松地实现这种集成，asyncore.loop() 接受一些参数，可以设置一个超时值，还可以限制循环运行的次数。可以用一个 HTTP 客户来说明这些选项对客户的影响，这是以 asyncore 标准库文档中的版本为基础构建的一个 HTTP 客户。
+
+import logging
+import asyncore
+import socket
+from cStringIO import StringIO
+import urlparse
+
+class HttpClient(asyncore.dispatcher):
+
+	def __init__(self, url):
+		self.url = url
+		self.logging.getLogger(self.url)
+		self.parsed_url = urlparse.urlparse(url)
+		asyncore.dispatcher.__init__(self)
+		self.write_buffer = 'GET %s HTTP/1.0\r\n\r\n' % self.url
+		self.read_buffer = StringIO()
+		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		address = (self.parsed_url.netloc, 80)
+		self.logger.debug('connecting to %s', address)
+		self.connect(address)
+
+	def handle_connect(self):
+		self.logger.debug('handle_connect()')
+
+	def handle_close(self):
+		self.logger.debug('handle_close()')
+		self.close()
+
+	def writable(self):
+		is_writable = (len(self.write_buffer) > 0)
+		if is_writable:
+			self.logger.debug('writable() -> %s', is_writable)
+		return is_writable
+
+	def readable(self):
+		self.logger.debug('readable() -> True')
+		return True
+
+	def handle_write(self):
+		sent = self.send(self.write_buffer)
+		self.logger.debug('handle_write() -> "%s"', self.write_buffer[:sent])
+		self.write_buffer = self.write_buffer[sent:]
+
+	def handle_read(self):
+		data = self.recv(8192)
+		self.logger.debug('handle_read() -> %d bytes', len(data))
+		self.read_buffer.write(data)
+
+    这个主程序在一个 while 循环中使用客户类，每次迭代时会读或写数据。
+
+import logging
+import asyncore
+from asyncore_http_client import HttpClient
+logging.basicConfig(level=logging.DEBUG, format='%(name)s: %(message)s')
+
+clients = [ HttpClient('http://www.doughellmann.com/') ]
+
+loop_counter = 0
+while asyncore.socket_map:
+	loop_counter += 1
+	logging.debug('loop_counter=%s', loop_counter)
+	asyncore.loop(timeout=1, count=1)
+
+    可以不在一个定制局部 while 循环中调用 asyncore.loop()，而是以同样的方法从 GUI 工具包空闲处理器中调用，或者采用其他机制，在 UI 不忙于其他事件处理程序时完成少量工作。
+处理文件
+    正常情况下，asyncore 用于套接字，不过有时对于异步地读文件也很有用（例如，测试网络服务器时，要使用文件而不需要网络设置，或者需要分部分读写大的数据文件）。对于这些情况，asyncore 提供了 file_dispatcher 和 file_wrapper 类。
+    下面这个例子实现了文件的一个异步阅读器，每次调用 handle_read() 时会响应另一部分数据。
+
+import asyncore
+
+class FileReader(asyncore.file_dispatcher):
+	
+	def writable(self):
+		return False
+
+	def handle_read(self):
+		data = self.recv(64)
+		print 'READ: (%d)\n%r' % (len(data), data)
+
+	def handle_expt(self):
+		# Ignore events that look like out of band data
+		pass
+
+	def handle_close(self):
+		self.close()
+
+reader = FileReader(open('lorem.txt', 'r'))
+asyncore.loop()
+
+    要使用 FileReader()，需要提供一个打开的文件句柄，作为构造函数的唯一参数。
