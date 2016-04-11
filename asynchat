@@ -1,0 +1,100 @@
+[Python标准库]asynchat——异步协议处理器
+    作用：异步网络通信协议处理器。
+    Python 版本：1.5.2 及以后版本
+    asynchat 模块建立在 asyncore 基础上，为实现通信协议提供了一个框架，其出发点是在服务器和客户之间来回传递消息。async_chat 类是一个 asyncore.dispatcher 子类，它接收数据，并查找一个消息终止符。这个子类只需要指定数据到来时要做什么，以及一旦发现终止符该如何响应。发出的数据会排队，等待通过由 async_chat 管理的 FIFO 对象传输。
+消息终止符
+    到来的消息根据终止符（terminator）分解，要通过 set_terminator() 为每个 async_chat 实例管理终止符。有 3 种可能的配置。
+    1. 如果向 set_terminator() 传递一个字符串参数，当输入数据中出现这个字符串时，则认为这个消息是完整的。
+    2. 如果传入一个数值参数，当读入指定字节数的数据时则认为消息是完整的。
+    3. 如果传入 None，消息的终止不由 async_chat 管理。
+    下一个 EchoServer 例子使用了一个简单的字符串终止符和一个消息长度终止符，这取决于到来数据的上下文。标准库文档中的 HTTP 请求处理器示例还提供了另一个例子，来说明如何提供上下文改变终止符。它在读取 HTTP 首部时使用了一个字面量终止符，另外使用一个长度值来终止 HTTP POST 请求体。
+服务器和处理器
+    为了更易于理解 asynchat 与 asyncore 实现实际上与 asyncore 例子中创建的服务器是相同的，只不过日志记录调用更少。
+
+import asyncore
+import logging
+import socket
+from asynchat_echo_handler import EchoHandler
+
+class EchoServer(asyncore.dispatcher):
+	"""Receives connections and establishes handlers for each client."""
+
+	def __init__(self, address):
+		asyncore.dispatcher.__init__(self)
+		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.bind(address)
+		self.address = self.socket.getsockname()
+		self.listen(1)
+		return
+
+	def handle_accet(self):
+		# Called when a client connects to our socket
+		client_info = self.accept()
+		EchoHandler(sock=client_info[0])
+		# Only deal with one client at a time,
+		# so close as soon as the handler is set up,
+		# Under normal conditions, the server
+		# would run forever or until it received
+		# instructions to stop.
+		self.handle_close()
+		return
+
+	def handle_close(self):
+		self.close()
+
+    这个版本的 EchoHandler 建立在 asynchat.async_chat 基础上，而不是 asyncore.dispatcher。它在一个稍高的抽象层次上操作，读写会自动处理，缓冲区需要了解 4 个方面：
+    如何处理到来的数据（覆盖 handle_incoming_data()）
+    如何识别到来消息的结束（通过 set_terminator()）
+    接收到一个完整消息时做什么（found_terminator() 中）
+    要发送什么数据（使用 push()）
+    这个示例应用有两种操作模式。它会等待 ECHO length\n 形式的命令，或者等待数据回应。通过将一个实例变量 process_data 设置为发现终止符时所要调用的方法，然后在适当时改变终止符，可以来回切换操作模式。
+
+import asynchat
+import logging
+
+class EchoHandler(asynchat.async_chat):
+	"""Handles echoing messages from a single client."""
+
+	# Artificially reduce buffer sizes to illistrate
+	# sending and receiving partial messages.
+	ac_in_buffer_size = 128
+	ac_out_buffer_size = 128
+
+	def __init__(self, sock):
+		self.received_data = []
+		self.logger = logging.getLogger('EchoHandler')
+		asynchat.async_chat.__init__(self, sock)
+		# Start looking for the ECHO command
+		self.process_data = self._process_command
+		self.set_terminator('\n')
+		return
+	def collect_incoming_data(self, data):
+		"""Read an incoming message from the client and put it into the outgoing queue."""
+		self.logger.debug('collect_incoming_data() -> (%d bytes) %r', len(data), data)
+		self.received_data(data)
+
+	def found_terminator(self):
+		"""The end of a command or message has been seen."""
+		self.logger.debug('found_terminator()')
+		self.process_data()
+
+	def _process_command(self):
+		"""Have the full ECHO command"""
+		command = ''.join(self.received_data)
+		self.logger.debug('_process_command() %r', command)
+		command_verb, command_arg = command.strip().split(' ')
+		expected_data_len = int(command_arg)
+		self.set_terminator(expected_data_len)
+		self.process_data = self._process_message
+		self.received_data = []
+
+	def _process_message(self):
+		"""Have read the entire message."""
+		to_echo = ''.join(self.received_data)
+		self.logger.debug('_process_message() echoing %r', to_echo)
+		self.push(to_echo)
+		# Disconnect after sending the entire response
+		# since we only want to do one thing at a time
+		self.close_when_done()
+
+    一旦发现完整命令，处理程序会切换为消息处理模式，等待接收完整的文本。所有数据都得到时，会推至发出通道。数据一旦发送就会关闭处理程序。
