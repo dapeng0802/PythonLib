@@ -27,7 +27,7 @@ class EchoServer(asyncore.dispatcher):
 		self.listen(1)
 		return
 
-	def handle_accet(self):
+	def handle_accept(self):
 		# Called when a client connects to our socket
 		client_info = self.accept()
 		EchoHandler(sock=client_info[0])
@@ -71,7 +71,7 @@ class EchoHandler(asynchat.async_chat):
 	def collect_incoming_data(self, data):
 		"""Read an incoming message from the client and put it into the outgoing queue."""
 		self.logger.debug('collect_incoming_data() -> (%d bytes) %r', len(data), data)
-		self.received_data(data)
+		self.received_data.append(data)
 
 	def found_terminator(self):
 		"""The end of a command or message has been seen."""
@@ -98,3 +98,86 @@ class EchoHandler(asynchat.async_chat):
 		self.close_when_done()
 
     一旦发现完整命令，处理程序会切换为消息处理模式，等待接收完整的文本。所有数据都得到时，会推至发出通道。数据一旦发送就会关闭处理程序。
+客户
+    客户与处理程序的做法相同。类似于 asyncore 实现，要发送的消息是客户构造函数的一个参数。建立套接字连接时，会调用 handle_connect()，使客户能够发送命令和消息数据。
+    命令直接推送，但是对于消息文本，会使用一个特殊的“生成器”类。将轮询这个生成器，通过网络发出数据块。生成器返回一个空串时，则认为它为空，写操作结束。
+    客户希望只响应消息数据，所以它设置了一个整数终止符，在一个列表中收集数据，直至接收到整个消息。
+
+import asynchat
+import logging
+import socket
+
+class EchoClient(asynchat.async_chat):
+	"""Sends messages to the server and receives responses."""
+
+	# Artificially reduce buffer sizes to show
+	# sending and receiving partial messages.
+	ac_in_buffer_size = 128
+	ac_out_buffer_size = 128
+
+	def __init__(self, host, port, message):
+		self.message = message
+		self.received_data = []
+		self.logger = logging.getLogger('EchoClient')
+		asynchat.async_chat.__init__(self)
+		self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.logger.debug('connecting to %s', (host, port))
+		self.connect((host, port))
+		return
+
+	def handle_connect(self):
+		self.logger.debug('handle_connect()')
+		# Send the command
+		self.push('ECHO %d\n' % len(self.message))
+		# Send the data
+		self.push_with_producer(EchoProducer(self.message, buffer_size=self.ac_out_buffer_size))
+		# We expect the data to come back as-is,
+		# so set a length-based terminator
+		self.set_terminator(len(self.message))
+	def collect_incoming_data(self, data):
+		"""Read an incoming message from the client and add it to the outgoing queue."""
+		self.logger.debug('collect_incoming_data() -> (%d) %r', len(data), data)
+		self.received_data.append(data)
+
+	def found_terminator(self):
+		self.logger.debug('found_terminator()')
+		received_message = ''.join(self.received_data)
+		if received_message == self.message:
+			self.logger.debug('RECEIVED COPY OF MESSAGE')
+		else:
+			self.logger.debug('ERROR IN TRANSMISSION')
+			self.logger.debug('EXPECTED %r', self.message)
+			self.logger.debug('RECEIVED %r', received_message)
+		return
+
+class EchoProducer(asynchat.simple_producer):
+
+	logger = logging.getLogger('EchoProducer')
+
+	def more(self):
+		response = asynchat.simple_producer.more(self)
+		self.logger.debug('more() -> (%s bytes) %r', len(response), response)
+		return response
+
+集成
+    这个例子的主程序在同一个 asyncore 主循环中建立了客户和服务器。
+
+import asyncore
+import logging
+import socket
+
+from asynchat_echo_server import EchoServer
+from asynchat_echo_client import EchoClient
+
+logging.basicConfig(level=logging.DEBUG, format='%(name)-11s: %(message)s')
+
+address = ('localhost', 0) # let the kernel give us a port
+server = EchoServer(address)
+ip, port = server.address # find out what port we were given
+
+message_data = open('lorem.txt', 'r').read()
+client = EchoClient(ip, port, message=message_data)
+
+asyncore.loop()
+
+    正常情况下会在单独的进程中运行服务器和客户，不过采用这里的做法更容易显示组合的输出。
