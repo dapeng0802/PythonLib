@@ -1,0 +1,118 @@
+[Python标准库]urlparse——分解 URL
+    作用：将 URL 分解为其组成部分。
+    Python 版本：1.4 及以后版本
+    urlparse 模块提供了一些函数，可以按相关 RFC 定义将 URL 分解为其组成部分。
+解析
+    urlparse() 函数的返回值是一个对象，相当于一个包含 6 个元素的 tuple。
+
+from urlparse import urlparse
+
+url = 'http://netloc/path;param?query=arg#frag'
+parsed = urlparse(url)
+print parsed
+
+    通过元组接口得到的 URL 部分分别是机制、网络位置、路径段参数（由一个分号与路径分开）、查询以及片段。
+    尽管返回值相当于一个元组，但实际上它基于一个 namedtuple，这是 tuple 的一个子类，除了可以通过索引访问，它还支持通过命名属性访问 URL 的各个部分。属性 API 不仅更易于程序员使用，还允许访问 tuple API 未提供的很多值。
+
+from urlparse import urlparse
+
+url = 'http://user:pwd@NetLoc:80/path;param?query=arg#frag'
+parsed = urlparse(url)
+print 'scheme  :', parsed.scheme
+print 'netloc  :', parsed.netloc
+print 'path    :', parsed.path
+print 'params  :', parsed.params
+print 'query   :', parsed.query
+print 'fragment:', parsed.fragment
+print 'username:', parsed.username
+print 'password:', parsed.password
+print 'hostname:', parsed.hostname, '(netloc in lowercase)'
+print 'port    :', parsed.port
+
+    输入 URL 中有用户名（username）和密码（password）时，由 urlparse() 可以得到，如果没有提供用户名和密码则设置为 None。主机名（hostname）与 netloc 值相同，全为小写。如果有端口（port）则转换为一个整数，如果没有会设置为 None。
+    urlsplit() 函数可以替换 urlparse()，但表现稍有不同，因为它不会从 URL 分解参数。这对于遵循 RFC 2396 的 URL 很有用，它支持对应路径每一段的参数。
+
+from urlparse import urlsplit
+
+url = 'http://user:pwd@NetLoc:80/p1;param/p2;param?query=arg#frag'
+parsed = urlsplit(url)
+print parsed
+print 'scheme  :', parsed.scheme
+print 'netloc  :', parsed.netloc
+print 'path    :', parsed.path
+print 'query   :', parsed.query
+print 'fragment:', parsed.fragment
+print 'username:', parsed.username
+print 'password:', parsed.password
+print 'hostname:', parsed.hostname, '(netloc in lowercase)'
+print 'port    :', parsed.port
+
+    由于没有分解参数，tuple API 会显示 5 个元素而不是 6 个，这里没有 param 属性。
+    要想从一个 URL 剥离出片段标识符，如从一个 URL 查找基页面名，可以使用 urldefrag()。
+
+from urlparse import urldefrag
+
+original = 'http://user:pwd@NetLoc:80/path;param?query=arg#frag'
+print 'original:', original
+url, fragment = urldefrag(original)
+print 'url     :', url
+print 'fragment:', fragment
+
+    返回值是一个元组，其中包含基 URL 和片段。
+反解析
+    还可以利用一些方法把分解的 URL 的各个部分重新组装在一起，形成一个串。解析的 URL 对象有一个 geturl() 方法。
+
+from urlparse import urlparse
+
+original = 'http://user:pwd@NetLoc:80/path;param?query=arg#frag'
+print 'ORIG  :', original
+parsed = urlparse(original)
+print 'PARSED:', parsed.geturl()
+
+    利用 urlunparse() 可以将包含串的普通元组重新组合为一个 URL。
+
+from urlparse import urlparse, urlunparse
+
+original = 'http://user:pwd@NetLoc:80/path;param?query=arg#frag'
+print 'ORIG  :', original
+parsed = urlparse(original)
+print 'PARSED:', type(parsed), parsed
+t = parsed[:]
+print 'TUPLE :', type(t), t
+print 'NEW   :', urlunparse(t)
+
+    尽管 urlparse() 返回的 ParseResult 可以用作一个元组，不过这个例子显式地创建了一个新元组，来展示 urlunparse() 也适用于普通元组。
+    如果输入 URL 包含多余的部分，重新构造的 URL 可能会将其去除。
+
+from urlparse import urlparse, urlunparse
+
+original = 'http://netloc/path;?#'
+print 'ORIG  :', original
+parsed = urlparse(original)
+print 'PARSED:', type(parsed), parsed
+t = parsed[:]
+print 'TUPLE :', type(t), t
+print 'NEW   :', urlunparse(t)
+
+    在这里，原 URL 中缺少参数、查询和片段。新 URL 看起来与原 URL 并不相同，不过按照标准它们是等价的。
+连接
+    除了解析 URL 外，urlparse 还包括一个 urljoin() 方法，可以由相对片段构造绝对 URL。
+
+from urlparse import urljoin
+
+print urljoin('http://www.example.com/path/file.html',
+	      'anotherfile.html')
+print urljoin('http://www.example.com/path/file.html',
+	      '../anotherfile.html')
+
+    在这个例子中，计算第 2 个 URL 时要考虑路径的相对部分（“../”）。
+    非相对路径的处理与 os.path.join() 的处理方式相同。
+
+from urlparse import urljoin
+
+print urljoin('http://www.example.com/path/file.html',
+	      '/subpath/file.html')
+print urljoin('http://www.example.com/path/file.html',
+	      'subfile.html')
+
+    如果连接到 URL 的路径以一个斜线开头（/），这会将 URL 的路径置为顶级路径。如果不是以一个斜线开头，则追加到当前 URL 路径的末尾。
