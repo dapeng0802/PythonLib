@@ -1,0 +1,166 @@
+[Python标准库]BaseHTTPServer——实现 Web 服务器的基类
+    作用：BaseHTTPServer 包含一些类，可以构成 Web 服务器的基础。
+    Python 版本：1.4 及以后版本
+    BaseHTTPServer 使用 SocketServer 的类创建基类，用来建立 HTTP 服务器。HTTPServer 可以直接使用，不过 BaseHTTPRequestHandler 需要扩展来处理各个协议方法（GET、POST 等等）。
+HTTP GET
+    要在一个请求处理器类中添加一个 HTTP 方法支持，需要实现方法 do_METHOD()，这里的 METHOD 要替换为具体的 HTTP 方法名（例如，do_GET()、do_POST() 等等）。为保持一致，请求处理器方法不带任何参数。请求的所有参数都由 BaseHTTPRequestHandler 解析，并存储为请求实例的实例属性。
+    下面这个示例请求处理器展示了如何向客户返回一个响应，其中包含对构建响应可能有用的一些本地属性。
+
+from BaseHTTPServer import BaseHTTPRequestHandler
+import urlparse
+
+class GetHandler(BaseHTTPRequestHandler):
+
+	def do_GET(self):
+		parsed_path = urlparse.urlparse(self.path)
+		message_parts = [
+		        'CLIENT VALUES:',
+		        'client_address=%s (%s)' % (self.client_address, self.address_string()),
+		        'command=%s' % self.command,
+		        'path=%s' % self.path,
+		        'real path=%s' % parsed_path.path,
+		        'query=%s' % parsed_path.query,
+		        'request_version=%s' % self.request_version,
+		        '',
+		        'SERVER VALUES:',
+		        'server_version=%s' % self.server_version,
+		        'sys_version=%s' % self.sys_version,
+		        'protocol_version=%s' % self.protocol_version,
+		        '',
+		        'HEADERS RECEIVED:',
+		        ]
+		for name, value in sorted(self.headers.items()):
+			message_parts.append('%s=%s' % (name, value.rstrip()))
+		message_parts.append('')
+		message = '\r\n'.join(message_parts)
+		self.send_response(200)
+		self.end_headers()
+		self.wfile.write(message)
+		return
+
+if __name__ == '__main__':
+	from BaseHTTPServer import HTTPServer
+	server = HTTPServer(('localhost', 8080), GetHandler)
+	print 'Starting server, use <Ctrl-C> to stop'
+	server.serve_forever()
+
+    先组装消息文本，然后写至 wfile，这是包装了响应套接字的文件句柄。每个响应需要一个响应码，通过 send_response() 设置。如果使用了一个错误码（404,501 等等），首部会包含一个相应的默认错误消息，或者可能会随这个错误码传递一个消息。
+    要在服务器中运行请求处理器，需要将它传递到 HTTPServer 的构造函数，如示例脚本中 __mian__ 处理部分所示。
+    然后启动服务器。在另外一个终端使用 curl 来访问这个服务器。
+HTTP POST
+    支持 POST 请求需要多做一些工作，因为基类不会自动解析表单数据。cgi 模块提供了 FieldStorage 类，如果给定了正确的输入，它知道如何解析表单。
+
+from BaseHTTPServer import BaseHTTPRequestHandler
+import cgi
+
+class PostHandler(BaseHTTPRequestHandler):
+
+	def do_POST(self):
+		# Parse the form data posted
+		form = cgi.FieldStorage(
+			fp=self.rfile,
+			headers=self.headers,
+			environ={'REQUEST_METHOD':'POST',
+			         'CONTENT_TYPE':self.headers['Content-Type'],
+			         })
+
+		# Begin the response
+		self.send_response(200)
+		self.end_headers()
+		self.wfile.write('Client: %s\n' % str(self.client_address))
+		self.wfile.write('User-agent: %s\n' % str(self.headers['user-agent']))
+		self.wfile.write('Path: %s\n' % self.path)
+		self.wfile.write('Form data:\n')
+
+		# Echo back information about what was posted in thr form
+		for field in form.keys():
+			field_item = form[field]
+			if field_item.filename:
+				# The field contains an uploaded file
+				file_data = field_item.file.read()
+				file_len = len(file_data)
+				del file_data
+				self.wfile.write(
+					'\tUploaded %s as "%s" (%d bytes)\n' % \
+					    (field, field_item.filename, file_len))
+			else:
+				# Regular form value
+				self.wfile.write('\t%s-%s\n' % \
+					(field, form[field].value))
+		return
+
+if __name__ == '__main__':
+	from BaseHTTPServer import HTTPServer
+	server = HTTPServer(('localhost', 8080), PostHandler)
+	print 'Starting server, use <Ctrl-C> to stop'
+	server.serve_forever()
+
+    在一个窗口中运行这个服务器。通过使用 -F 选项，curl 的参数可以包括将提交给服务器的表单数据。最后一个参数（-F datafile=@BaseHTTPServer_GET.py）将提交文件 BaseHTTPServer_GET.py 的内容，来展示如何从表单读取文件数据。
+线程与进程
+    HTTPServer 是 SocketServer.TCPServer 的一个简单子类，并不使用多线程或多进程来处理请求。要增加线程或进程，需要使用相应的 mix-in 技术从 SocketServer 创建一个新类。
+
+from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from SocketServer import ThreadingMixIn
+import threading
+
+class Handler(BaseHTTPRequestHandler):
+
+	def do_GET(self):		
+		self.send_response(200)
+		self.end_headers()
+		message = threading.currentThread().getName()
+		self.wfile.write(message)
+		self.wfile.write('\n')
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+	"""Handle request in a separate thread."""
+
+if __name__ == '__main__':
+	server = ThreadedHTTPServer(('localhost', 8080), Handler)
+	print 'Starting server, use <Ctrl-C> to stop'
+	server.serve_forever()
+
+    类似于其他例子，采用同样的方式运行服务器。每次服务器接收到一个请求时，它会开始一个新线程或进程来处理这个请求。
+    用 ForkingMixIn 替换 ThreadingMixIn 会得到类似的结果，不过会使用单独的进程而不是线程。
+处理错误
+    处理错误时要调用 send_error()，并传入适当的错误码和一个可选的错误消息。整个响应（包括首部、状态码和响应体）会自动生成。
+
+from BaseHTTPServer import BaseHTTPRequestHandler
+
+class ErrorHandler(BaseHTTPRequestHandler):
+
+	def do_GET(self):		
+		self.send_error(404)
+		return
+
+if __name__ == '__main__':
+	from BaseHTTPServer import HTTPServer
+	server = HTTPServer(('localhost', 8080), ErrorHandler)
+	print 'Starting server, use <Ctrl-C> to stop'
+	server.serve_forever()
+
+    在这里，会返回一个 404 错误。这里使用一个 HTML 文档将错误消息报告给客户，并提供一个首部指示错误码。
+设置首部
+    send_header 方法将向 HTTP 响应添加首部数据。这个方法有两个参数：首部名和值。
+
+from BaseHTTPServer import BaseHTTPRequestHandler
+import urlparse
+import time
+
+class GetHandler(BaseHTTPRequestHandler):
+
+	def do_GET(self):		
+		self.send_response(200)
+		self.send_header('Last-Modified', self.date_time_string(time.time()))
+		self.end_headers()
+		self.wfile.write('Response body\n')
+		return
+
+if __name__ == '__main__':
+	from BaseHTTPServer import HTTPServer
+	server = HTTPServer(('localhost', 8080), GetHandler)
+	print 'Starting server, use <Ctrl-C> to stop'
+	server.serve_forever()
+
+    这个例子将 Last-Modified 首部设置为当前时间戳（按照 RFC 2822 格式化）。
+    类似于其他例子，服务器将请求记录到终端。
