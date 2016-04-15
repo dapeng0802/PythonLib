@@ -1,0 +1,112 @@
+[Python标准库]urllib——网络资源访问
+    作用：访问不需要验证的远程资源、cookie 等等。
+    Python 版本：1.4 及以后版本
+    urllib 模块为网络资源访问提供了一个简单的接口。它还包括一些函数用于对参数编码和加引号，以便通过 HTTP 传递到一个服务器。
+利用缓存实现简单获取
+    下载数据是一个很常见的操作，urllib 提供了 urlretrieve() 函数来满足这个需要。urlretrieve() 的参数包括一个 URL、存放数据的一个临时文件和一个报告下载进度的函数，另外如果 URL 指示一个表单，要求提交数据，那么 urlretrieve() 还要有一个参数表示要传递的数据。如果没有给定文件名，urlretrieve() 会创建一个临时文件。调用程序可以直接删除这个文件，或者将这个文件作为一个缓存，使用 urlcleanup() 将其删除。
+    下面这个例子使用一个 HTTP GET 请求从一个 Web 服务器获取数据。
+
+import urllib
+import os
+
+def reporthook(blocks_read, block_size, total_size):
+	"""total_size is reported in bytes.
+	block_size is the amount read each time.
+	blocks_read is the number of blocks successfully read.
+	"""
+	if not blocks_read:
+		print 'Connection opend'
+		return
+	if total_size < 0:
+		# Unknown size
+		print 'Read %d blocks (%d bytes)' % (blocks_read, blocks_read * block_size)
+	else:
+		amount_read = blocks_read * block_size
+		print 'Read %d blocks, or %d/%d' % (blocks_read, amount_read, total_size)
+	return
+
+try:
+	filename, msg = urllib.urlretrieve(
+		'http://www.python.org/',
+		reporthook=reporthook)
+	print
+	print 'File:', filename
+	print 'Headers:'
+	print msg
+	print 'File exists before cleanup:', os.path.exists(filename)
+
+finally:
+	urllib.urlcleanup()
+	print 'File still exists:', os.path.exists(filename)
+
+    每次从服务器读取数据时，会调用 reporthook() 报告下载进度。这个函数的 3 个参数分别是目前为止读取的块数、块的大小（字节数），以及正在下载的资源的大小（字节数）。服务器没有返回 Content-length 首部时，urlretrieve() 不知道数据有多大，为 total_size 参数传入 -1。
+参数编码
+    可以对参数编码并追加到 URL，从而将它们传递到服务器。
+
+import urllib
+
+query_args = { 'q':'query string', 'foo':'bar' }
+encoded_args = urllib.urlencode(query_args)
+print 'Encoded:', encoded_args
+
+url = 'http://localhost:8080/?' + encoded_args
+print urllib.urlopen(url).read()
+
+    客户值列表中，查询包含了已编码的查询参数。
+    要使用变量的不同出现向查询串传入一个值序列，需要在调用 urlencode() 时将 doseq 设置为 True。
+
+import urllib
+
+query_args = { 'foo':['fool', 'foo2'] }
+print 'Single  :', urllib.urlencode(query_args)
+print 'Sequence:', urllib.urlencode(query_args, doseq=True )
+
+    结果是一个查询串，同一个名称与多个值关联。
+    要对这个查询串解码，参见 cgi 模块的 FieldStorage 类。
+    查询参数中可能有一些特殊字符，在服务器端对 URL 解析时这些字符会带来问题，所以在传递到 urlencode() 时要对这些特殊字符“加引号”。要在本地对特殊字符加引号从而得到字符串的“安全”版本，可以直接使用 quote() 或 quote_plus() 函数。
+
+import urllib
+
+url = 'http://localhost:8080/~dhellmann/'
+print 'urlencode() :', urllib.urlencode({'url':url})
+print 'quote()     :', urllib.quote(url)
+print 'quote_plus():', urllib.quote_plus(url)
+
+    quote_plus() 实现的加引号处理会更大程度地替换相应字符。
+    要完成加引号操作的逆过程，可以根据需要相应地使用 unquote() 或 unquote_plus()。
+
+import urllib
+
+print urllib.unquote('http%3A//localhost%3A8080/%7Edhellmann/')
+print urllib.unquote_plus('http%3A%2F%2Flocalhost%3A8080%2F%7Edhellmann%2F')
+
+    编码值会转换回一个常规的 URL 字符串。
+路径与 URL
+    有些操作系统在本地文件和 URL 中使用不同的值分割路径的不同部分。为了保证代码可移植，可以使用函数 pathname2url() 和 url2pathname() 来回转换。
+
+import os
+from urllib import pathname2url, url2pathname
+
+print '== Default =='
+path = '/a/b/c'
+print 'Original:', path
+print 'URL     :', pathname2url(path)
+print 'Path    :', url2pathname('/d/e/f')
+print
+
+from nturl2path import pathname2url, url2pathname
+
+print '== Windows, without drive letter =='
+path = r'\a\b\c'
+print 'Original:', path
+print 'URL     :', pathname2url(path)
+print 'Path    :', url2pathname('/d/e/f')
+print
+
+print '== Windows, with drive letter =='
+path = r'C:\a\b\c'
+print 'Original:', path
+print 'URL     :', pathname2url(path)
+print 'Path    :', url2pathname('/d/e/f')
+
+    这里有两个 Windows 例子，其路径前缀中分别包含和不包含驱动器字母。
