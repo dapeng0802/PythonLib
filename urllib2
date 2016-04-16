@@ -1,0 +1,107 @@
+[Python标准库]urllib2——网络资源访问
+    作用：用于打开扩展 URL 的库，这些 URL 可以通过定义定制协议处理器来扩展。
+    Python 版本：2.1 及以后版本
+    urllib2 模块提供了一个更新的 API 来使用 URL 标识的 Internet 资源。可以由单个应用扩展来支持新的协议，或者可以对现有协议添加变化（如处理 HTTP 基本验证）。
+HTTP GET
+    （注意，这些例子的测试服务器在 BaseHTTPServer_GET.py 中，在一个终端窗口启动服务器，另一个终端窗口运行这些例子。）
+    与 urllib 类似，HTTP GET 操作是 urllib2 最简单的用法。将 URL 传入 urlopen()，来得到远程数据的一个“类文件”的句柄。
+
+import urllib2
+
+response = urllib2.urlopen('http://localhost:8080/')
+print 'RESPONSE:', response
+print 'URL     :', response.geturl()
+
+headers = response.info()
+print 'DATE    :', headers['date']
+print 'HEADERS :'
+print '---------'
+print headers
+
+data = response.read()
+print 'LENGTH  :', len(data)
+print 'DATA    :'
+print '---------'
+print data
+
+    这个示例服务器接收到来的值，并建立一个纯文本的格式化响应发回给客户。利用 urlopen() 的返回值，可以通过 info() 方法从 HTTP 服务器访问首部，还可以通过类似 read() 和 readlines() 等方法访问远程资源。
+    urlopen() 返回的类文件对象是可迭代的。
+
+import urllib2
+
+response = urllib2.urlopen('http://localhost:8080/')
+for line in response:
+	print line.rstrip()
+
+    这个例子在打印输出之前先去除末尾的换行和回车。
+参数编码
+    可以用 urllib.urlencode() 对参数编码，并追加到 URL，从而将参数传递到服务器。
+
+import urllib2
+import urllib
+
+query_args = { 'q':'query string', 'foo':'bar' }
+encoded_args = urllib.urlencode(query_args)
+print 'Encoded:', encoded_args
+url = 'http://localhost:8080/?' + encoded_args
+print urllib2.urlopen(url).read()
+
+    示例输出返回的客户值列表包含有已编码的查询参数。
+HTTP POST
+    （注意：这些例子的测试服务器在 BaseHTTPServer_POST.py 中，在一个终端中启动服务器，另一个终端中与运行这些例子。）
+    要使用 POST 而不是 GET 将表单编码（form-encoded）数据发送到远程服务器，需要将编码的查询参数作为数据传入 urlopen()。
+
+import urllib2
+import urllib
+
+query_args = { 'q':'query string', 'foo':'bar' }
+encoded_args = urllib.urlencode(query_args)
+url = 'http://localhost:8080/?' + encoded_args
+print urllib2.urlopen(url, encoded_args).read()
+
+    服务器可以对表单数据解码，并按名称访问各个值。
+增加发出首部
+    urlopen() 是一个便利函数，可以隐藏建立和处理请求的一些细节。通过直接使用 Request 实例可以提供更精确的控制。例如，可以向发出的请求增加定制首部，控制所返回数据的格式、指定本地缓存文档的版本，还可以告诉远程服务器与之通信的软件客户名。
+    如前例的输出所示，默认的 User-agent 首部值包括常量 Python-urllib，后面是 Python 解释器版本。如果要创建一个应用访问其他人拥有的 Web 资源，最好在请求中包含真实的 user-agent 信息，这样比较礼貌，可以更容易地标识请求来源。通过使用一个定制代理，还允许使用一个 robots.txt 文件控制“爬虫”（参见 robotparser 模块）。
+
+import urllib2
+
+request = urllib2.Request('http://localhost:8080/')
+request.add_header(
+	'User-agent',
+	'PyMOTW (http://www.doughellmann.com/PyMOTW/)',
+	)
+
+response = urllib2.urlopen(request)
+data = response.read()
+print data
+
+    创建一个 Request 对象之后，打开请求之前使用 add_header() 设置 user-agent 值。输出的最后一行显示了这个定制值。
+从请求提交表单数据
+    可以将发出的数据添加到 Request，提交给服务器。
+
+import urllib2
+import urllib
+
+query_args = { 'q':'query string', 'foo':'bar' }
+
+request = urllib2.Request('http://localhost:8080/')
+print 'Request method before data:', request.get_method()
+
+request.add_data(urllib.urlencode(query_args))
+print 'Request method after data :', request.get_method()
+request.add_header(
+	'User-agent',
+	'PyMOTW (http://www.doughellmann.com/PyMOTW/)',
+	)
+
+print
+print 'OUTGOING DATA:'
+print request.get_data()
+
+print
+print 'SERVER RESPONSE:'
+print urllib2.urlopen(request).read()
+
+    添加数据之后，Request 使用的 HTTP 方法会自动从 GET 变为 POST。
+上传文件
