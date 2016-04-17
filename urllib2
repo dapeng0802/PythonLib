@@ -105,3 +105,182 @@ print urllib2.urlopen(request).read()
 
     添加数据之后，Request 使用的 HTTP 方法会自动从 GET 变为 POST。
 上传文件
+    与简单表单相比，要对文件编码以便上传，需要多做一些工作。要在请求体中构造一个完整的 MIME 消息，是服务器能够区分哪些是收到的表单域，哪些是上传的文件。
+
+import itertools
+import mimetools
+import mimetypes
+from cStringIO import StringIO
+import urllib2
+import urllib
+
+class MultiPartForm(object):
+	"""Accumulate  the data to be used when posting a form."""
+
+	def __init__(self):
+		self.form_fields = []
+		self.files = []
+		self.boundary = mimetools.choose_boundary()
+		return
+
+	def get_content_type(self):
+		return 'multipart/form-data; boundary=%s' % self.boundary
+
+	def add_field(self, name, value):
+		"""Add a simple field to the form data."""
+		self.form_fields.append((name, value))
+		return
+
+	def add_file(self, fieldname, filename, fileHandle, mimetype=None):
+		"""Add a file to be uploaded."""
+		body = fileHandle.read()
+		if mimetype is None:
+			mimetype = ( mimetypes.guess_type(filename)[0]
+				         or
+				         'application/octet-stream'
+				         )
+		self.files.append((fieldname, filename, mimetype, body))
+		return
+
+	def __str__(self):
+		"""Return a string representing the form data, including attached files."""
+		# Build a list of lists, each containing "lines" of the
+		# request. Each part is separated by a boundary string.
+		# Once the list is built, return a string where each
+		# line is separated by '\r\n'.
+		parts = []
+		part_boundary = '--' + self.boundary
+
+		# Add the form fields
+		parts.extend(
+			[ part_boundary,
+			  'Content-Disposition: form-data; name="%s"' % name,
+			  '',
+			  value,
+			  ]
+			  for name, value in self.form_fields
+			  )
+
+		# Add the files to upload
+		parts.extend([
+			part_boundary,
+			'Content-Disposition: file; name="%s"; filename="%s"' % \
+			    (field_name, filename),
+			'Content-Type: %s' % content_type,
+			'',
+			body,
+		  ]
+		  for field_name, filename, content_type, body in self.files
+		  )
+
+		# Flatten the list and add closing boundary marker, and
+		# then return CR+LF separated data
+		flattened = list(itertools.chain(*parts))
+		flattened.append('--' + self.boundary + '--')
+		flattened.append('')
+		return '\r\n'.join(flattened)
+
+if __name__ == '__main__':
+	# Create the form with simple fields
+	form = MultiPartForm()
+	form.add_field('firstname', 'Doug')
+	form.add_field('lastname', 'Hellmann')
+
+	# Add a fake file
+	form.add_file(
+		'biography', 'bio.txt',
+		fileHandle=StringIO('Python developer and blogger.'))
+	# Build the request
+	request = urllib2.Request('http://localhost:8080/')
+	request.add_header(
+		'User-agent',
+		'PyMOTW (http://www.doughellmann.com/PyMOTW/)')
+	body = str(form)
+	request.add_header('Content-type', form.get_content_type())
+	request.add_header('Content-length', len(body))
+	request.add_data(body)
+
+	print
+	print 'OUTGOING DATA:'
+	print request.get_data()
+
+	print
+	print 'SERVER RESPONSE:'
+	print urllib2.urlopen(request).read()
+
+    MultiPartForm 类可以把一个任意的表单表示为带附加文件的多部分 MIME 消息。
+创建定制协议处理器
+    urllib2 提供了对 HTTP(S)、FTP 和本地文件访问的内置支持。要增加对其他 URL 类型的支持，需要注册另外的协议处理器。例如，要支持指向远程 NFS 服务器上任意文件的 URL，而不需要用户在访问文件之前先装载（mount）这个路径，可以创建一个由 BaseHandler 派生的类，并包括一个 nfs_open() 方法。
+    协议特定的 open() 方法（如 nfs_open()）会得到一个参数，即 Request 实例，它要返回一个对象，这个对象包括一个 read() 方法，可以用来读取数据，另外包括一个 info() 方法返回响应首部，还有一个 geturl() 方法返回所读取文件的具体 URL。要得到这个结果，一种简单的方法是创建一个 urllib.addurlinfo 实例，在构造函数中传入首部、URL 和打开的文件句柄。
+
+import mimetypes
+import os
+import tempfile
+import urllib2
+import urllib
+
+class NFSFile(file):
+	def __init__(self, tempdir, filename):
+		self.tempdir = tempdir
+		file.__init__(self, filename, 'rb')
+	def close(self):
+		print 'NFSFile'
+		print '  unmounting %s' % os.path.basename(self.tempdir)
+		print '  when %s is closed' % os.path.basename(self.name)
+		return file.close(self)
+
+class FauxNFSHandler(urllib2.BaseHandler):
+
+	def __init__(self, tempdir):
+		self.tempdir = tempdir
+
+	def nfs_open(self, req):
+		url = req.get_selector()
+		directory_name, file_name = os.path.split(url)
+		server_name = req.get_host()
+		print 'FauxNFSHandler simulating mount:'
+		print '  Remote path: %s' % directory_name
+		print '  Server     : %s' % server_name
+		print '  Local path : %s' % os.path.basename(tempdir)
+		print '  Filename   : %s' % file_name
+		local_file = os.path.join(tempdir, file_name)
+		fp = NFSFile(tempdir, local_file)
+		content_type = ( mimetypes.guess_type(file_name)[0]
+			             or
+			             'application/octet-stream'
+			             )
+		stats = os.stat(local_file)
+		size = stats.st_size
+		headers = { 'Content-type': content_type,
+		            'Content-length': size,
+		          }
+		return urllib.addinfourl(fp, headers, req.get_full_url())
+
+if __name__ == '__main__':
+	tempdir = tempfile.mkdtemp()
+	try:
+		# Populate the temporary file for the simulation
+		with open(os.path.join(tempdir, 'file.txt'), 'wt') as f:
+			f.write('Contents of file.txt')
+
+		# Construct an opener with our NFS handler
+		# and register it as the default opener.
+		opener = urllib2.build_opener(FauxNFSHandler(tempdir))
+		urllib2.install_opener(opener)
+
+		# Open the file through a URL.
+		response = urllib2.urlopen(
+			'nfs://remote_server/path/to/the/file.txt'
+			)
+		print
+		print 'READ CONTENTS:', response.read()
+		print 'URL          :', response.geturl()
+		print 'HEADERS:'
+		for name, value in sorted(response.info().items()):
+			print '  %-15s = %s' % (name, value)
+		response.close()
+	finally:
+		os.remove(os.path.join(tempdir, 'file.txt'))
+		os.removedirs(tempdir)
+
+    FauxNFSHandler 和 NFSFile 类打印了一些消息，来展示真正的实现会在哪里增加装载（mount）和卸载（unmount）调用。由于这只是一个模拟，FauxNFSHandler 只是简单地提供了一个临时目录名，它将在这个目录中查找所有文件。
