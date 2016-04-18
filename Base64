@@ -1,0 +1,88 @@
+[Python标准库]Base64——用 ASCII 编码二进制数据
+    作用：base64 模块包含一些函数，可以将二进制数据转换为适合使用纯文本协议传输的 ASCII 子集。
+    Python 版本：1.4 及以后版本
+    Base64、Base32 和 Base16 编码将 8 位字节分别转换为每字节有 6、5 或 4 位有用数据的值，这就允许将非 ASCII 字节编码为 ASCII 字符，以便通过需要纯 ASCII 的协议进行传输，如 SMTP。base（进制）值对应于各编码中使用的字母表长度。这些原始编码还有一些“URL 安全”（URL-safe）的变种，使用的字母表稍有不同。
+Base64 编码
+    以下是对于文本编码的一个基本例子。
+
+import base64
+import textwrap
+
+# Load this source file and strip the header.
+with open(__file__, 'rt') as input:
+	raw = input.read()
+	initial_data = raw.split('#end_pymotw_header')[1]
+
+encoded_data = base64.b64encode(initial_data)
+
+num_initial = len(initial_data)
+
+# There will never be more than 2 padding bytes.
+padding = 3 - (num_initial % 3)
+
+print '%d bytes before encoding' % num_initial
+print 'Expect %d padding bytes' % padding
+print '%d bytes after encoding' % len(encoded_data)
+print
+print encoded_data
+
+    输出显示出原始源文件的 168 字节经编码后扩展为 224 字节。
+Base64 解码
+    b64decode() 将编码的串转换回原来的形式，它取 4 个字节，利用一个查找表将这 4 个字节转换回原来的 3 个字节。
+
+import base64
+
+original_string = 'This is the data, in the clear.'
+print 'Original:', original_string
+
+encoded_string = base64.b64encode(original_string)
+print 'Encoded :', encoded_string
+
+decoded_string = base64.b64decode(encoded_string)
+print 'Decoded :', decoded_string
+
+    编码过程中，会查看输入中的各个 24 位序列（3 个字节），然后将这 24 位编码为输出中的 4 个字节。输出末尾的等号作为填充插入，因为在这个例子中，原始串中的位数不能被 24 整除。
+URL 安全的变种
+    因为默认的 Base64 字母表可能使用 + 和 /，这两个字符在 URL 中会用到，所有通常很有必要使用一个候选编码，来替换这些字符。
+
+import base64
+
+encodes_with_pluses = chr(251) + chr(239)
+encodes_with_slashes = chr(255) * 2
+
+for original in [ encodes_with_pluses, encodes_with_slashes ]:
+	print 'Original         :', repr(original)
+	print 'Standard encoding:', base64.standard_b64encode(original)
+	print 'URL_safe encoding:', base64.urlsafe_b64encode(original)
+	print
+
+    + 替换为 -，/ 替换为下划线（_）。除此之外，字母表是一样的。
+其他编码
+    除了 Base64，这个模块还提供了一些函数来处理 Base32 和 Base16（十六进制）编码数据。
+
+import base64
+
+original_string = 'This is the data, in the clear.'
+print 'Original:', original_string
+
+encoded_string = base64.b32encode(original_string)
+print 'Encoded :', encoded_string
+
+decoded_string = base64.b32decode(encoded_string)
+print 'Decoded :', decoded_string
+
+    Base32 字母表包括 ASCII 集中的 26 个大写字母以及数字 2~7。
+    Base16 函数处理十六进制字母表。
+
+import base64
+
+original_string = 'This is the data, in the clear.'
+print 'Original:', original_string
+
+encoded_string = base64.b16encode(original_string)
+print 'Encoded :', encoded_string
+
+decoded_string = base64.b16decode(encoded_string)
+print 'Decoded :', decoded_string
+
+    每次编码位数下降时，采用编码格式的输出就会占用更多空间。
