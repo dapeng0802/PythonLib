@@ -1,0 +1,110 @@
+[Python标准库]Cookie——HTTP Cookie
+    作用：Cookie 模块定义一些类来解析和创建 HTTP cookie 首部。
+    Python 版本：2.1 及以后版本
+    Cookie 模块为大多数符合 RFC 2109 的 cookie 实现一个解析器。这个实现没有标准那么严格，因为 MSIE 3.0x 并不支持整个标准。
+创建和设置 Cookie
+    可以用 Cookie 为基于浏览器的应用实现状态管理，因此，Cookie 通常由服务器设置，并由客户存储和返回。下面是创建一个 cookie 的最简单的例子。
+
+import Cookie
+
+c = Cookie.SimpleCookie()
+c['mycookie'] = 'cookie_value'
+print c
+
+    输出是一个合法的 Set-Cookie 首部，可以作为 HTTP 响应的一部分传递到客户。
+Morsel
+    还可以控制 cookie 的其他方面，如到期时间、路径和域。实际上，cookie 的所有 RFC 属性都可以通过表示 cookie 值的 Morsel 对象来管理。
+
+import Cookie
+import datetime
+
+def show_cookie(c):
+	print c
+	for key, morsel in c.iteritems():
+		print
+		print 'key =', morsel.key
+		print '  value =', morsel.value
+		print '  coded_value =', morsel.coded_value
+		for name in morsel.keys():
+			if morsel[name]:
+				print '  %s = %s' % (name, morsel[name])
+
+c = Cookie.SimpleCookie()
+
+# A cookie with a value that has to be encoded to fit into the header
+c['encoded_value_cookie'] = '"cookie_value"'
+c['encoded_value_cookie']['comment'] = 'Value has escaped quotes'
+
+# A cookie that only applies to part of a site
+c['restricted_cookie'] = 'cookie_value'
+c['restricted_cookie']['path'] = '/sub/path'
+c['restricted_cookie']['domain'] = 'PyMOTW'
+c['restricted_cookie']['secure'] = True
+
+# A cookie that expires in 5 minutes
+c['with_max_age'] = 'expires in 5 minutes'
+c['with_max_age']['max-age'] = 300 # seconds
+
+# A cookie that expires at a specific time
+c['expires_at_time'] = 'cookie_value'
+time_to_live = datetime.timedelta(hours=1)
+expires = datetime.datetime(2016, 4, 19, 20, 30, 14) + time_to_live
+
+# Date format: Wdy, DD-Mon-YY HH:MM:SS GMT
+expires_at_time = expires.strftime('%a, %d %b %Y %H:%M:%S')
+c['expires_at_time']['expires'] = expires_at_time
+show_cookie(c)
+
+    这个例子使用两个不同的方法设置所存储 cookie 的到期时间。其中一个将 max-age 设置为秒数，另一个将 expires 设置为日期时间，达到这个日期时间就会丢弃这个 cookie。
+    Cookie 和 Morsel 对象与字典类似。Morsel 响应一个固定的键集：
+    expires、path、comment、domain、max-age、secure、version
+    Cookie 实例的键是所存储的各个 cookie 的名称。这个信息也可以从 Morsel 的键属性得到。
+编码值
+    cookie 首部要求对值编码，才能正确地解析。
+
+import Cookie
+
+c = Cookie.SimpleCookie()
+c['integer'] = 5
+c['string_with_quotes'] = 'He said, "Hello, World!"'
+
+for name in ['integer', 'string_with_quotes']:
+	print c[name].key
+	print '  %s' % c[name]
+	print '  value=%r' % c[name].value
+	print '  coded_value=%r' % c[name].coded_value
+	print
+
+    Morsel.value 是 cookie 的解码值，而 Morsel.coded_value 表示则用来将值传输到客户。这两个值都是串。如果保存到 cookie 的值不是串将会自动转换。
+接收和解析 Cookie 首部
+    一旦客户接收到 Set-Cookie 首部，在后续请求中它会使用一个 Cookie 首部把这些 cookie 返回到服务器。到来的 Cookie 首部串可能包含多个 cookie 值，由分号分隔（;）。
+    Cookie: integer=5; string_with_quotes="He said, \"Hello, World!\""
+    取决于 Web 服务器和框架，可以直接从首部或 HTTP_COOKIE 环境变量得到 cookie。
+
+import Cookie
+
+c = Cookie.SimpleCookie()
+c['integer'] = 5
+c['string_with_quotes'] = 'He said, "Hello, World!"'
+
+for name in ['integer', 'string_with_quotes']:
+	print c[name].key
+	print '  %s' % c[name]
+	print '  value=%r' % c[name].value
+	print '  coded_value=%r' % c[name].coded_value
+	print
+
+    要对其解码，实例化时可以将串（但不包括首部前缀）传递到 SimpleCookie，或者使用 load() 方法。
+候选输出格式
+    除了使用 Set-Cookie 首部外，服务器还可以提供 JavaScript，向客户添加 cookie。SimpleCookie 和 Morsel 通过 js_output() 方法来提供 JavaScript 输出。
+
+import Cookie
+
+c = Cookie.SimpleCookie()
+c['mycookie'] = 'cookie_value'
+c['another_cookie'] = 'second value'
+print c.js_output()
+
+    结果是一个完整的 script 标记，其中包含设置 cookie 的语句。
+废弃的类
+    所有这些例子都使用了 SimpleCookie。Cookie 模块还提供了另外两个类，SerialCookie 和 SmartCookie。SerialCookie 可以处理任何可 pickle 的值。SmartCookie 能确定一个值是否需要解除 pickle，或者这是否是一个简单值。
