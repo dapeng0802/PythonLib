@@ -6,3 +6,53 @@
     使用伪随机数
     使用公开的串并结合密码散列
     在上述所有情况下，种子值都要与系统时钟结合，如果向后设置时钟，则要用一个时钟序列值维护唯一性。
+UUID 1——IEEE 802 MAC 地址
+    UUID 1 值使用主机的 MAC 地址计算。uuid 模块使用 getnode() 来获取当前系统的 MAC 值。
+
+import uuid
+
+print hex(uuid.getnode())
+
+    如果一个系统有多个网卡，相应的有多个 MAC 地址，可能返回其中任意一个值。
+    要为一个主机生成一个 UUID，由其 MAC 地址标识，需要使用 uuid1() 函数。节点标识符参数是可选的；如果未设置这个域，就会使用 getnode() 返回的值。
+
+import uuid
+
+u = uuid.uuid1()
+
+print u
+print type(u)
+print 'bytes   :', repr(u.bytes)
+print 'hex     :', u.hex
+print 'int     :', u.int
+print 'urn     :', u.urn
+print 'variant :', u.variant
+print 'version :', u.version
+print 'fields  :', u.fields
+print '\ttime_low            :', u.time_low
+print '\ttime_mid            :', u.time_mid
+print '\ttime_hi_version     :', u.time_hi_version
+print '\tclock_seq_hi_variant:', u.clock_seq_hi_variant
+print '\tclock_seq_low       :', u.clock_seq_low
+print '\tnode                :', u.node
+print '\ttime                :', u.time
+print '\tclock_seq           :', u.clock_seq
+
+    对于返回 UUID 对象，它的各个部分可以通过只读的实例属性访问。有些属性，如 hex、int 和 urn，则是 UUID 值的不同表示。
+    由于有时间分量（time），每次调用 uuid1() 都会返回一个新值。
+
+import uuid
+
+for i in xrange(3):
+	print uuid.uuid1()
+
+    在这个输出中，只有时间分量（串的开始位置）有变化。
+    由于每个计算机有一个不同的 MAC 地址，在不同系统上运行这个示例程序会产生完全不同的值。这个例子传递不同的节点 id 来模拟在不同主机上运行。
+
+import uuid
+
+for node in [ 0x1ec200d9e0, 0x1e5274040e ]:
+	print uuid.uuid1(node), hex(node)
+
+    除了时间值不同外，UUID 末尾的节点标识符也有变化。
+UUID 3 和 5——基于名字的值
