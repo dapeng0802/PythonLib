@@ -56,3 +56,69 @@ for node in [ 0x1ec200d9e0, 0x1e5274040e ]:
 
     除了时间值不同外，UUID 末尾的节点标识符也有变化。
 UUID 3 和 5——基于名字的值
+    有些情况下可能需要根据名字创建 UUID 值，而不是根据随机值或基于时间的值来创建。UUID 3 和 5 规范使用密码散列值（分别使用 MD5 或 SHA1），将特定于命名空间的种子值与名字相结合。有一些公开的命名空间，由预定义的 UUID 值标识，分别用于处理 DNS、URL、IOS OID 和 X.500 识别名（Distinguished Names）。通过生成和保存 UUID 值，还可以定义新的特定于应用的命名空间。
+
+import uuid
+
+hostname = ['www.doughellmann.com', 'blog.doughellmann.com']
+
+for name in hostname:
+	print name
+	print '  MD5   :', uuid.uuid3(uuid.NAMESPACE_DNS, name)
+	print '  SHA-1 :', uuid.uuid5(uuid.NAMESPACE_DNS, name)
+	print
+
+    要从一个 DNS 名创建 UUID，将 uuid.NAMESPACE_DNS 作为命名空间参数传入 uuid3() 或 uuid5()。
+    一个命名空间中给定的 UUID 值总是相同的，而不论在何时或何地计算。
+
+import uuid
+
+namespace_types = sorted(n
+	for n in dir(uuid)
+	if n.startswith('NAMESPACE_')
+	)
+name = 'www.doughellmann.com'
+
+for namespace_type in namespace_types:
+	print namespace_type
+	namespace_uuid = getattr(uuid, namespace_type)
+	print ' ', uuid.uuid3(namespace_uuid, name)
+	print ' ', uuid.uuid3(namespace_uuid, name)
+	print
+
+    但是命名空间中相同名的 UUID 值则是不同的。
+UUID 4——随机值
+    有时，基于主机和基于命名空间的 UUID 值“差别还不够大”。例如，如果 UUID 要用作散列键，则需要有区分度更大、更随机的值序列来避免散列表中出现冲突。通过让值有更少的共同数字，也能更容易地在日志文件中查找这些值。为了增加 UUID 的区分度，可以通过 uuid4() 用随机的输入值来生成。
+
+import uuid
+
+for i in xrange(3):
+	print uuid.uuid4()
+
+    随机性的来源取决于导入 uuid 时哪些 C 库可用。如果可以加载 libuuid（或 uuid.dll），而且其中包含一个生成随机值的函数，则使用这个库。否则，使用 os.urandom() 或 random 模块。
+处理 UUID 对象
+    除了生成新的 UUID 值，还可以解析标准格式的串来创建 UUID 对象，使比较和排序操作的处理更为容易。
+
+import uuid
+
+def show(msg, l):
+	print msg
+	for v in l:
+		print ' ', v
+	print
+
+input_values = [
+    'urn:uuid:f2f84497-b3bf-493a-bba9-7c68e6def80b',
+    '{417a5ebb-01f7-4ed5-aeac-3d56cd5037b0}',
+    '2115773a-5bf1-11dd-ab48-001ec200d9e0',
+    ]
+
+show('input_values', input_values)
+
+uuids = [ uuid.UUID(s) for s in input_values ]
+show('converted to uuids', uuids)
+
+uuids.sort()
+show('sorted', uuids)
+
+    将外围大括号从输入中去除，另外将短横线（-）也去除。如果串有一个包含 urn: 或 uuid: 的前缀，也会将其删除。剩下的文本必然是十六进制数构成的串，然后再将它解释为一个 UUID 值。
