@@ -1,0 +1,33 @@
+[Python标准库]json——JavaScript 对象记法
+    作用：将 Python 对象编码为 JSON 串，以及将 JSON 串解码为 Python 对象。
+    Python 版本：2.6 及以后版本
+    json 模块提供了一个与 pickle 类似的 API，可以将内存中的 Python 对象转换为一个串行化表示，称为 JavaScript 对象记法（JavaScript  Object Notation，JSON）。不同于 pickle，JSON 有一个优点，它有多种语言的实现（特别是 JavaScript）。JSON 最广泛地应用于 AJAX 应用中 Web 服务器和客户之间的通信，不过也可以用于满足其他应用间的通信需求。
+编码和解码简单数据类型
+    默认情况下，编码器支持 Python 的一些内置类型（string、unicode、int、float、list、tuple 和 dict）。
+
+import json
+
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0 } ]
+print 'DATA:', repr(data)
+
+data_string = json.dumps(data)
+print 'JSON:', data_string
+
+    对值编码时，表面上类似于 Python 的 repr() 的输出。
+    编码然后再重新解码时，可能不会得到完全相同的对象类型。
+
+import json
+
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0 } ]
+print 'DATA:', data
+
+data_string = json.dumps(data)
+print 'ENCODED:', data_string
+
+decoded = json.loads(data_string)
+print 'DECODED:', decoded
+
+print 'ORIGINAL:', type(data[0]['b'])
+print 'DECODED :', type(decoded[0]['b'])
+
+    具体地，字符串会转换为 unicode 对象，而元组会变成列表。
