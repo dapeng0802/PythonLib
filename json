@@ -31,3 +31,139 @@ print 'ORIGINAL:', type(data[0]['b'])
 print 'DECODED :', type(decoded[0]['b'])
 
     具体地，字符串会转换为 unicode 对象，而元组会变成列表。
+优质输出和紧凑输出
+    JSON 优于 pickle 的另一个好处是，其结果是人类可读的。dumps() 函数接受多个参数，可以使输出更美观。例如，sort_keys 标志会告诉编码器按有序顺序而不是随机顺序输出字典的键。
+
+import json
+
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0 } ]
+print 'DATA:', repr(data)
+
+unsorted = json.dumps(data)
+print 'JSON:', json.dumps(data)
+print 'SORT:', json.dumps(data, sort_keys=True)
+
+first = json.dumps(data, sort_keys=True)
+second = json.dumps(data, sort_keys=True)
+
+print 'UNSORTED MATCH:', unsorted == first
+print 'SORTED MATCH  :', first == second
+
+    排序后，人类查看结果会更为容易，而且还可以在测试中比较 JSON 输出。
+    对于高度嵌套的数据结构，还可以指定一个（indent）值，来得到格式美观的输出。
+
+import json
+
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0 } ]
+print 'DATA:', repr(data)
+
+print 'NORMAL:', json.dumps(data, sort_keys=True)
+print 'INDENT:', json.dumps(data, sort_keys=True, indent=2)
+
+    当缩进是一个非负整数时，输出更类似于 pprint 的输出。数据结构中每一级的前导空格与其缩进级别匹配。
+    不过，这样的详细输出会增加传输等量数据所需的字节数，所以生产环境中往往不使用这种输出。实际上，可以调整编码输出中分隔数据的设置，使之比默认格式更为紧凑。
+
+import json
+
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0 } ]
+print 'DATA:', repr(data)
+
+print 'repr(data)             :', len(repr(data))
+
+plain_dump = json.dumps(data)
+print 'dumps(data)            :', len(plain_dump)
+
+small_indent = json.dumps(data, indent=2)
+print 'dumps(data, indent=2)  :', len(small_indent)
+
+with_separators = json.dumps(data, separators=(',',':'))
+print 'dumps(data, separators):', len(with_separators)
+
+    dumps() 的分隔符（separators）参数应当是一个元组，其中包含用来分隔列表中各项的字符串，以及分隔字典中键和值的字符串。默认为 （',',':'）。通过去除空白符，可以生成一个更为紧凑的输出。
+编码字典
+    JSON 格式要求字典的键是字符串。如果一个字典以非串类型作为键，对这个字典编码时，会生成一个异常。（异常类型取决于是加载了模块的纯 Python 版本还是快速的 C 版本，不过异常无非是 TypeError 或 ValueError）。要想绕开这个限制，一种办法是使用 skipkeys 参数告诉编码器跳过非串的键。
+
+import json
+
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0, ('d',):'D tuple' } ]
+
+print 'First attempt'
+try:
+	print json.dumps(data)
+except (TypeError, ValueError), err:
+	print 'ERROR:', err
+
+print
+print 'Second attempt'
+print json.dumps(data, skipkeys=True)
+
+    此时不会产生一个异常，而是会忽略非串键。
+处理定制类型
+    目前为止，所有例子都使用 Python 的内置类型，因为这些类型得到了 json 的内置支持。通常还需要对定制类编码，有两种办法可以做到。
+    给定以下需要编码的类：
+
+class MyObj(object):
+	def __init__(self, s):
+		self.s = s
+	def __repr__(self):
+		return '<MyObj(%s)>' % self.s
+
+    对 MyObj 实例编码的简单方法是定义一个函数，将未知类型转换为已知类型。这个函数并不需要具体完成编码，它只是将一个对象转换为另一个对象。
+
+import json
+import json_myobj
+
+obj = json_myobj.MyObj('instance value goes here')
+
+print 'First attempt'
+try:
+	print json.dumps(obj)
+except (TypeError, ValueError), err:
+	print 'ERROR:', err
+
+def convert_to_builtin_type(obj):
+	print 'default(', repr(obj), ')'
+	# Convert objects to a dictionary of their representation
+	d = { '__class__':obj.__class__.__name__,
+	      '__module__':obj.__module__,
+	      }
+	d.update(obj.__dict__)
+	return d
+
+print
+print 'With default'
+print json.dumps(obj, default=convert_to_builtin_type)
+
+    在 convert_to_builtin_type() 中，json 无法识别的类实例会转换为字典，其中包含足够的信息，如果程序可以访问所需的 Python 模块，则可以利用这些信息重新创建对象。
+    要对结果解码并创建一个 MyObj() 实例，可以使用 loads() 的 object_hook 参数关联解码器，从而可以从模块导入这个类，并用于创建实例。
+    对于从到来数据流解码的每个字典，都会调用 object_hook，这样就提供了一个机会，可以将字典转换为另外一种对象类型。hook 函数要返回调用应用所接收的对象而不是字典。
+
+import json
+
+def dict_to_object(d):
+	if '__class__' in d:
+		class_name = d.pop('__class__')
+		module_name = d.pop('__module__')
+		module = __import__(module_name)
+		print 'MODULE:', module.__name__
+		class_ = getattr(module, class_name)
+		print 'CLASS:', class_
+		args = dict( (key.encode('ascii'), value)
+			         for key, value in d.items())
+		print 'INSTANCE ARGS:', args
+		inst = class_(**args)
+	else:
+		inst = d
+	return inst
+
+encode_object = '''
+    [{"s": "instance value goes here",
+      "__module__": "json_myobj", "__class__": "MyObj"}]
+      '''
+myobj_instance = json.loads(encode_object,
+							object_hook=dict_to_object)
+print myobj_instance
+
+    由于 json 将串值转换为 unicode 对象，因此，用作类构造器的 keyword 参数之前，需要将它们重新编码为 ASCII 串。
+    对于内置类型也有类似的 hook 函数，如整数（parse_int）、浮点数（parse_float）和常量（parse_constant）。
+编码器和解码器类
