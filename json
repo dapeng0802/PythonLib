@@ -167,3 +167,125 @@ print myobj_instance
     由于 json 将串值转换为 unicode 对象，因此，用作类构造器的 keyword 参数之前，需要将它们重新编码为 ASCII 串。
     对于内置类型也有类似的 hook 函数，如整数（parse_int）、浮点数（parse_float）和常量（parse_constant）。
 编码器和解码器类
+    除了之前介绍的便利函数外，json 模块还提供了一些类来完成编码和解码。直接使用这些类可以访问另外的 API 来定制其行为。
+    JSONEncoder 使用一个可迭代接口生成编码数据“块”，从而更容易写至文件或网络套接字，而不必在内存中表示完整的数据结构。
+
+import json
+
+encoder = json.JSONEncoder()
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0 } ]
+
+for part in encoder.iterencode(data):
+	print 'PART:', part
+
+    输出按逻辑单元生成，而不是根据某个大小值。
+    encode() 方法基本上等价与表达式 ''.join(encoder.iterencode()) 生成的值，只不过之前会做一些额外的错误检查。
+    要对任意的对象编码，需要用一个类似于 convert_to_builtin_type() 中的实现覆盖 default() 方法。
+
+import json
+import json_myobj
+
+class MyEncoder(json.JSONEncoder):
+
+	def default(self, obj):
+		print 'default(', repr(obj), ')'
+		# Convert objects to a dictionary of their representation
+		d = { '__class__':obj.__class__.__name__,
+		      '__module__':obj.__module__,
+		      }
+		d.update(obj.__dict__)
+		return d
+
+obj = json_myobj.MyObj('internal data')
+print obj
+print MyEncoder().encode(obj)
+
+    输出与前一个实现的输出相同。
+    这里要解码文本，然后将字典转换为一个对象，与前面的实现相比，还需要多做一些工作，不过不算太多。
+
+import json
+
+class MyDecoder(json.JSONDecoder):
+
+	def __init__(self):
+		json.JSONDecoder.__init__(self,
+								  object_hook=self.dict_to_object)
+
+	def dict_to_object(self, d):
+		if '__class__' in d:
+			class_name = d.pop('__class__')
+			module_name = d.pop('__module__')
+			module = __import__(module_name)
+			print 'MODULE:', module.__name__
+			class_ = getattr(module, class_name)
+			print 'CLASS:', class_
+			args = dict( (key.encode('ascii'), value)
+				         for key, value in d.items())
+			print 'INSTANCE ARGS:', args
+			inst = class_(**args)
+		else:
+			inst = d
+		return inst
+
+encode_object = '''
+    [{"s": "instance value goes here",
+      "__module__": "json_myobj", "__class__": "MyObj"}]
+      '''
+myobj_instance = MyDecoder().decode(encode_object)
+print myobj_instance
+
+    输出与前面的例子相同。
+处理流和文件
+    到目前为止，所有例子都假设整个数据结构的编码版本可以一次完全放在内存中。对于很大的数据结构，更合适的做法可能是将编码直接写至一个类文件的对象。便利函数 load() 和 dump()  会接受一个类文件对象的引用，用于读写。
+
+import json
+from StringIO import StringIO
+
+data = [ { 'a':'A', 'b':(2, 4), 'c':3.0 } ]
+
+f = StringIO()
+json.dump(data, f)
+
+print f.getvalue()
+
+    类似于这个例子中使用的 StringIO 缓冲区，也可以使用套接字或常规的文件句柄。
+    尽管没有优化，即一次只读取数据的一部分，但 load() 函数还提供了一个好处，它封装了从流输入生成对象的逻辑。
+
+import json
+from StringIO import StringIO
+
+f = StringIO('[{"a":"A", "b":[2, 4], "c":3.0}]')
+print json.load(f)
+
+    类似于 dump()，任何类文件对象都可以传递到 load()。
+混合数据流
+    JSONDecoder 包含一个 raw_decode() 方法，如果一个数据结构后面跟有更多数据，如带尾部文本的 JSON 数据，可以用这个方法完成解码。返回值是对输入数据解码创建的对象，以及该数据的一个索引（指示解码从哪里结束）。
+
+import json
+
+decoder = json.JSONDecoder()
+def get_decoded_and_remainder(input_data):
+	obj, end = decoder.raw_decode(input_data)
+	remaining = input_data[end:]
+	return (obj, end, remaining)
+
+encoded_object = '[{"a": "A", "c": 3.0, "b": [2, 4]}]'
+extra_text = 'This text is not JSON.'
+
+print 'JSON first:'
+data = ' '.join([encoded_object, extra_text])
+obj, end, remaining = get_decoded_and_remainder(data)
+
+print 'Object              :', obj
+print 'End of parsed input :', end
+print 'remaining text      :', repr(remaining)
+
+print
+print 'JSON embedded:'
+try:
+	data = ' '.join([extra_text, encoded_object, extra_text])
+	obj, end, remaining = get_decoded_and_remainder(data)
+except ValueError, err:
+	print 'ERROR:', err
+
+    遗憾的是，这种做法只适用于对象出现在输入起始位置的情况。
