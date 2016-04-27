@@ -1,0 +1,95 @@
+[Python标准库]xmlrpclib——XML-RPC 的客户端库
+    作用：XML-RPC 通信的客户端库。
+    Python 版本：2.2 及以后版本
+    XML-RPC 是一个轻量级远程过程调用协议，建立在 HTTP 和 XML 之上。xmlrpclib 模块允许 Python 程序与使用任何语言编写的 XML-PRC 服务器通信。
+    本节中的所有例子都使用了 xmlrpclib_server.py 中定义的服务器，可以在源发布包中找到，这里给出这个服务器以供参考。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+from xmlrpclib import Binary
+import datetime
+
+server = SimpleXMLRPCServer(('localhost', 9000),
+							logRequests=True,
+							allow_none=True)
+server.register_introspection_functions()
+server.register_multicall_functions()
+
+class ExampleService:
+
+	def ping(self):
+		"""Simple function to respond when called
+		to demonstrate connectivity.
+		"""
+		return True
+
+	def now(self):
+		"""Returns the server current date and time."""
+		return datetime.datetime.now()
+
+	def show_type(self, arg):
+		"""Illustrates how types are passed in and out of
+		server methods.
+		Accepts one argument of any type.
+		Returns a tuple with string representation of the value,
+		the name of the type, and the value itself.
+		"""
+		return (str(arg), str(type(arg)), arg)
+
+	def raises_exception(self, msg):
+		"Always raises a RuntimeError with the message passed in"
+		raise RuntimeError(msg)
+
+	def send_back_binary(slef, bin):
+		"""Accepts single Binary argument, and unpacks and
+		repacks it to return it."""
+		data = bin.data
+		response = Binary(data)
+		return response
+
+server.register_instance(ExampleService())
+
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+连接服务器
+    要将一个客户连接到服务器，最简单的方法是实例化一个 ServerProxy 对象，为它指定服务器的 URI。例如，演示服务器在 localhost 的端口 9000 上运行。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+print 'Ping:', server.ping()
+
+    在这种情况下，服务的 ping() 方法没有任何参数，它会返回一个布尔值。
+    还可以有其他选项来支持其他类型的传输。HTTP 和 HTTPS 已经明确得到支持，二者都提供基本验证。要实现一个新的通信通道，只需要一个新的传输类。例如，可以在 SMTP 之上实现 XML-RPC，这可能是一个很有意思的练习。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000', verbose=True)
+print 'Ping:', server.ping()
+
+    指定 verbose 选项会提供调试信息，这对于解决通信错误会很有用。
+    如果需要其他系统，可以将默认编码由 UTF-8 改为其他编码。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000', encoding='ISO-8859-1')
+print 'Ping:', server.ping()
+
+    服务器会自动检测正确的编码。
+    allow_none 选项会控制 Python 的 None 值是自动转换为 nil 值还是会导致一个错误。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000', allow_none=True)
+print 'Allowed:', server.show_type(None)
+
+server = xmlrpclib.ServerProxy('http://localhost:9000', allow_none=False)
+try:
+	server.show_type(None)
+except TypeError as err:
+	print 'ERROR:', err
+
+    如果客户不允许 None，会在本地产生一个错误，不过如果未配置为允许 None，也可能从服务器产生错误。
