@@ -93,3 +93,160 @@ except TypeError as err:
 	print 'ERROR:', err
 
     如果客户不允许 None，会在本地产生一个错误，不过如果未配置为允许 None，也可能从服务器产生错误。
+数据类型
+    XML-RPC 协议能够识别一组有限的常用数据类型。这些类型可以作为参数或返回值传递，还可以结合来创建更为复杂的数据结构。
+
+import xmlrpclib
+import datetime
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+
+for t, v in [ ('boolen', True),
+			  ('integer', 1),
+			  ('float', 2.5),
+			  ('string', 'some text'),
+			  ('datetime', datetime.datetime.now()),
+			  ('array', ['a', 'list']),
+			  ('array', ('a', 'tuple')),
+			  ('structure', {'a':'dictionary'}),
+			]:
+	as_string, type_name, value = server.show_type(v)
+	print '%-12s:' % t, as_string
+	print '%12s ' % '', type_name
+	print '%12s ' % '', value
+
+
+    简单的类型包括：
+
+boolen      : True
+              <type 'bool'>
+              True
+integer     : 1
+              <type 'int'>
+              1
+float       : 2.5
+              <type 'float'>
+              2.5
+string      : some text
+              <type 'str'>
+              some text
+datetime    : 20160427T18:04:32
+              <type 'instance'>
+              20160427T18:04:32
+array       : ['a', 'list']
+              <type 'list'>
+              ['a', 'list']
+array       : ['a', 'tuple']
+              <type 'list'>
+              ['a', 'tuple']
+structure   : {'a': 'dictionary'}
+              <type 'dict'>
+              {'a': 'dictionary'}
+
+
+    所支持的这些类型可以嵌套，以创建任意复杂度的值。
+
+import xmlrpclib
+import datetime
+import pprint
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+
+data = { 'boolen': True,
+		 'integer': 1,
+		 'float': 2.5,
+		 'string': 'some text',
+		 'datetime': datetime.datetime.now(),
+		 'array': ['a', 'list'],
+		 'array': ('a', 'tuple'),
+		 'structure': {'a':'dictionary'},
+		 }
+arg = []
+for i in range(3):
+	d = {}
+	d.update(data)
+	d['integer'] = i
+	arg.append(d)
+print 'Before:'
+pprint.pprint(arg)
+
+print
+print 'After:'
+pprint.pprint(server.show_type(arg)[-1])
+
+    这个程序向示例服务器传递一个字典列表，其中包含所有支持的类型，由示例服务器返回数据。元组会转换为列表，datetime 实例转换为 DateTime 对象。否则，数据不变。
+    XML-RPC 支持日期作为一个内置类型，xmlrpclib 可以使用两个类在发出代理中表示日期值，或者从服务器接收时表示日期值。默认地，会使用 DateTime 的一个内部版本，不过如果设置了 use_datetime 选项，则会打开 datetime 支持，使用 datetime 模块中的类。
+传递对象
+    Python 类实例被处理为结构，并作为字典传递，对象的属性将作为字典中的值。
+
+import xmlrpclib
+import pprint
+
+class MyObj:
+	def __init__(self, a, b):
+		self.a = a
+		self.b = b
+	def __repr__(self):
+		return 'MyObj(%s, %s)' % (repr(self.a), repr(self.b))
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+
+o = MyObj(1, 'b goes here')
+print 'o  :', o
+pprint.pprint(server.show_type(o))
+o2 = MyObj(2, o)
+print 'o2 :', o2
+pprint.pprint(server.show_type(o2))
+
+    值从服务器发送回客户时，结果将是客户上的一个字典，因为值中没有编码相关信息来告诉服务器（或客户）应当将它实例化为类的一部分。
+二进制数据
+    所有传递到服务器的值都会编码，并自动转义。不过，有些数据类型包含的字符可能不是合法的 XML。例如，二进制图像数据可能包括 ASCII 控制范围 0~31 中的字节值。要传递二进制数据，最好使用 Binary 类对其编码来进行传输。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+
+s = 'This is a string with control characters' + '\0'
+print 'Local string:', s
+
+data = xmlrpclib.Binary(s)
+print 'As binary:', server.send_back_binary(data)
+
+try:
+	print 'As string:', server.show_type(s)
+except xmlrpclib.Fault as err:
+	print '\nERROR:', err
+
+    如果将一个包含 NULL 字节的串传递到 show_type()，XML 解析器会产生一个异常。
+    还可以利用 pickle 使用 Binary 对象发送对象。通过网络向可执行代码发送大量数据时，通常存在一些安全问题，这里也不例外（也就是说，除非通信通道是安全的，否则不要这么做）。
+
+import xmlrpclib
+import cPickle as pickle
+import pprint
+
+class MyObj:
+	def __init__(self, a, b):
+		self.a = a
+		self.b = b
+	def __repr__(self):
+		return 'MyObj(%s, %s)' % (repr(self.a), repr(self.b))
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+
+o = MyObj(1, 'b goes here')
+print 'Local:', id(o)
+print o
+
+print '\nAs object:'
+pprint.pprint(server.show_type(o))
+
+p = pickle.dumps(o)
+b = xmlrpclib.Binary(p)
+r = server.send_back_binary(b)
+
+o2 = pickle.loads(r.data)
+print '\nFrom pickle:', id(o2)
+pprint.pprint(o2)
+
+    Binary 实例的数据属性包含对象的 pickle 版本，所以在使用之前必须解除 pickle。这会得到一个不同的对象（有一个新的 id 值）。
+异常处理
