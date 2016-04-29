@@ -250,3 +250,48 @@ pprint.pprint(o2)
 
     Binary 实例的数据属性包含对象的 pickle 版本，所以在使用之前必须解除 pickle。这会得到一个不同的对象（有一个新的 id 值）。
 异常处理
+    由于 XML-RPC 服务器可以用任何语言编写，所以不能直接传输异常类。实际上，服务器中产生的异常会被转换为 Fault 对象，并在客户端作为异常本地产生。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+try:
+	server.raises_exception('A message')
+except Exception, err:
+	print 'Fault code:', err.faultCode
+	print 'Message   :', err.faultString
+
+    原来的错误消息保存在 faultString 属性中，fault-Code 设置为一个 XML-RPC 错误码。
+将调用结合在一个消息中
+    多调用（Multicall）是对 XML-RPC 协议的扩展，它允许同时发送多个调用，并收集响应，返回给调用者。Python 2.4 在 xmlrpclib 中增加了 MultiCall 类。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+multicall = xmlrpclib.MultiCall(server)
+multicall.ping()
+multicall.show_type(1)
+multicall.show_type('string')
+
+for i, r in enumerate(multicall()):
+	print i, r
+
+    要使用 MultiCall 实例，可以像 ServerProxy 一样调用 MultiCall 的方法，然后不带参数地调用这个对象来具体运行远程函数。返回值是一个迭代器，可以得到所有调用的结果。
+    如果某个调用导致一个 Fault，从迭代器生成结果时会产生异常，相应地不再生成更多结果。
+
+import xmlrpclib
+
+server = xmlrpclib.ServerProxy('http://localhost:9000')
+multicall = xmlrpclib.MultiCall(server)
+multicall.ping()
+multicall.show_type(1)
+multicall.raises_exception('Next to last call stops execution')
+multicall.show_type('string')
+
+try:
+	for i, r in enumerate(multicall()):
+		print i, r
+except xmlrpclib.Fault as err:
+	print 'ERROR:', err
+
+    由于第 3 个响应（来自 raises_exception()）生成了一个异常，所以无法再访问 show_type() 的响应。
