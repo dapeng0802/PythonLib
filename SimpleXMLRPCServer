@@ -1,0 +1,35 @@
+[Python标准库]SimpleXMLRPCServer——一个 XML-RPC 服务器
+    作用：实现一个 XML-RPC 服务器。
+    Python 版本：2.2 及以后版本
+    SimpleXMLRPCServer 模块包含有一些类，可以使用 XML-RPC 协议创建跨平台、语言独立的服务器。除了 Python 之外，还有很多其他语言的客户端库，这使得 XML-RPC 成为构建 RPC 式服务的一个便利选择。
+一个简单的服务器
+    这个简单的服务器示例提供了一个函数，它取一个字典名，并返回这个字典的内容。第一步是创建 SimpleXMLRPCServer 实例，告诉它在哪里监听到来的请求（这里要在 'localhost' 的端口 9000 监听）。下一步定义一个函数作为服务的一部分，并注册这个函数，使服务器知道如何调用该函数。最后一步是将这个服务器放在一个接收和响应请求的无限循环中。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+import logging
+import os
+
+server = SimpleXMLRPCServer(('localhost', 9000), logRequests=True)
+
+# Expose a function
+def list_contents(dir_name):
+	logging.debug('list_contents(%s)', dir_name)
+	return os.listdir(dir_name)
+server.register_function(list_contents)
+
+# Start the server
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    使用 xmlrpclib 的客户类，可以在 URL http://localhost:9000 访问这个服务器。这个示例代码展示了如何从 Python 调用 list_contents() 服务。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+print proxy.list_contents('/tmp/')
+
+    ServerProxy 使用基 URL 连接到服务器，然后在代理上直接调用方法。代理上调用的各个方法会转换为对服务器的一个请求。参数使用 XML 格式化，然后通过一个 POST 消息发送到服务器。服务器解包 XML，根据从客户调用的方法名来确定调用哪个函数。参数将传递到这个函数，返回值将转换回 XML，以便返回给客户。
+备用 API 名
