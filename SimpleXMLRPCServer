@@ -33,3 +33,98 @@ print proxy.list_contents('/tmp/')
 
     ServerProxy 使用基 URL 连接到服务器，然后在代理上直接调用方法。代理上调用的各个方法会转换为对服务器的一个请求。参数使用 XML 格式化，然后通过一个 POST 消息发送到服务器。服务器解包 XML，根据从客户调用的方法名来确定调用哪个函数。参数将传递到这个函数，返回值将转换回 XML，以便返回给客户。
 备用 API 名
+    有时，模块或库中使用的函数名并不是外部 API 中要使用的名。函数名之所以有变化，可能是因为加载了一个平台特定的实现，或者服务 API 要根据一个配置文件动态地构建，也可能实际函数要用桩函数替换来完成测试。要注册一个有备用名的函数，需要将这个名作为第 2 个参数传递到 register_function()，如下所示。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+import os
+
+server = SimpleXMLRPCServer(('localhost', 9000), logRequests=True)
+
+# Expose a function with an alternate name
+def list_contents(dir_name):
+	return os.listdir(dir_name)
+server.register_function(list_contents, 'dir')
+
+# Start the server
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    客户现在应当是使用 dir() 而不是 list_contents()。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+print 'dir():', proxy.dir('/tmp/')
+try:
+	print '\nlist_contents():', proxy.list_contents('/tmp/')
+except xmlrpclib.Fault as err:
+	print '\nERROR:', err
+
+    调用 list_contents() 会得到一个错误，因为服务器上不再有以这个名字注册的处理程序。
+加点的 API 名
+    还可以用通常情况下不能作为合法 Python 标识符的名字来注册单个函数。例如，可以在名字中包含一个点号（.）分隔服务中的命名空间。下面的例子扩展了“目录”服务，增加了“创建”和“删除”调用。所有函数注册时都使用了前缀“dir.”，这样一来，同一个服务器可以使用不同的前缀提供其他服务。这个例子中还有一点不同，有些函数会返回 None，所以必须告诉服务器将 None 值转换为一个 nil 值。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+import os
+
+server = SimpleXMLRPCServer(('localhost', 9000), allow_none=True)
+
+server.register_function(os.listdir, 'dir.list')
+server.register_function(os.mkdir, 'dir.create')
+server.register_function(os.rmdir, 'dir.remove')
+
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    要在客户中调用服务函数，只需用加点的名称指示函数。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+print 'BEFORE       :', 'EXAMPLE' in proxy.dir.list('/tmp')
+print 'CREATE       :', proxy.dir.create('/tmp/EXAMPLE')
+print 'SHOULD EXIST :', 'EXAMPLE' in proxy.dir.list('/tmp')
+print 'REMOVE       :', proxy.dir.remove('/tmp/EXAMPLE')
+print 'AFTER        :', 'EXAMPLE' in proxy.dir.list('/tmp')
+
+    假设当前系统上没有 /tmp/EXAMPLE 文件，示例客户脚本的输出如下。
+
+BEFORE       : False
+CREATE       : None
+SHOULD EXIST : True
+REMOVE       : None
+AFTER        : False
+
+任意 API 名
+    还有一个有趣的特性，能够用一些非法的 Python 对象属性名来注册函数。下面的示例服务用名字“multiply args”注册了一个函数。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+import os
+
+server = SimpleXMLRPCServer(('localhost', 9000))
+
+def my_function(a, b):
+	return a * b
+server.register_function(my_function, 'multiply args')
+
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    由于所注册的名字包含一个空格，因此不能使用点记法直接从代理访问。不过，可以使用 getattr()。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+print getattr(proxy, 'multiply args')(5, 5)
+
+    但是要避免用类似这样的名字创建服务。提供这个例子并不是因为这种想法很好，而是因为确实存在这种有任意名的服务、可能需要新程序才能调用这些服务。
+公布对象的方法
