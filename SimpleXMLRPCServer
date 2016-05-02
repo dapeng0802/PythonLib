@@ -128,3 +128,174 @@ print getattr(proxy, 'multiply args')(5, 5)
 
     但是要避免用类似这样的名字创建服务。提供这个例子并不是因为这种想法很好，而是因为确实存在这种有任意名的服务、可能需要新程序才能调用这些服务。
 公布对象的方法
+    前面几节讨论了使用好的命名约定和命名空间机制建立 API 的技术。要在 API 中结合命名空间，另一种方法是使用类实例并公布其方法。可以使用仅有一个方法的实例重新创建第一个例子。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+import os
+import inspect
+
+server = SimpleXMLRPCServer(('localhost', 9000))
+
+class DirectoryService:
+	def list(self, dir_name):
+		return os.listdir(dir_name)
+
+server.register_instance(DirectoryService())
+
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    客户可以直接调用这个方法，如下所示。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+print proxy.list('/tmp')
+
+    不过，服务的“dir”前缀没有丢失。可以定义一个类来建立一个服务树（可以从客户调用）加以恢复。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+import os
+import inspect
+
+server = SimpleXMLRPCServer(('localhost', 9000), logRequests=True)
+
+class ServiceRoot:
+	pass
+
+class DirectoryService:
+	def list(self, dir_name):
+		return os.listdir(dir_name)
+
+root = ServiceRoot()
+root.dir = DirectoryService()
+
+server.register_instance(root, allow_dotted_names=True)
+
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    通过注册 ServiceRoot 实例，并启用 allow_dotted_names，当一个请求到来时，服务器有权限遍历这个对象树从而使用 getattr() 查找指定的方法。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+print proxy.dir.list('/tmp')
+
+    dir.list() 的输出与之前实现的输出相同。
+分派调用
+    默认情况下，register_instance() 会查找实例的所有可调用属性（属性名以一个下划线 ("_") 开头的除外），并用其名字注册。对于公布的方法，为了更谨慎，可以使用定制的分派逻辑，如下例所示。
+
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+import os
+import inspect
+
+server = SimpleXMLRPCServer(('localhost', 9000), logRequests=True)
+
+def expose(f):
+	"Decorator to set exposed flag on a function."
+	f.exposed = True
+	return f
+
+def is_exposed(f):
+	"Test whether another function should be publicly exposed."
+	return getattr(f, 'exposed', False)
+
+class MyService:
+	PREFIX = 'prefix'
+
+	def _dispatch(self, method, params):
+		# Remove our prefix from the method name
+		if not method.startswith(self.PREFIX + '.'):
+			raise Exception('method "%s" is not supported' % method)
+
+		method_name = method.partition('.')[2]
+		func = getattr(self, method_name)
+		if not is_exposed(func):
+			raise Exception('method "%s" is not supported' % method)
+
+		return func(*params)
+
+	@expose
+	def public(self):
+		return 'This is public'
+
+	def private(self):
+		return 'This is private'
+server.register_instance(MyService())
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    MyService 的 public() 方法标志为要公布到 XML-RPC 服务，而 private() 不公布。客户试图访问 MyService 中的一个函数时会调用 _dispatch() 方法。它首先强制使用一个前缀（在这里是“prefix.”，不过也可以使用任意的串）。然后要求这个函数有一个名为 exposed 的属性，而且值为 true。为方便起见，这里使用一个修饰符在函数上设置这个 expeosed 标志。
+    以下是一些示例客户调用。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+print 'public():', proxy.prefix.public()
+try:
+	print 'private():', proxy.prefix.private()
+except Exception, err:
+	print '\nERROR:', err
+try:
+	print 'public() without prefix:', proxy.public()
+except Exception, err:
+	print '\nERROR:', err
+
+    还有另外一些方法来覆盖分派机制，包括直接从 SimpleXMLRPCServer 派生子类。
+自省 API
+    与很多网络服务一样，可以查询一个 XML-RPC 服务器来询问它支持哪些方法，并了解如何使用这些方法。SimpleXMLRPCServer 包括一组公共方法来完成这个自省。默认情况下，这些方法是关闭的，不过可以用 register_introspection_functions() 启用。通过在服务类上定义 _listMethods() 和 _methodHelp()，可以在服务中增加对 system.listMethods() 和 system.methodHelp() 的支持。
+
+from SimpleXMLRPCServer import ( SimpleXMLRPCServer, list_public_methods)
+import os
+import inspect
+
+server = SimpleXMLRPCServer(('localhost', 9000), logRequests=True)
+server.register_introspection_functions()
+
+class DirectoryService:
+
+	def _listMethods(self):
+		return list_public_methods(self)
+
+	def _methodHelp(self, method):
+		f = getattr(self, method)
+		return inspect.getdoc(f)
+
+	def list(self, dir_name):
+		"""list(dir_name) => [<filenames>]
+
+		Returns a list containing the contents of
+		the named directory.
+		"""
+		return os.lostdir(dir_name)
+
+server.register_instance(DirectoryService())
+
+try:
+	print 'Use Control-C to exit'
+	server.serve_forever()
+except KeyboardInterrupt:
+	print 'Exiting'
+
+    在这里，便利函数 list_public_methods() 扫描一个实例，返回不是以下划线 (_) 开头的可调用属性名。重新定义 _listMethods() 来应用所需的规则。类似地，对于这个基本例子，_methodHelp() 返回了函数的 docstring，不过也可以写为从其他来源构建一个帮助文本串。
+    这个客户会查询服务器，并报告所有可公开调用的方法。
+
+import xmlrpclib
+
+proxy = xmlrpclib.ServerProxy('http://localhost:9000')
+for method_name in proxy.system.listMethods():
+	print '=' * 60
+	print method_name
+	print '-' * 60
+	print proxy.system.methodHelp(method_name)
+	print
