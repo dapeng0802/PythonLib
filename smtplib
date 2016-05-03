@@ -1,0 +1,79 @@
+[Python标准库]smtplib——简单邮件传输协议客户
+    作用：与 SMTP 服务器交互，包括发送 Email。
+    Python 版本：1.5.2 及以后版本
+    smtplib 包括一个 SMTP 类，可以用来与邮件服务器通信发送邮件。
+发送 Email 消息
+    SMTP 最常见的用法就是连接到邮件服务器发送消息。可以把邮件服务器主机名和端口传递到构造函数，也可以显示调用 connect()。一旦连接，可以调用 sendmail() 并提供信封参数和消息体。消息文本要完整并遵循 RFC 2882，因为 smtplib 根本不会修改内容或首部。这说明，调用者需要添加 From 和 To 首部。
+
+import smtplib
+import email.utils
+from email.mime.text import MIMEText
+
+# Create the message
+msg = MIMEText('This is the body of the message.')
+msg['To'] = email.utils.formataddr(('Recipient', 'recipient@example.com'))
+msg['From'] = email.utils.formataddr(('Author', 'author@example.com'))
+msg['Subject'] = 'Simple test message'
+
+server = smtplib.SMTP('mail')
+server.set_debuglevel(True) # show communication with the server
+try:
+	server.sendmail('author@example.com', ['recipient@example.com'], msg.as_string())
+finally:
+	server.quit()
+
+    这个例子还打开了调试，以显示客户与服务器之间的通信。否则，这个示例根本不会产生任何输出。
+    sendmail() 的第 2 个参数，即接收者，会作为一个列表传递。这个列表中可以包括任意多个地址，将把消息按顺序逐个传送到各个地址。由于信封消息与消息首部是分开的，所以通过把地址包含在方法参数中而不是置于消息首部，可以实现暗送（blind carbon copy， BCC）。
+认证和加密
+    SMTP 类还会处理认证和传输层安全（transport layer security，TLS）加密（如果服务器提供支持）。要确定服务器是否支持 TLS，可以直接调用 ehlo() 为服务器标识客户，询问可以得到哪些扩展。然后调用 has_extn() 来检查结果。启动 TLS 之后，在认证之前必须再次调用 ehlo()。
+
+import smtplib
+import email.utils
+from email.mime.text import MIMEText
+import getpass
+
+# Prompt the user for connection info
+to_email = raw_input('Recipient: ')
+servername = raw_input('Mail server name: ')
+username = raw_input('Mail username: ')
+password = getpass.getpass("%s's password: " % username)
+
+# Create the message
+msg = MIMEText('Test message from PyMOTW.')
+msg.set_unixfrom('author')
+msg['To'] = email.utils.formataddr(('Recipient', to_email))
+msg['From'] = email.utils.formataddr(('Author', 'author@example.com'))
+msg['Subject'] = 'Test from PyMOTW'
+
+server = smtplib.SMTP(servername)
+try:
+	server.set_debuglevel(True)
+
+	# identify ourselves, promting server for supported features
+	server.ehlo()
+
+	# If we can encrypt this session, do it
+	if server.has_extn('STARTTLS'):
+		server.starttls()
+		server.ehlo() # reidentify ourselves over TLS connection
+
+	server.login(username, password)
+	server.sendmail('author@example.com', [to_email], msg.as_string())
+finally:
+	server.quit()
+
+    启用 TLS 之后，STARTTLS 扩展不会出现在对 EHLO 的应答中。
+验证 Email 地址
+    SMTP 协议包括一个命令来询问服务器地址是否合法。通常，VRFY 是禁用的，以避免垃圾邮件工具（spammer）查找到合法的 Email 地址。不过，如果启用这个命令，客户可以询问服务器一个地址是否合法，并接收一个状态码指示其合法性，同时提供用户的全名（如果有）。
+
+import smtplib
+
+server = smtplib.SMTP('mail')
+server.set_debuglevel(True) # show communication with the server
+try:
+	dhellmann_result = server.verify('dhellmann')
+	notthere_result = server.verify('notthere')
+finally:
+	server.quit()
+
+    如输出中最后两行所示，地址 dhellmann 是合法的，而 notthere 不合法。
