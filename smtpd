@@ -1,0 +1,86 @@
+[Python标准库]smtpd——示例邮件服务器
+    作用：包含一些实现 SMTP 服务器的类。
+    Python 版本：2.1 及以后版本
+    smtpd 模块包括一些类来构建简单的邮件传输协议服务器。这是 smtplib 使用的协议的服务器端。
+邮件服务器基类
+    已经提供的所有示例服务器的基类都是 SMTPServer。它会处理与客户的通信以及接收到来的数据，并提供一个方便的 hook，可以覆盖这个 hook，从而一旦得到完整的消息就可以处理消息。
+    构造函数参数包括本地地址和远程地址：要在本地地址监听连接，代理消息将传送到这个远程地址。方法 process_message() 提供为一个 hook，要由派生类覆盖。接收到完整的消息时会调用这个方法，并指定以下参数：
+    peer：客户的地址，这是一个包含 IP 和到来端口的元组。
+    mailfrom：消息信封以外的“from”消息，传送消息时由客户提供给服务器。这个消息不一定总与 From 首部匹配。
+    repttos：消息信封中的接收者列表。同样地，这个列表不一定总与 To 首部匹配，特别是秘密送给接收者时。
+    data：完整的 RFC 2822 消息体。
+    process_message() 的默认实现只产生一个 NotImplementedError 异常。下面的例子定义了一个子类，它覆盖了这个方法，将打印接收到的消息的有关信息。
+
+import smtpd
+import asyncore
+
+class CustonSMTPServer(smtpd.SMTPServer):
+
+	def process_message(self, peer, mailfrom, rcpttos, data):
+		print 'Receiving message from:', peer
+		print 'Message addressed from:', mailfrom
+		print 'Message addressed to  :', rcpttos
+		print 'Message length        :', len(data)
+		return
+
+server = CustonSMTPServer(('127.0.0.1', 1025), None)
+
+asyncore.loop()
+
+    SMTPServer 使用了 asyncore，所以要运行服务器，需要调用 asyncore.loop()。
+    还需要一个客户来展示服务器。可以修改 smtplib 一节中的某个例子来创建一个客户，向在端口 1025 本地运行的测试服务器发送数据。
+
+import smtplib
+import email.utils
+from email.mime.text import MIMEText
+
+# Create the message
+msg = MIMEText('This is the body of the message.')
+msg['To'] = email.utils.formataddr(('Recipient', 'recipient@example.com'))
+msg['From'] = email.utils.formataddr(('Author', 'author@example.com'))
+msg['Subject'] = 'Simple test message'
+
+server = smtplib.SMTP('127.0.0.1', 1025)
+server.set_debuglevel(True) # show communication with the server
+try:
+	server.sendmail('author@example.com', ['recipient@example.com'], msg.as_string())
+finally:
+	server.quit()
+
+    要测试这些程序，可以在一个终端窗口运行 smtpd_custom.py，在另外一个终端窗口运行 smtpd_senddata.py。
+调试服务器
+    前面的例子显示了 process_message() 的参数，不过 smtpd 还包括一个专门设计的服务器，名为 DebuggingServer，用来完成更完备的调试。它会把到来的消息完整地打印到控制台，然后停止处理（它不会把消息转发给一个真正的邮件服务器）。
+
+import smtpd
+import asyncore
+
+server = smtpd.DebuggingServer(('127.0.0.1', 1025), None)
+
+asyncore.loop()
+
+    使用前面的 smtpd_senddata.py 客户程序，以下是 DebuggingServer 的输出。
+
+---------- MESSAGE FOLLOWS ----------
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+To: Recipient <recipient@example.com>
+From: Author <author@example.com>
+Subject: Simple test message
+X-Peer: 127.0.0.1
+
+This is the body of the message.
+------------ END MESSAGE ------------
+
+代理服务器
+    PureProxy 类实现了一个简单的代理服务器。到来的消息将作为构造函数的一个参数，向上转发服务器。
+    建立代理服务器的步骤与建立调试服务器的步骤类似。
+
+import smtpd
+import asyncore
+
+server = smtpd.PureProxy(('127.0.0.1', 1025), ('mail', 25))
+
+asyncore.loop()
+
+    不过，它不会打印任何输出，所以要验证是否正常工作，需要查看邮件服务器日志。
