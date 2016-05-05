@@ -1,0 +1,42 @@
+[Python标准库]imaplib——IMAP4 客户库
+    作用：完成 IMAP4 通信的客户库。
+    Python 版本：1.5.2 及以后版本
+    imaplib 实现了一个可与 IMAP4 服务器通信的客户，IMAP 表示 Internet 消息访问协议（Internet Message Access Protocol）。IMAP 协议定义了一组发送到服务器的命令，以及发回客户的响应。大多数命令都可与作为 IMAP4 对象的方法得到（IMAP4 对象用于与服务器通信）。
+    下面的例子将讨论 IMAP 协议的一部分，不过并不完备。要想全面地了解有关的详细信息，可与参考 RFC 3501。
+变种
+    有 3 个客户类可与使用不同的机制与服务器通信。第 1 个是 IMAP4，它使用明文套接字；第 2 个是 IMAP4_SSL，使用基于 SSL 套接字的加密通信；最后 1 个是 IMAP4_stream，使用一个外部命令的标准输入和标准输出。这里的所有例子都使用 IMAP4_SSL，不过其他类的 API 也是类似的。
+连接到服务器
+    要建立与一个 IMAP 服务器的连接，有 2 个步骤。首先，建立套接字连接本身。其次，用服务器上的一个账户作为用户完成认证。下面的示例代码会从一个配置文件读取服务器和用户信息。
+
+import imaplib
+import ConfigParser
+import os
+
+def open_connection(verbose=False):
+	# Read the config file
+	config = ConfigParser.ConfigParser()
+	config.read([os.path.expanduser('~/.pymotw')])
+
+	# Connect to the server
+	hostname = config.get('server', 'hostname')
+	if verbose:
+		print 'Connecting to', hostname
+	connection = imaplib.IMAP4_SSL(hostname)
+
+	# Login to our account
+	username = config.get('account', 'username')
+	password = config.get('account', 'password')
+	if verbose:
+		print 'Logging in as', username
+	connection.login(username, password)
+	return connection
+
+if __name__ == '__main__':
+	c = open_connection(verbose=True)
+	try:
+		print c
+	finally:
+		c.logout()
+
+    运行时，open_connection() 从用户主目录中的一个文件读取配置信息，然后打开 IMAP4_SSL 连接并认证。
+    本节的其他例子还会重用这个模块，以避免重复代码。
