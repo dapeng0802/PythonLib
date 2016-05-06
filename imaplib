@@ -40,3 +40,150 @@ if __name__ == '__main__':
 
     运行时，open_connection() 从用户主目录中的一个文件读取配置信息，然后打开 IMAP4_SSL 连接并认证。
     本节的其他例子还会重用这个模块，以避免重复代码。
+    如果建立了连接，但是认证失败，会产生一个异常。
+
+import imaplib
+import ConfigParser
+import os
+
+# Read the config file
+config = ConfigParser.ConfigParser()
+config.read([os.path.expanduser('~/.pymotw')])
+
+# Connect to the server
+hostname = config.get('server', 'hostname')
+print 'Connecting to', hostname
+connection = imaplib.IMAP4_SSL(hostname)
+
+# Login to our account
+username = config.get('account', 'username')
+password = config.get('account', 'password')
+print 'Logging in as', username
+try:
+	connection.login(username, password)
+except Exception as err:
+	print 'ERROR:', err
+
+    这个例子故意用错误的密码来触发这个异常。
+示例配置
+    示例账户有 3 个邮箱：INBOX、Archive 和 2008（Archive 的一个自文件夹）。邮箱的层次结构如下：
+    INBOX
+    Archive
+    - 2008
+    INBOX 文件夹下有一个未读的消息，Archive/2008 中有一个已读的消息。
+列出邮箱
+    要获取一个账户的可用邮箱，可以使用 list() 方法。
+
+import imaplib
+from pprint import pprint
+from imaplib_connect import open_connection
+
+c = open_connection()
+try:
+	typ, data = c.list()
+	print 'Response code:', typ
+	print 'Response:'
+	pprint(data)
+finally:
+	c.logout()
+
+    返回值是一个 tuple，其中包含一个响应码，以及由服务器返回的数据。除非出现一个错误，否则响应码都是 OK。list() 的数据是一个字符串序列，其中包含标志、层次结构定界符和每个邮箱的邮箱名。
+    可以使用 re 或 csv 将各个响应串划分为 3 个部分。
+
+import imaplib
+import re
+from imaplib_connect import open_connection
+
+list_response_pattern = re.compile(
+	r'\((?P<flags>.*?)\) "(?P<delimiter>.*)" (?P<name>.*)'
+	)
+
+def parse_list_response(line):
+	match = list_response_pattern.match(line)
+	flags, delimiter, mailbox_name = match.groups()
+	mailbox_name = mailbox_name.strip('"')
+	return (flags, delimiter, mailbox_name)
+
+if __name__ == '__main__':
+	c = open_connection()
+	try:
+		typ, data = c.list()
+	finally:
+		c.logout()
+	print 'Response code:', typ
+
+	for line in data:
+		print 'Server response:', line
+		flags, delimiter, mailbox_name = parse_list_response(line)
+		print 'Parsed response:', (flags, delimiter, mailbox_name)
+
+    如果邮箱名包含空格，服务器会对邮箱名加引号，不过以后在对服务器的其他调用中使用邮箱名时需要将这些引号去除。
+    list() 有一些参数可以指定层次结构中的邮箱。例如，要列出 Archive 的子文件夹，需要传入“Archive”作为目录（directory）参数。
+
+import imaplib
+from imaplib_connect import open_connection
+
+if __name__ == '__main__':
+	c = open_connection()
+	try:
+		typ, data = c.list(directory='Archive')
+	finally:
+		c.logout()
+	print 'Response code:', typ
+
+	for line in data:
+		print 'Server response:', line
+
+    这样只会返回一个子文件夹。
+    或者，要列出与一个模式匹配的文件夹，需要传入模式（pattern）参数。
+
+import imaplib
+from imaplib_connect import open_connection
+
+if __name__ == '__main__':
+	c = open_connection()
+	try:
+		typ, data = c.list(pattern='*Archive*')
+	finally:
+		c.logout()
+	print 'Response code:', typ
+
+	for line in data:
+		print 'Server response:', line
+
+    在这种情况下，Archive 和 Archive.2008 都会包含在响应中。
+邮箱状态
+    使用 status() 可以询问内容的有关统计信息。下表列出了标准中定义的状态条件。
+    ----------------------------------------------------
+          条件      |               含义
+    ----------------------------------------------------
+        MESSAGES    |    邮箱中的消息数
+    ----------------------------------------------------
+        RECENT      |    设置了 \Recent 标志的消息数
+    ----------------------------------------------------
+        UIDNEXT     |    邮箱的下一个唯一标识符值
+    ----------------------------------------------------
+        UIDVALIDITY |    邮箱的唯一标识符合法性值
+    ----------------------------------------------------
+        UNSEEN      |    未设置 \Seen 标志的消息数
+    ----------------------------------------------------
+    状态条件必须格式化为空格分隔的字符串，并包围在括号中，编码采用 IMAP4 规范中“列表”的编码。
+
+import imaplib
+import re
+from imaplib_connect import open_connection
+from imaplib_list_parse import parse_list_response
+
+if __name__ == '__main__':
+	c = open_connection()
+	try:
+		typ, data = c.list()
+		for line in data:
+			flags, delimiter, mailbox = parse_list_response(line)
+			print c.status(
+				mailbox,
+				'(MESSAGES RECENT UIDNEXT UIDVALIDITY UNSEEN)')
+	finally:
+		c.logout()
+
+    返回值仍是 tuple，其中包含一个响应码和一个来自服务器的信息列表。在这里，列表中包含一个字符串，其格式为首先是邮箱名（用引号包围），然后是状态条件和值（用括号括起）。
