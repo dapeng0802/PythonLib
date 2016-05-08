@@ -187,3 +187,305 @@ if __name__ == '__main__':
 		c.logout()
 
     返回值仍是 tuple，其中包含一个响应码和一个来自服务器的信息列表。在这里，列表中包含一个字符串，其格式为首先是邮箱名（用引号包围），然后是状态条件和值（用括号括起）。
+选择邮箱
+    一旦客户得到认证，基本操作模式为选择一个邮箱，然后向服务器询问邮箱中的消息。这个连接是有状态的，所以选择一个邮箱之后，所有命令都会处理该邮箱中的消息，直至选择一个新邮箱。
+
+import imaplib
+from imaplib_connect import open_connection
+
+c = open_connection()
+try:
+	typ, data = c.select('INBOX')
+	print typ, data
+	num_msgs = int(data[0])
+	print 'There are %d messages in INBOX' % num_msgs
+finally:
+	c.close()
+	c.logout()
+
+    响应数据包含邮箱中的消息总数。
+    如果指定了一个不合法的邮箱，响应码为 NO。
+
+import imaplib
+from imaplib_connect import open_connection
+
+c = open_connection()
+try:
+	typ, data = c.select('Does Not Exist')
+	print typ, data
+finally:
+	c.logout()
+
+    数据中包含一个描述问题的错误消息。
+搜索消息
+    选择邮箱之后，可以使用 search() 来获取邮箱中消息的 ID。
+
+import imaplib
+from imaplib_connect import open_connection
+from imaplib_list_parse import parse_list_response
+
+c = open_connection()
+try:
+	typ, mailbox_data = c.list()
+	for line in mailbox_data:
+		flags, delimiter, mailbox_name = parse_list_response(line)
+		c.select(mailbox_name, readonly=True)
+		typ, msg_ids = c.search(None, 'ALL')
+		print mailbox_name, typ, msg_ids
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    消息 ID 有服务器分配，并依赖于具体实现。IMAP4 协议实现了两种 ID，一种是事务期间给定时刻消息的顺序 ID，另一种是消息的 UID 标识符，并对二者做出了严格区分，不过并非所有服务器都同时实现了这两类 ID。
+搜索规则
+    还可以使用很多其他搜索规则，包括查看消息的日期、标志和其他首部。要全面了解有关详细消息，可以参考 RFC 3501。
+    要查找主题中包含“test message 2”的消息，应当如下构造搜索规则：
+
+(SUBJECT "test message 2")
+
+    这个例子会查找所有邮箱中标题为“test message 2”的消息。
+
+import imaplib
+from imaplib_connect import open_connection
+from imaplib_list_parse import parse_list_response
+
+c = open_connection()
+try:
+	typ, mailbox_data = c.list()
+	for line in mailbox_data:
+		flags, delimiter, mailbox_name = parse_list_response(line)
+		c.select(mailbox_name, readonly=True)
+		typ, msg_ids = c.search(None, '(SUBJECT "test message 2")')
+		print mailbox_name, typ, msg_ids
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    这个账户中只有一个这样的消息，位于 INBOX 中。
+    搜索规则还可以结合。
+
+import imaplib
+from imaplib_connect import open_connection
+from imaplib_list_parse import parse_list_response
+
+c = open_connection()
+try:
+	typ, mailbox_data = c.list()
+	for line in mailbox_data:
+		flags, delimiter, mailbox_name = parse_list_response(line)
+		c.select(mailbox_name, readonly=True)
+		typ, msg_ids = c.search(None, '(FROM "Doug" SUBJECT "test message 2")')
+		print mailbox_name, typ, msg_ids
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    这里用一个逻辑与（and）操作来结合搜索规则。
+获取消息
+    使用 fetch() 方法，可以利用 search() 返回的标识符来获取消息的内容（或部分内容），以便做进一步处理。这个方法有两个参数：要获取的消息和所获取的消息部分。
+    message_ids 参数是一个用逗号分隔的 id 列表（例如，“1”，“1,2”）或者是一个 id 区间（如 1:2）。message_parts 参数是一个消息段名 IMAP 列表。与 search() 的搜索规则类似，IMAP 协议指定了命名消息段，所以客户可以高效地获取他们真正需要的那部分消息。例如，要获取一个邮箱中消息的首部，可以使用 fetch() 并指定参数 BODY.PEEK[HEADER]。
+
+import imaplib
+from imaplib_connect import open_connection
+import pprint
+
+imaplib.Debug = 4
+c = open_connection()
+try:
+	c.select('INBOX', readonly=True)
+	typ, msg_data = c.fetch('1', '(BODY.PEEK[HEADER] FLAGS)')
+	pprint.pprint(msg_data)
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    fetch() 的返回值已经部分解析，所以与 list() 的返回值相比，从某种程度上讲会更难处理。可以打开调试，显示客户与服务器之间完整的交互，来理解为什么会这样。
+    FETCH 命令的响应中，首先是标志，然后指示有 595 字节的首部数据。客户用这个消息响应构造一个元组，然后用一个包含右括号（“)”）的字符串（服务器在获取命令响应的最后会发送这个字符串）结束这个序列。由于采用了这种格式，就能更容易地单独获取信息的不同部分，或者重新组合响应并在客户端解析。
+
+import imaplib
+from imaplib_connect import open_connection
+import pprint
+
+c = open_connection()
+try:
+	c.select('INBOX', readonly=True)
+
+	print 'HEADER:'
+	typ, msg_data = c.fetch('1', '(BODY.PEEK[HEADER])')
+	for resonse_part in msg_data:
+		if isinstance(resonse_part, tuple):
+			print resonse_part[1]
+	print 'BODY TEXT:'
+	typ, msg_data = c.fetch('1', '(BODY.PEEK[TEXT])')
+	for resonse_part in msg_data:
+		if isinstance(resonse_part, tuple):
+			print resonse_part[1]
+	print '\nFLAGS:'
+	typ, msg_data = c.fetch('1', '(FLAGS)')
+	for resonse_part in msg_data:
+		print resonse_part
+		print imaplib.ParseFlags(resonse_part)
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    单独地获取值还有一个额外的好处，这样更易于使用 ParseFlags() 解析响应中的标志。
+完整消息
+    如前所述，客户可以向服务器单独请求消息中的单个部分。还可以获取整个消息（采用 RFC 2822 规范格式化的邮件消息），并用 email 模块的类进行解析。
+
+import imaplib
+from imaplib_connect import open_connection
+import email
+
+c = open_connection()
+try:
+	c.select('INBOX', readonly=True)
+
+	typ, msg_data = c.fetch('1', '(RFC822)')
+	for resonse_part in msg_data:
+		if isinstance(resonse_part, tuple):
+			msg = email.message_from_string(resonse_part[1])
+			for header in [ 'subject', 'to', 'from' ]:
+				print '%-8s: %s' % (header.upper(), msg[header])
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    利用 email 模块中的解析器，可以非常容易地访问和处理消息。上面的例子只打印了各个消息的一些首部。
+上传消息
+    要向邮箱添加一个新消息，需要构造一个 Message 实例，并把它传递到 append() 方法，同时提供消息的时间戳。
+
+import imaplib
+from imaplib_connect import open_connection
+import email.message
+import time
+
+new_message = email.message.Message()
+new_message.set_unixfrom('pymotw')
+new_message['Subject'] = 'subject goes here'
+new_message['From'] = 'pymotw@example.com'
+new_message['To'] = 'example@example.com'
+new_message.set_payload('This is the body of the message.\n')
+print new_message
+
+c = open_connection()
+try:
+	c.append('INBOX', '',
+		imaplib.Time2Internaldate(time.time()),
+		str(new_message))
+
+	# Show the headers for all messages in the mailbox
+	c.select('INBOX')
+	typ, [msg_ids] = c.search(None, 'ALL')
+	for num in msg_ids.split():
+		typ, msg_data = c.fetch(num, '(BODY.PEEK[HEADER])')
+		for response_part in msg_data:
+			if isinstance(response_part, tuple):
+				print '\n%s:' % num
+				print response_part[1]
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    这个例子中使用的消息内容（payload）是一个简单的纯文本 Email 体。Message 还支持 MIME 编码的多部分消息。
+移动和复制消息
+    一旦消息上传到服务器，则可以使用 move() 或 copy() 移动或复制，而无须下载。与 fetch() 一样，这些方法要处理消息 id 区间。
+
+import imaplib
+from imaplib_connect import open_connection
+
+c = open_connection()
+try:
+	# Find the "SEEN" messages in INBOX
+	c.select('INBOX')
+	typ, [response] = c.search(None, 'SEEN')
+	if typ != 'OK':
+		raise RuntimeError(response)
+	# Create a new mailbox, "Archive.Today"
+	msg_ids = ','.join(response.split(' '))
+	typ, create_response = c.create('Archive.Today')
+	print 'CREATED Archive.Today:', create_response
+
+	# Copy the message
+	print 'COPYING:', msg_ids
+	c.copy(msg_ids, 'Archive.Today')
+
+	# Look at the results
+	c.select('Archive.Today')
+	typ, [response] = c.search(None, 'ALL')
+	print 'COPIED:', response
+
+finally:
+	c.close()
+	c.logout()
+
+    这个示例脚本在 Archive 下创建一个新的邮箱，并把已读消息从 INBOX 复制到这个邮箱。
+    再次运行这个脚本，可以看出检查返回码的重要性。这里调用 create() 创建新邮箱时没有产生异常，而是会报告这个邮箱已经存在。
+删除消息
+    尽管很多现代邮箱客户程序使用一个“垃圾文件夹”模型来处理已删除的消息，但是这些消息往往并没有移动到一个真正的文件夹中。实际上，删除邮件只会更新它们的标志，在其中添加 \Deleted。“清空”垃圾箱的操作是通过 EXPUNGE 命令实现的。下面这个示例脚本将查找主题包含“Lorem ipsum”的归档消息，设置已删除标志，然后再次查询服务器，可以看到这些消息仍在文件夹中。
+
+import imaplib
+from imaplib_connect import open_connection
+from imaplib_list_parse import parse_list_response
+
+c = open_connection()
+try:
+	c.select('Archive.Today')
+
+	# What ids are in the mailbox?
+	typ, [msg_ids] = c.search(None, 'ALL')
+	print 'Starting messages:', msg_ids
+
+	# Find the message(s)
+	typ, [msg_ids] = c.search(None, '(SUBJECT "Lorem ipsum")')
+	msg_ids = ','.join(msg_ids.split(' '))
+	print 'Matching messages:', msg_ids
+
+	# What are the current flags?
+	typ, response = c.fetch(msg_ids, '(FLAGS)')
+	print 'Flags before:', response
+
+	# Change the Deleted flag
+	typ, response = c.store(msg_ids, '+FLAGS', r'(\Deleted)')
+
+	# What are the flags now?
+	typ, response = c.fetch(msg_ids, '(FLAGS)')
+	print 'Flags before:', response
+
+	# Really delete the message.
+	typ, response = c.expunge()
+	print 'Expunged:', response
+
+	# What ids are left in the mailbox?
+	typ, [msg_ids] = c.search(None, 'ALL')
+	print 'Remaining messages:', msg_ids
+
+finally:
+	try:
+		c.close()
+	except:
+		pass
+	c.logout()
+
+    显式地调用 expunge() 会删除消息，不过调用 close() 也能达到同样的效果。区别在于，调用 close() 时，客户不会得到删除通知。
