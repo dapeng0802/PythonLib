@@ -1,0 +1,73 @@
+[Python标准库]mailbox——管理邮件归档
+    作用：处理多种本地文件格式的邮件消息。
+    Python 版本：1.4 及以后版本
+    mailbox 模块定义了一个通用 API，用来访问采用本地磁盘格式存储的邮件消息，包括：Maildir，mbox，MH，Baby1，MMDF
+    mailbox 模块提供了 Mailbox 和 Message 基类，每种邮箱格式分别包含一对子类，用来实现相应格式的有关细节。
+mbox
+    mbox 格式是文档中最简单的格式，因为它完全是纯文本的。每个邮箱存储为一个文件，所有消息都联接在一起。每次遇到一个以“From”开头的行时（“From”后面有一个空格），就会处理为一个新消息的开始。只要这些字符出现在消息体中某一行的开头，就会将其转义，在这一行前面添加“>”前缀。
+    1. 创建 mbox 邮箱
+    一般将文件名传递到构造函数来实例化 mbox 类。如果该文件不存在，使用 add() 追加消息时会创建这个文件。
+
+import mailbox
+import email.utils
+
+from_addr = email.utils.formataddr(('Aythor', 'author@example.com'))
+to_addr = email.utils.formataddr(('Recipient', 'recipient@example.com'))
+
+mbox = mailbox.mbox('example.mbox')
+mbox.lock()
+try:
+	msg = mailbox.mboxMessage()
+	msg.set_unixfrom('auhor Sat Feb  7 01:05:34 2009')
+	msg['From'] = from_addr
+	msg['To'] = to_addr
+	msg['Subject'] = 'Sample message 1'
+	msg.set_payload('\n'.join(['This is the body.',
+							   'From (should be escaped).',
+							   'There are 3 lines.\n',
+							   ]))
+	mbox.add(msg)
+	mbox.flush()
+
+	msg = mailbox.mboxMessage()
+	msg.set_unixfrom('author')
+	msg['From'] = from_addr
+	msg['To'] = to_addr
+	msg['Subject'] = 'Sample message 2'
+	msg.set_payload('This is the second body.\n')
+	mbox.add(msg)
+	mbox.flush()
+finally:
+	mbox.unlock()
+
+    这个脚本的结果是一个新的邮箱文件，其中包含两个邮件消息。
+    2. 读取 mbox 邮箱
+    要读取一个已有的邮箱，需要打开这个邮箱，像字典一样处理这个 mbox 对象。键是邮箱实例定义的任意值，它们只作为消息对象的内部标识符，并不一定有实际意义。
+
+import mailbox
+
+mbox = mailbox.mbox('example.mbox')
+for message in mbox:
+    print message['subject']
+
+    打开的邮箱支持迭代器协议，不过与真正的字典对象不同，邮箱的默认迭代器会处理值（values）而不是键（keys）。
+    3. 从 mbox 邮箱删除消息
+    要从一个 mbox 文件删除已有的消息，可以使用 remove() 并提供这个消息的键，也可以使用 del。
+
+import mailbox
+
+mbox = mailbox.mbox('example.mbox')
+mbox.lock()
+try:
+	to_remove = []
+	for key, msg in mbox.iteritems():
+		if '2' in msg['subject']:
+			print 'Removing:', key
+			to_remove.append(key)
+	for key in to_remove:
+		mbox.remove(key)
+finally:
+	mbox.flush()
+	mbox.close()
+
+    可以使用 lock() 和 unlock() 方法避免同时访问文件可能导致的问题，flush() 强制将修改写入磁盘。
