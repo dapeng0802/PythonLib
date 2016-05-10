@@ -18,7 +18,7 @@ mbox = mailbox.mbox('example.mbox')
 mbox.lock()
 try:
 	msg = mailbox.mboxMessage()
-	msg.set_unixfrom('auhor Sat Feb  7 01:05:34 2009')
+	msg.set_unixfrom('author Sat Feb  7 01:05:34 2009')
 	msg['From'] = from_addr
 	msg['To'] = to_addr
 	msg['Subject'] = 'Sample message 1'
@@ -30,7 +30,7 @@ try:
 	mbox.flush()
 
 	msg = mailbox.mboxMessage()
-	msg.set_unixfrom('author')
+	msg.set_unixfrom('author Sat Feb  7 01:05:34 2009')
 	msg['From'] = from_addr
 	msg['To'] = to_addr
 	msg['Subject'] = 'Sample message 2'
@@ -71,3 +71,135 @@ finally:
 	mbox.close()
 
     可以使用 lock() 和 unlock() 方法避免同时访问文件可能导致的问题，flush() 强制将修改写入磁盘。
+Maildir
+    创建 Maildir 格式是为了消除 mbox 文件并发修改存在的问题。这里不再使用单个文件，Maildir 邮箱会组织为一个目录，其中各个消息分别包含在自己单独的文件中。这样还允许邮箱嵌套，所以可以扩展 Maildir 邮箱的 API，添加一些方法来处理子文件夹。
+    1. 创建 Maildir 邮箱
+    创建 Maildir 邮箱和 mbox 邮箱很类似，唯一的区别是构造函数的参数是一个目录名而不是文件名。与前面一样，如果邮箱不存在，会在具体添加消息时创建。
+
+import mailbox
+import email.utils
+import os
+
+from_addr = email.utils.formataddr(('Aythor', 'author@example.com'))
+to_addr = email.utils.formataddr(('Recipient', 'recipient@example.com'))
+
+mbox = mailbox.Maildir('Example')
+mbox.lock()
+try:
+	msg = mailbox.mboxMessage()
+	msg.set_unixfrom('author Sat Feb  7 01:05:34 2009')
+	msg['From'] = from_addr
+	msg['To'] = to_addr
+	msg['Subject'] = 'Sample message 1'
+	msg.set_payload('\n'.join(['This is the body.',
+							   'From (will not be escaped).',
+							   'There are 3 lines.\n',
+							   ]))
+	mbox.add(msg)
+	mbox.flush()
+
+	msg = mailbox.mboxMessage()
+	msg.set_unixfrom('author Sat Feb  7 01:05:34 2009')
+	msg['From'] = from_addr
+	msg['To'] = to_addr
+	msg['Subject'] = 'Sample message 2'
+	msg.set_payload('This is the second body.\n')
+	mbox.add(msg)
+	mbox.flush()
+finally:
+	mbox.unlock()
+
+for dirname, subdirs, files in os.walk('Example'):
+	print dirname
+	print '\tDirectories:', subdirs
+	for name in files:
+		fullname = os.path.join(dirname, name)
+		print
+		print '***', fullname
+		print open(fullname).read()
+		print '*' * 20
+
+    消息添加到邮箱是，它们会放在 new 子目录中。读取之后，客户程序可能会把它们移动到 cur 子目录。
+    2. 读取 Maildir 邮箱
+    读取一个已有的 Maildir 邮箱与读取 mbox 邮箱很类似。
+
+import mailbox
+
+mbox = mailbox.Maildir('Example')
+for message in mbox:
+    print message['subject']
+
+    不能保证以某种特定的顺序读取消息。
+    3. 从 Maildir 邮箱删除消息
+    要从一个 Maildir 邮箱删除已有的消息，可以将消息的键传递到 remove() 或者使用 del。
+
+import mailbox
+import os
+
+mbox = mailbox.Maildir('Example')
+mbox.lock()
+try:
+	to_remove = []
+	for key, msg in mbox.iteritems():
+		if '2' in msg['subject']:
+			print 'Removing:', key
+			to_remove.append(key)
+	for key in to_remove:
+		mbox.remove(key)
+finally:
+	mbox.flush()
+	mbox.close()
+
+for dirname, subdirs, files in os.walk('Example'):
+	print dirname
+	print '\tDirectories:', subdirs
+	for name in files:
+		fullname = os.path.join(dirname, name)
+		print
+		print '***', fullname
+		print open(fullname).read()
+		print '*' * 20
+
+    没有办法计算一个消息的键，所以应当使用 iteritems() 从邮箱同时获取键和消息对象。
+    4. Maildir 文件夹
+    Maildir 邮箱的子目录或文件夹（folder）可以通过 Maildir 类的方法直接管理。调用者可以列出、获取、创建和删除一个给定邮箱的子目录。
+
+import mailbox
+import os
+
+def show_maildir(name):
+	os.system('find %s -print' % name)
+
+mbox = mailbox.Maildir('Example')
+print 'Before:', mbox.list_folders()
+show_maildir('Example')
+
+print
+print '#' * 30
+print
+
+mbox.add_folder('subfolder')
+print 'subfolder created:', mbox.list_folders()
+show_maildir('Example')
+
+subfolder = mbox.get_folder('subfolder')
+print 'subfolder contents:', subfolder.list_folders()
+
+print
+print '#' * 30
+print
+
+subfolder.add_folder('second_level')
+print 'second_level created:', subfolder.list_folders()
+show_maildir('Example')
+print
+print '#' * 30
+print
+
+subfolder.remove_folder('second_level')
+print 'second_level removed:', subfolder.list_folders()
+show_maildir('Example')
+
+    构造文件夹的目录名时，要在文件夹名前面加一个点号（.）作为前缀。
+其他格式
+    mailbox 还支持另外一些格式，不过这些格式都没有 mbox 或 Maildir 常用。MH 也是一种多文件邮箱格式，一些邮箱处理程序就使用了这种格式。Babyl 和 MMDF 是单文件格式，使用了不同于 mbox 的消息分隔符。单文件格式支持的 API 与 mbox 相同，MH 则包括 Maildir 类中与文件夹相关的方法。
