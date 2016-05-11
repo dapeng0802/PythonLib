@@ -1,0 +1,214 @@
+[Python标准库]getopt——命令行选项解析
+    作用：命令行选项解析。
+    Python 版本：1.4 及以后版本
+    getopt 模块是原来的命令行选项解释器，支持 UNIX 函数 getopt() 建立的约定。它会解析一个参数序列，如 sys.argv，并返回一个元组序列和一个非选项参数序列，元组序列中包含一些 (选项, 参数) 对。
+    目前支持的选项语法包括短格式和长格式选项：
+    -a、-bval、-b val、--noarg、--witharg=val、--witharg val
+函数参数
+    getopt() 函数有 3 个参数：
+    第 1 个参数是要解析的参数序列。这通常来自 sys.argv[1:]（忽略 sys.argv[0] 中的程序名）。
+    第 2 个参数是单字符选项的选项定义串。如果某个选项需要一个参数，相应字母后面会有一个冒号。
+    第 3 个参数（如果使用）应当是一个长格式选项名序列。长格式选项可以包含多个字符，如 --noarg 或 --witharg。序列中的选项名不包括“--”前缀。如果某个长选项需要一个参数，其名应当有一个后缀“=”。
+    短格式和长格式选项可以在一个调用中结合使用。
+短格式选项
+    这个示例程序接受 3 个选项。-a 是一个简单标志，-b 和 -c 需要一个参数。选项定义串为“ab:c:”。
+
+import getopt
+
+opts, args = getopt.getopt(['-a', '-bval', '-c', 'val'], 'ab:c:')
+
+for opt in opts:
+	print opt
+
+    这个程序将一个模拟选项值列表传递到 getopt()，来显示如何对它们进行处理。
+长格式选项
+    对于一个有两个选项的程序（--noarg 和 --witharg），长参数序列为 ['noarg', 'witharg=']。
+
+import getopt
+
+opts, args = getopt.getopt(['--noarg',
+							'--witharg', 'val',
+							'--witharg2=another',
+							],
+						   '',
+						   [ 'noarg', 'witharg=', 'witharg2='])
+
+for opt in opts:
+	print opt
+
+    由于这个示例程序没有任何短格式选项，所以 getopt() 的第 2 个参数是一个空串。
+一个完整的例子
+    这个例子是一个更完整的程序，它有 5 个选项：-o、-v、--output、--verbose 和 --version。-o、--output 和 --version 选项分别需要一个参数。
+
+import getopt
+import sys
+
+version = '1.0'
+verbose = False
+output_filename = 'default.out'
+
+print 'ARGV      :', sys.argv[1:]
+
+try:
+	options, remainder = getopt.getopt(
+		sys.argv[1:],
+		'o:v',
+		['output=',
+		 'verbose',
+		 'version=',
+		 ])
+except getopt.GetoptError as err:
+	print 'ERROR:', err
+	sys.exit(1)
+
+print 'OPTIONS   :', options
+
+for opt, arg in options:
+	if opt in ('-o', '--output'):
+		output_filename = arg
+	elif opt in ('-v', '--verbose'):
+		verbose = True
+	elif opt == '--version':
+		version = arg
+
+print 'VERSION   :', version
+print 'VERBOSE   :', verbose
+print 'OUTPUT    :', output_filename
+print 'REMAINING :', remainder
+
+    可以采用多种不同方式调用这个程序。如果不带任何参数调用这个程序，会使用默认设置。
+
+$ python getopt_example.py 
+ARGV      : []
+OPTIONS   : []
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : default.out
+REMAINING : []
+
+    单字母选项与其参数可以用空白符分隔。
+
+$ python getopt_example.py -o foo
+ARGV      : ['-o', 'foo']
+OPTIONS   : [('-o', 'foo')]
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : foo
+REMAINING : []
+
+    或者，也可以把选项和值结合到一个参数中。
+
+$ python getopt_example.py -ofoo
+ARGV      : ['-ofoo']
+OPTIONS   : [('-o', 'foo')]
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : foo
+REMAINING : []
+
+    长格式选项也可以类似地与值分隔。
+
+$ python getopt_example.py --output foo
+ARGV      : ['--output', 'foo']
+OPTIONS   : [('--output', 'foo')]
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : foo
+REMAINING : []
+
+    一个长选项与其值结合时，选项名和值要用一个 = 分隔。
+
+$ python getopt_example.py --output=foo
+ARGV      : ['--output=foo']
+OPTIONS   : [('--output', 'foo')]
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : foo
+REMAINING : []
+
+缩写长格式选项
+    只有提供了一个唯一的前缀，则不必在命令行上完整地拼写出长格式选项。
+
+$ python getopt_example.py --o foo
+ARGV      : ['--o', 'foo']
+OPTIONS   : [('--output', 'foo')]
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : foo
+REMAINING : []
+
+    如果没有提供一个唯一的前缀，则会产生一个异常。
+
+$ python getopt_example.py --ver 2.0
+ARGV      : ['--ver', '2.0']
+ERROR: option --ver not a unique prefix
+
+GNU 选项解析
+    正常情况下，一旦遇到第一个非选项参数，选项处理就会停止。
+
+$ python getopt_example.py -v not_an_option --option foo
+ARGV      : ['-v', 'not_an_option', '--option', 'foo']
+OPTIONS   : [('-v', '')]
+VERSION   : 1.0
+VERBOSE   : True
+OUTPUT    : default.out
+REMAINING : ['not_an_option', '--option', 'foo']
+
+    Python 2.3 中为这个模块增加了另外一个函数 gnu_getopt()。它允许在命令行上以任意顺序混合选项和非选项参数。
+
+import getopt
+import sys
+
+version = '1.0'
+verbose = False
+output_filename = 'default.out'
+
+print 'ARGV      :', sys.argv[1:]
+
+try:
+	options, remainder = getopt.gnu_getopt(
+		sys.argv[1:],
+		'o:v',
+		['output=',
+		 'verbose',
+		 'version=',
+		 ])
+except getopt.GetoptError as err:
+	print 'ERROR:', err
+	sys.exit(1)
+
+print 'OPTIONS   :', options
+
+for opt, arg in options:
+	if opt in ('-o', '--output'):
+		output_filename = arg
+	elif opt in ('-v', '--verbose'):
+		verbose = True
+	elif opt == '--version':
+		version = arg
+
+print 'VERSION   :', version
+print 'VERBOSE   :', verbose
+print 'OUTPUT    :', output_filename
+print 'REMAINING :', remainder
+
+    修改前例中的调用之后，可以清楚地看出差别。
+
+$ python getopt_gnu.py -v not_an_option --output foo
+ARGV      : ['-v', 'not_an_option', '--output', 'foo']
+OPTIONS   : [('-v', ''), ('--output', 'foo')]
+VERSION   : 1.0
+VERBOSE   : True
+OUTPUT    : foo
+REMAINING : ['not_an_option']
+
+结束参数处理
+    如果 getopt() 在输入参数中遇到“--”，它会停止，不再将余下的参数作为选项处理。这个特性可以用来传递看上去像选项的参数值，如以一个短横线（“-”）开头的文件名。
+
+$ python getopt_example.py -v -- --output foo
+ARGV      : ['-v', '--', '--output', 'foo']
+OPTIONS   : [('-v', '')]
+VERSION   : 1.0
+VERBOSE   : True
+OUTPUT    : default.out
+REMAINING : ['--output', 'foo']
