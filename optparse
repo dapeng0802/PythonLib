@@ -1,0 +1,41 @@
+[Python标准库]optparse——命令行选项解析器
+    作用：取代 getopt 的命令行选项解析器。
+    Python 版本：2.3 及以后版本
+    optparse 是当前替代 getopt 的模块，用来完成命令行选项解析，它可以提供 getopt 所没有的很多特性，包括类型转换、选项回调，以及自动生成帮助。除了这里能介绍的特性外，optparse 还有很多其他特性，不过本节会介绍较为常用的一些功能。
+创建 OptionParser
+    用 optparse 解析选项有两个阶段。首先，构造 OptionParser 实例，并配置期望的选项。然后输入一个选项序列进行处理。
+
+import optparse
+parser = optparse.OptionParser()
+
+    一般地，一旦创建了解析器，要显式地向解析器添加各个选项，并提供信息指出命令行上遇到该选项时该如何处理。也可以向 OptionParser 构造函数传递一个选项列表，不过这种做法不常用。
+    1. 定义选项
+    应当使用 add_option() 方法一次增加一个选项。参数列表前面所有未命名的串参数都处理为选项名。要为一个选项创建别名（也就是同一个选项同时有短格式和长格式），可以传入多个名。
+    2. 解析命令行
+    定义所有选项之后，可以向 parse_args() 传递一个参数串序列来解析命令行。默认情况下，参数由 sys.argv[1:] 得到，不过也可以显式地传递一个列表。这些选项使用 GNU/POSIX 语法处理，所以选项和参数值可以混合出现在序列中。
+    parse_args() 的返回值是一个两部分的元组，其中包含一个 Values 实例以及未解释为选项的命令参数列表。选项的默认处理动作是使用 add_option() 的 dest 参数中指定的名称存储这个值。parse_args() 返回的 Values 实例包含选项值（作为属性），所以，如果一个选项的 dest 设置为“myoption"，就可以作为 options.myoption 访问这个选项值。
+短格式和长格式选项
+    下面是一个简单的例子，有 3 个不同的选项：一个布尔选项 (-a)，一个简单的串选项 (-b)，以及一个整数选项 (-c)。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-a', action="store_true", default=False)
+parser.add_option('-b', action="store", dest="b")
+parser.add_option('-c', action="store", dest="c", type="int")
+
+print parser.parse_args(['-a', '-bval', '-c', '3'])
+
+    类似于 getopt.gnu_geropt()，optparse 用同样的规则解析命令行选项，所以有两种方法向单字符选项传值。这两种形式在例子中都用到了，具体为 -bval 和 -c val。
+    与输出中“c”关联的值类型是一个整数，因为要求 OptionParser 存储参数之前先进行转换。不同于 getopt，optparse 对“长”选项名的处理并无不同。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('--noarg', action="store_true", default=False)
+parser.add_option('--witharg', action="store", dest="witharg")
+parser.add_option('--witharg2', action="store", dest="witharg2", type="int")
+
+print parser.parse_args(['--noarg', '--witharg', 'val', '--witharg2=3'])
+
+    结果也是相似的。
