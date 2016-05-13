@@ -39,3 +39,59 @@ parser.add_option('--witharg2', action="store", dest="witharg2", type="int")
 print parser.parse_args(['--noarg', '--witharg', 'val', '--witharg2=3'])
 
     结果也是相似的。
+用 getopt 比较
+    由于 optparse 要替换 getopt，下面这个例子重新实现了 getopt 一节中的示例程序。
+
+import optparse
+import sys
+
+print 'ARGV      :', sys.argv[1:]
+
+parse = optparse.OptionParser()
+parse.add_option('-o', '--output',
+				 dest="output_filename",
+				 default="default.out",
+				 )
+parse.add_option('-v', '--verbose',
+				 dest="verbose",
+				 default="False",
+				 action="store_true",
+				 )
+parse.add_option('--version',
+				 dest="version",
+				 default=1.0,
+				 type="float",
+				 )
+options, remainder = parse.parse_args()
+
+print 'VERSION   :', options.version
+print 'VERBOSE   :', options.verbose
+print 'OUTPUT    :', options.output_filename
+print 'REMAINING :', remainder
+
+    由于同时增加了选项 -o 和 --output，所以它们是别名。可以在命令行上使用任意一个选项。
+
+$ python optparse_getoptcomparison.py -o output.txt
+ARGV      : ['-o', 'output.txt']
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : output.txt
+REMAINING : []
+
+$ python optparse_getoptcomparison.py --output output.txt
+ARGV      : ['--output', 'output.txt']
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : output.txt
+REMAINING : []
+
+    还可以使用长选项的唯一前缀。
+
+$ python optparse_getoptcomparison.py --out output.txt 
+ARGV      : ['--out', 'output.txt']
+VERSION   : 1.0
+VERBOSE   : False
+OUTPUT    : output.txt
+REMAINING : []
+
+选项值
