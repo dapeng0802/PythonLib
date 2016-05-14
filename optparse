@@ -47,22 +47,22 @@ import sys
 
 print 'ARGV      :', sys.argv[1:]
 
-parse = optparse.OptionParser()
-parse.add_option('-o', '--output',
+parser = optparse.OptionParser()
+parser.add_option('-o', '--output',
 				 dest="output_filename",
 				 default="default.out",
 				 )
-parse.add_option('-v', '--verbose',
+parser.add_option('-v', '--verbose',
 				 dest="verbose",
 				 default="False",
 				 action="store_true",
 				 )
-parse.add_option('--version',
+parser.add_option('--version',
 				 dest="version",
 				 default=1.0,
 				 type="float",
 				 )
-options, remainder = parse.parse_args()
+options, remainder = parser.parse_args()
 
 print 'VERSION   :', options.version
 print 'VERBOSE   :', options.verbose
@@ -95,3 +95,78 @@ OUTPUT    : output.txt
 REMAINING : []
 
 选项值
+    默认的处理动作是存储选项的参数。如果定义选项时提供了一个类型，在存储这个参数值之前会首先将该值转换为该类型。
+    1. 设置默认值
+    根据定义，选项是可选的，所以如果命令行上未指定选项，应用应当建立默认行为。定义选项时可以使用参数 default 提供各选项的默认值。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-o', action="store", default="default value")
+
+options, args = parser.parse_args()
+
+print options.o
+
+    默认值要与期望的选项类型匹配，因为默认值不会完成任何转换。
+    还可以在定义选项之后使用 set_defaults() 的关键字参数加载默认值。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-o', action="store")
+
+parser.set_defaults(o="default value")
+
+options, args = parser.parse_args()
+
+print options.o
+
+    如果一个配置文件或其他来源加载默认值，而不是硬编码写入默认值，这种形式就很有用。
+    定义的所有选项都可以作为 parse_args() 返回的 Values 实例的属性得到，所以应用在尝试使用一个选项值之前不需要检查这个选项是否存在。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-o', action="store")
+
+options, args = parser.parse_args()
+
+print options.o
+
+    如果未向一个选项提供默认值，而且命令行上没有指定这个选项，它的值则为 None。
+    2. 类型转换
+    optparse 可以把选项值从字符串转换外整数、浮点数、长整数和复杂项。要启用转换，需要指定选项类型为 add_option() 的参数。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-i', action="store", type="int")
+parser.add_option('-f', action="store", type="float")
+parser.add_option('-l', action="store", type="long")
+parser.add_option('-c', action="store", type="complex")
+
+options, args = parser.parse_args()
+
+print 'int    : %-16r %s' % (type(options.i), options.i)
+print 'float  : %-16r %s' % (type(options.f), options.f)
+print 'long   : %-16r %s' % (type(options.l), options.l)
+print 'complex: %-16r %s' % (type(options.c), options.c)
+
+    如果一个选项的值不能转换为指定的类型，会打印一个错误，程序将退出。
+    通过派生 Option 类，可以创建定制转换。有关的更多详细信息请参考标准库文档。
+    3. 枚举
+    choice 类型使用一个候选串列表来提供验证。将 type 设置为 choice，并使用 add_option() 的 choice 参数提供合法值列表。
+
+import optparse
+
+parser = optparse.OptionParser()
+
+parser.add_option('-c', type='choice', choices=['a', 'b', 'c'])
+
+options, args = parser.parse_args()
+
+print 'Choice:', options.c
+
+    如果输入不合法会导致一个错误消息，显示允许的值列表。
+选项动作
