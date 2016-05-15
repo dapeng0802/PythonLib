@@ -170,3 +170,123 @@ print 'Choice:', options.c
 
     如果输入不合法会导致一个错误消息，显示允许的值列表。
 选项动作
+    不同于 getopt（它只解析选项），optparse 则是一个选项处理库。选项可能触发不同的动作，由 add_option() 的 action 参数指定。支持的动作包括存储参数（单独存储，或者作为列表的一部分存储），遇到这个选项时存储一个常量值（包括对 Boolean 分支语句的 true/false 值的特殊处理），统计遇到一个选项的次数，以及调用一个回调。默认动作是 store，这不需要显式指定。
+    1. 常量
+    选项表示一组固定的选择（如一个应用的操作模式）时，通过创建单独的显式选项，可以更容易地建立文档。store_const 动作就是要达到这个目的。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('--earth', action="store_const",
+				  const='earth', dest='element',
+				  default='earth',
+				  )
+parser.add_option('--air', action="store_const",
+				  const='air', dest='element',
+				  )
+parser.add_option('--water', action="store_const",
+				  const='water', dest='element',
+				  )
+parser.add_option('--fire', action="store_const",
+				  const='fire', dest='element',
+				  )
+
+options, args = parser.parse_args()
+
+print options.element
+
+    store_const 动作将应用中的一个常量与用户指定的选项相关联。可以配置多个选项对相同的 dest 名存储不同的常量值，这样一来，应用只需检查一个设置。
+    2. 布尔标志
+    布尔选项使用特使动作来实现，用来存储 true 和 false 常量值。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-t', action="store_true",
+				  default=False, dest='flag')
+parser.add_option('-f', action="store_false",
+				  default=False, dest='flag')
+
+options, args = parser.parse_args()
+
+print 'Flag:', options.flag
+
+    通过将 dest 名配置为相同的值，可以创建同一个标志的 true 和 false 版本。
+    3. 重复选项
+    处理重复的选项有 3 种方法：覆盖、追加和统计。默认做法是覆盖所有现有的值，所以会使用最后指定的选项。store 动作就采用这种方式。
+    通过使用 append 动作，可以在选项重复时累积值，创建一个值列表。允许多个响应时，追加模式会很有用，因为各个响应可以单独列出。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-o', action="append", dest='outputs', default=[])
+options, args = parser.parse_args()
+print options.outputs
+
+    命令行上指定值的顺序会保留，因为这个顺序可能对应用很重要。
+    有时，知道一个选项指定了多少次就足够了，而不需要相关的值。例如，很多应用允许用户重复 -v 选项，来提高其输出的详细等级。每次这个选项出现时，count 动作会让一个值递增。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-v', action="count", dest='verbosity', default=1)
+parser.add_option('-q', action="store_const", const=0, dest='verbosity')
+options, args = parser.parse_args()
+print options.verbosity
+
+    由于 -v 选项不带任何参数，可以使用语法 -vv 重复，也可以重复单个选项。
+    4. 回调
+    除了直接保存选项参数，还可以为选项定义回调函数，在命令行上遇到选项时就会调用这些回调函数。选项的回调函数有 4 个参数：导致回调的 Option 实例、来自命令行的选项串、与选项关联的参数值，以及完成解析工作的 OptionParser 实例。
+
+import optparse
+
+def flag_callback(option, opt_str, value, parser):
+	print 'flag_callback:'
+	print '\toption:', repr(option)
+	print '\topt_str:', opt_str
+	print '\tvalue:', value
+	print '\tparser:', parser
+	return
+
+def with_callback(option, opt_str, value, parser):
+	print 'with_callback:'
+	print '\toption:', repr(option)
+	print '\topt_str:', opt_str
+	print '\tvalue:', value
+	print '\tparser:', parser
+	return
+
+parser = optparse.OptionParser()
+parser.add_option('--flag', action="callback",
+                  callback=flag_callback)
+parser.add_option('--with', action="callback",
+				  callback=with_callback,
+				  type="string",
+				  help="Include optional feature")
+
+parser.parse_args(['--with', 'foo', '--flag'])
+
+    在这个例子中，--with 选项配置为有一个字符串参数（也支持其他类型，如整数和浮点数）。
+    可以使用 nargs 选项配置回调有多个参数。
+
+import optparse
+
+def with_callback(option, opt_str, value, parser):
+	print 'with_callback:'
+	print '\toption:', repr(option)
+	print '\topt_str:', opt_str
+	print '\tvalue:', value
+	print '\tparser:', parser
+	return
+
+parser = optparse.OptionParser()
+parser.add_option('--with', action="callback",
+				  callback=with_callback,
+				  type="string",
+				  nargs=2,
+				  help="Include optional feature")
+
+parser.parse_args(['--with', 'foo', 'bar'])
+
+    在这里，参数会通过 value 参数作为一个 tuple 传递给回调函数。
+帮助消息
