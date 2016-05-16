@@ -290,3 +290,122 @@ parser.parse_args(['--with', 'foo', 'bar'])
 
     在这里，参数会通过 value 参数作为一个 tuple 传递给回调函数。
 帮助消息
+    OptionParser 会为所有选项集自动添加一个帮助选项，使用户可以在命令行上键入 --help 查看运行程序的使用说明。这个帮助消息包括所有选项，并指示它们是否有参数。还可以把帮助文本传入 add_option()，得到一个选项更详细的描述。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('--no-foo', action="store_true",
+				  default=False,
+				  dest="foo",
+				  help="Turn off foo",
+				  )
+parser.add_option('--with', action="store",
+				  help="Include optional feature")
+
+parser.parse_args()
+
+    选项按字母表顺序列出，并在同一行上给出别名。选项有参数时，会在帮助输出中包含 dest 名作为参数名。帮助文本打印在右列。
+    随选项 --with 打印的 WITH 来自选项的目标变量。如果内部变量名没有提供足够的描述性，不适合放在文档中，可以使用 metavar 参数设置一个不同的变量名。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('--no-foo', action="store_true",
+				  default=False,
+				  dest="foo",
+				  help="Turn off foo",
+				  )
+parser.add_option('--with', action="store",
+				  help="Include optional feature",
+				  metavar='feature_NAME')
+
+parser.parse_args()
+
+    值会原样打印，不做任何改变（如置为大写或添加标点符号）。
+    1. 组织选项
+    很多应用包括一些相关选项集合。例如，rpm 对于各种操作模式有单独的选项。optparse 使用选项组（option groups）在帮助输出中组织选项。选项值仍然保存在一个 Values 实例中，所以选项名的命名空间仍是平面命名空间。
+
+import optparse
+
+parser = optparse.OptionParser()
+parser.add_option('-q', action="store_const",
+				  const='query', dest="mode",
+				  help="Query")
+parser.add_option('-i', action="store_const",
+				  const='install', dest="mode",
+				  help="Install")
+
+query_opts = optparse.OptionGroup(
+	parser, 'Query Options',
+	'These options control the query mode.',
+	)
+query_opts.add_option('-l', action="store_const",
+					  const='list', dest="query_mode",
+				  	  help="List contents")
+query_opts.add_option('-f', action="store_const",
+					  const='file', dest="query_mode",
+				  	  help="Show owner of file")
+query_opts.add_option('-a', action="store_const",
+					  const='all', dest="query_mode",
+				  	  help="Show all packages")
+parser.add_option_group(query_opts)
+
+install_opts = optparse.OptionGroup(
+	parser, 'Installation Options',
+	'These options control installation.',
+	)
+install_opts.add_option(
+	'--hash', action='store_true', default=False,
+	help='Show hash marks as progress indication')
+install_opts.add_option(
+	'--force', dest='install_force', action='store_true',
+	default=False,
+	help='Install, regardless of dependencies or existing version')
+parser.add_option_group(install_opts)
+
+parser.parse_args()
+
+    每组分别有自己的节标题和描述，选项会显示在一起。
+    2. 应用设置
+    自动生成帮助的工具使用配置设置来控制帮助输出的很多方面。程序的用法（usage）串会显示如何指定位置参数，可以在创建 OptionParser 时设置这个串。
+
+import optparse
+
+parser = optparse.OptionParser(
+	usage='%prog [options] <arg1> <arg2> [<arg3>...]'
+	)
+parser.add_option('-a', action="store_true", default=False)
+parser.add_option('-b', action="store", dest="b")
+parser.add_option('-c', action="store", dest="c", type="int")
+
+parser.parse_args()
+
+    字面量值 %prog 在运行时会扩展为程序名，从而反映脚本的完整路径。如果脚本由 Python 运行，而不是直接运行，则使用脚本名。
+    可以使用 prog 参数改变程序名。
+
+import optparse
+
+parser = optparse.OptionParser(
+	usage='%prog [options] <arg1> <arg2> [<arg3>...]',
+	prog='my_program_name',
+	)
+parser.add_option('-a', action="store_true", default=False)
+parser.add_option('-b', action="store", dest="b")
+parser.add_option('-c', action="store", dest="c", type="int")
+
+parser.parse_args()
+
+    不过，以这种方式硬编码写入程序名通常不是一个好想法，因为如果对程序重命名，帮助将不会反映这个变化。
+    可以使用 version 参数设置应用版本。提供一个版本值时，optparse 会向解析器自动添加一个 --version 选项。
+
+import optparse
+
+parser = optparse.OptionParser(
+	usage='%prog [options] <arg1> <arg2> [<arg3>...]',
+	version='1.0',
+	)
+
+parser.parse_args()
+
+    用户运行程序时如果提供 --version 选项，optparse 会打印出这个版本串，然后退出。
