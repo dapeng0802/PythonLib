@@ -1,0 +1,126 @@
+[Python标准库]argparse——命令行选项和参数解析
+    作用：命令行选项和参数解析。
+    Python 版本：2.7 及以后版本
+    Python 2.7 中增加了 argparse 模块，以取代 optparse。argparse 的实现支持一些新特性，这些特性有些不能很容易地增加到 optparse 中，有些则要求不能保证向后兼容的 API 改变。所以，干脆在库中引入了一个新的模块。现在仍支持 optparse，不过不太可能增加新特性了。
+与 optparse 比较
+    argparse 与 optparse 提供的 API 很类似，很多情况下，argparse 模块可以直接替代 optparse，只需要更新所用的类和方法名。不过，还有一些情况下，由于增加了新特性，所以不能保留直接兼容性。
+    要根据具体情况来决定是否对现有程序升级。如果一个应用包含额外的代码来避开 optparse 的限制，升级则可以减少维护工作。对于一个新程序，如果将要部署这个程序的所有平台上都可以得到 argparse，就应当对这个新程序使用 argparse。
+建立解析器
+    使用 argparse 的第一步是创建一个解析器对象，并告诉它需要什么参数。程序运行时可以使用这个解析器处理命令行参数。解析器类（ArgumentParser）的构造函数可以取多个参数，为程序建立帮助文本中使用的描述以及其他全局行为或设置。
+
+import argparse
+
+parser = argparse.ArgumentParser(
+	description='This is a PyMOTW sample program',
+	)
+
+定义参数
+    argparse 是一个完整的参数处理库。参数可以触发不同的动作，由 add_argument() 的 action 参数指定。支持的动作包括存储参数（单独存储，或者作为列表的一部分存储）、遇到这个参数时存储一个常量值（包括对 Boolean 分支语句的 true/false 值的特殊处理）、统计遇到一个参数的次数，以及调用一个回调来使用定制处理指令。
+    默认动作是存储参数值。如果提供了一个类型，存储值之前要将值转换为该类型。如果提供了 dest 参数，解析命令行参数时要用这个名称来保存值。
+解析命令行
+    定义了所有参数之后，可以将一个参数串序列传递到 parse_args() 来解析命令行。默认情况下，参数由 sys.argv[1:] 得到，不过也可以使用任意的串列表。选项使用 GNU/POSIX 语法处理，所以选项和参数值可以混合出现在序列中。
+    parse_args() 的返回值是一个包含命令参数的 Namespace。这个对象会保存参数值（作为属性），所以如果参数的 dest 设置为“myoption”，就可以作为 args.myoption 访问这个值。
+简单示例
+    下面是一个简单的例子，有 3 个不同的选项：一个布尔选项（-a），一个简单的串选项（-b），以及一个整数选项（-c）。
+
+import argparse
+
+parser = argparse.ArgumentParser(
+	description='This is a PyMOTW sample program',
+	)
+
+parser.add_argument('-a', action="store_true", default=False)
+parser.add_argument('-b', action="store", dest="b")
+parser.add_argument('-c', action="store", dest="c", type=int)
+
+print parser.parse_args(['-a', '-bval', '-c', '3'])
+
+    向单字符选项传值有多做方法。前面的例子使用了两种不同形式，-bval 和 -c val。
+    与输出中“c”关联的值类型是一个整数，因为要求 ArgumentParser 存储参数之前先完成转换。“长”选项名（名称中包含多个字符）也用同样的方式处理。
+
+import argparse
+
+parser = argparse.ArgumentParser(
+	description='Example with long option names',
+	)
+
+parser.add_argument('--noarg', action="store_true", default=False)
+parser.add_argument('--witharg', action="store", dest="witharg")
+parser.add_argument('--witharg2', action="store", dest="witharg2", type=int)
+
+print parser.parse_args(['--noarg', '--witharg', 'val', '--witharg2=3'])
+
+    结果也是类似的。
+    有一个方面 argparse 与 optparse 有所不同，即对非选项参数值的处理。optparse 只完成选项解析，argparse 则是一个完备的命令行参数解析工具，还可以处理非选项参数。
+
+import argparse
+
+parser = argparse.ArgumentParser(
+	description='Example with nonoptional arguments',
+	)
+
+parser.add_argument('count', action="store", type=int)
+parser.add_argument('units', action="store")
+
+print parser.parse_args()
+
+    1. 参数动作
+    遇到一个参数时会触发 6 个内置动作。
+    store：保存值，可能首先要将值转换为一个不同的类型（可选）。如果没有显式指定任何动作，这将是默认动作。
+    store_const：保存作为参数规范的一部分定义的一个值，而不是来自所解析的参数。这通常用于实现非布尔类型的命令行标志。
+    store_true / store_false：保存适当的布尔值。这些动作用于实现 Boolean 分支语句。
+    append：将值保存到一个列表。如果参数重复则会保存多个值。
+    append_const：将参数规范中定义的一个值保存到一个列表。
+    version：打印程序的版本详细信息，然后退出。
+    下面这个示例程序展示了各种动作类型，这里提供了触发各个动作所需的最小配置。
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-s', action="store",
+					dest='simple_value',
+					help='Store a simple value')
+
+parser.add_argument('-c', action="store_const",
+					dest='constant_value',
+					const='value-to-store',
+					help='Store a constant value')
+
+parser.add_argument('-t', action="store_true",
+					default=False,
+					dest='boolean_switch',
+					help='Set a switch to true')
+parser.add_argument('-f', action="store_false",
+					default=False,
+					dest='boolean_switch',
+					help='Set a switch to false')
+
+parser.add_argument('-a', action="append",
+					dest='collection',
+					default=[],
+					help='Add repeated values to a list')
+
+parser.add_argument('-A', action="append_const",
+					dest='const_collection',
+					const='value-1-to-append',
+					default=[],
+					help='Add different values to list')
+
+parser.add_argument('-B', action="append_const",
+					dest='const_collection',
+					const='value-2-to-append',
+					help='Add different values to list')
+
+parser.add_argument('--version', action="version",
+					version='%(prog)s 1.0')
+
+results = parser.parse_args()
+print 'simple_value     = %r' % results.simple_value
+print 'constant_value   = %r' % results.constant_value
+print 'boolean_switch   = %r' % results.boolean_switch
+print 'collection       = %r' % results.collection
+print 'const_collection = %r' % results.const_collection
+
+    -t 和 -f 选项配置为修改同一个选项值，所以它们相当于一个布尔开关。-A 和 -B 的 dest 值相同，因此其常量值会追加到同一个列表。
+    2. 选项前缀
