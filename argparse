@@ -124,3 +124,126 @@ print 'const_collection = %r' % results.const_collection
 
     -t 和 -f 选项配置为修改同一个选项值，所以它们相当于一个布尔开关。-A 和 -B 的 dest 值相同，因此其常量值会追加到同一个列表。
     2. 选项前缀
+    选项的默认语法基于一个 UNIX 约定：使用一个短横线（“-”）前缀来指示命令行开关。argparse 还支持其他前缀，所以程序可以采用本地平台的默认设置（在 Windows 上则使用“/”），或者遵循一个不同的约定。
+
+import argparse
+
+parser = argparse.ArgumentParser(
+	description='Change the option prefix characters',
+	prefix_chars='-+/',
+	)
+
+parser.add_argument('-a', action="store_false",
+					default=None,
+					help='Turn A off',
+					)
+parser.add_argument('+a', action="store_true",
+					default=None,
+					help='Turn A on',
+					)
+parser.add_argument('//noarg', '++noarg',
+					action="store_true",
+					default=False)
+
+print parser.parse_args()
+
+    将 ArgumentParser 的 prefix_chars 参数设置为一个字符串，其中包含允许指示选项的所有字符。有一点要了解，尽管 prefix_chars 建立了允许的开关字符，但是要由单独的参数定义来指定一个给定开关的语法，这一点很重要。这样就能显式地控制使用不同前缀的选项究竟是别名（如平台独立的命令行语法就属于这种情况）还是替代选项（例如，使用“+”指示打开一个开关，用“-”关闭开关）。在前面的例子中，+a 和 -a 是不同的参数，//noarg 也可以指定为 ++noarg，不过不能指定为 --noarg。
+    3. 参数来源
+    在目前为止的例子中，提供给解析器的参数列表都是显式传入的一个列表，或者隐式地从 sys.argv 取参数。有一些类似命令行指令并非来自命令行（如配置文件中的指令），使用 argparse 处理这种指令时，显式地传入列表会很有用。
+
+import argparse
+from ConfigParser import ConfigParser
+import shlex
+
+parser = argparse.ArgumentParser(description='Short sample app')
+
+parser.add_argument('-a', action="store_true", default=False)
+parser.add_argument('-b', action="store", dest="b")
+parser.add_argument('-c', action="store", dest="c", type=int)
+
+config = ConfigParser()
+config.read('argparse_with_shlex.ini')
+config_value = config.get('cli', 'options')
+print 'Config  :', config_value
+
+argument_list = shlex.split(config_value)
+print 'Arg List:', argument_list
+
+print 'Results :', parser.parse_args(argument_list)
+
+    利用 shlex 可以很容易地分解存储在配置文件中的字符串。
+
+#argparse_with_shlex.ini
+[cli]
+options=-a -b 2
+
+    应用代码中处理配置文件还有一种做法，可以使用 fromfile_prefix_chars 告诉 argparse 如何识别一个指定输入文件的参数（这个文件中包含一组要处理的参数）。
+
+import argparse
+from ConfigParser import ConfigParser
+import shlex
+
+parser = argparse.ArgumentParser(
+	description='Short sample app',
+	fromfile_prefix_chars='@',
+	)
+
+parser.add_argument('-a', action="store_true", default=False)
+parser.add_argument('-b', action="store", dest="b")
+parser.add_argument('-c', action="store", dest="c", type=int)
+
+print parser.parse_args(['@argparse_fromfile_prefix_chars.txt'])
+
+    这个例子发现一个有 @ 前缀的参数时会停止，然后读取指定的文件来查找更多参数。例如，输入文件 argparse_fromfile_prefix_chars.txt 包含一系列参数，每个参数各占一行。
+
+    -a
+    -b
+    2
+
+    处理这个文件时生成的输出如下：
+
+Namespace(a=True, b='2', c=None)
+
+自动生成的选项
+    argparse 会自动添加选项来生成帮助，并显示应用的版本信息（如果有这个配置）。
+    ArgumentParser 的 add_help 参数控制与帮助相关的选项。
+
+import argparse
+
+parser = argparse.ArgumentParser(add_help=True)
+
+parser.add_argument('-a', action="store_true", default=False)
+parser.add_argument('-b', action="store", dest="b")
+parser.add_argument('-c', action="store", dest="c", type=int)
+
+print parser.parse_args()
+
+    会默认增加帮助选项（-h 和 --help），不过也可以将 add_help 设置为 false 禁用这些帮助选项。
+
+import argparse
+
+parser = argparse.ArgumentParser(add_help=False)
+
+parser.add_argument('-a', action="store_true", default=False)
+parser.add_argument('-b', action="store", dest="b")
+parser.add_argument('-c', action="store", dest="c", type=int)
+
+print parser.parse_args()
+
+    尽管 -h 和 --help 是请求帮助的事实标准选项名，不过有些应用或 argparse 的某些用法可能不需要提供帮助，或者需要用这些选项名来提供其他用途。
+    在 ArgumentParser 构造函数中设置版本（version）时会增加版本选项（-v 和 --version）。
+
+import argparse
+
+parser = argparse.ArgumentParser(version='1.0')
+
+parser.add_argument('-a', action="store_true", default=False)
+parser.add_argument('-b', action="store", dest="b")
+parser.add_argument('-c', action="store", dest="c", type=int)
+
+print parser.parse_args()
+
+print 'This is not printed'
+
+    这两种格式的选项都会打印程序的版本串，然后立即退出。
+解析器组织
