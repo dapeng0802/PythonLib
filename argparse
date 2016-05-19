@@ -247,3 +247,99 @@ print 'This is not printed'
 
     这两种格式的选项都会打印程序的版本串，然后立即退出。
 解析器组织
+    argparse 包含很多特性来组织参数解析器，以便于实现，或者改善帮助输出的可用性。
+    1. 共享解析器原则
+    程序员通常需要实现一组命令行工具，它们都取一组参数，然后以某种方式特殊化。例如，如果程序在采取具体行动之前都需要认证用户，它们就都需要支持 --user 和 --password 选项。不必显式地将这些选项添加到每一个 ArgumentParser 中，完全可以用这些共享选项定义一个父解析器，然后让各个程序的解析器继承它的选项。
+    第一步是用共享参数定义来建立解析器。由于父解析器的各个后续用户会尝试添加相同的帮助选项，这会导致一个异常，所以要在基解析器中关闭自动帮助生成。
+
+import argparse
+
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('--user', action="store")
+parser.add_argument('--password', action="store")
+
+    接下来，用 parents 集合创建另一个解析器。
+
+import argparse
+import argparse_parent_base
+
+parser = argparse.ArgumentParser(
+	parents=[argparse_parent_base.parser],
+	)
+
+parser.add_argument('--local-arg',
+					action="store_true",
+					default=False)
+
+print parser.parse_args()
+
+    得到的程序将有 3 个选项。
+    2. 选项冲突
+    前面的例子指出，使用相同的参数名向一个解析器添加两个参数处理程序时，会导致一个异常。可以传入一个 conflict_hendler 改变冲突解析行为。有两个内置的处理程序，分别是 error（默认）和 resolve，它们会根据处理程序添加的顺序来选择处理程序。
+
+import argparse
+
+parser = argparse.ArgumentParser(conflict_handler='resolve')
+
+parser.add_argument('-a', action="store")
+parser.add_argument('-b', action="store", help="Short alone")
+parser.add_argument('--long-b', '-b',
+					action="store", help="Long and short together")
+
+print parser.parse_args(['-h'])
+
+    在这个例子中，由于使用了给定参数名的最后一个处理程序，独立选项 -b 被 --long-b 的列名屏蔽。
+    改变 add_argument() 调用的顺序，就可以不再屏蔽独立选项。
+
+import argparse
+
+parser = argparse.ArgumentParser(conflict_handler='resolve')
+
+parser.add_argument('-a', action="store")
+parser.add_argument('--long-b', '-b',
+					action="store", help="Long and short together")
+parser.add_argument('-b', action="store", help="Short alone")
+
+print parser.parse_args(['-h'])
+
+    现在两个选项可以一起使用。
+    3. 参数组
+    argparse 将参数定义合并为“组”。默认情况下，它会使用两个组，一个对应选项，另一个对应必要的基于位置的参数。
+
+import argparse
+
+parser = argparse.ArgumentParser(description='Short sample app')
+
+parser.add_argument('--optional', action="store_true", default=False)
+parser.add_argument('positional', action="store")
+
+print parser.parse_args()
+
+    帮助输出的“位置参数”（positional argument）和“可选参数”（optional argument）部分可以反映出这种分组。
+    可以调整这种分组，使帮助更有条理，将相关的选项或值放在一起。可以使用定制组重新编写前面的共享选项示例，使得认证选项一同出现在帮助中。
+    用 add_argument_group() 创建“authentication”组，然后将与认证有关的各个选项添加到这个组，而不是添加到基解析器。
+
+import argparse
+
+parser = argparse.ArgumentParser(add_help=False)
+
+group = parser.add_argument_group('authentication')
+
+group.add_argument('--user', action="store")
+group.add_argument('--password', action="store")
+
+    如果程序使用了基于组的父解析器，要像前面一样把它列在 parents 值中。
+
+import argparse
+import argparse_parent_with_group
+
+parser = argparse.ArgumentParser(
+	parents=[argparse_parent_with_group.parser],
+	)
+
+parser.add_argument('--local-arg', action="store_true", default=False)
+
+print parser.parse_args()
+
+    现在帮助输出会把认证选项显示在一起。
+    4. 互斥选项
