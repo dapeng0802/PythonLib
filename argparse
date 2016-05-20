@@ -343,3 +343,61 @@ print parser.parse_args()
 
     现在帮助输出会把认证选项显示在一起。
     4. 互斥选项
+    定义互斥选项是选项分组特性的一个特殊情况，要使用 add_mutually_exclusive_group() 而不是 add_argument_group()。
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+group = parser.add_mutually_exclusive_group()
+group.add_argument('-a', action="store_true")
+group.add_argument('-b', action="store_true")
+
+print parser.parse_args()
+
+    argparse 会保证这种互斥性，从而只能指定组中的一个选项。
+    5. 嵌套解析器
+    前面介绍的父解析器方法只是在相关命令之间共享选项的一种方法。还可以采用另一种方法，将命令结合到一个程序中，使用子解析器来处理命令行的各个部分。其做法类似于 svn、hg 和其他有多个命令行动作或子命令的程序。
+    如果一个程序要处理文件系统上的目录，可以定义命令来创建、删除和列出目录的内容，如下所示。
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+subparser = parser.add_subparsers(help='commands')
+
+# A list command
+list_parser = subparser.add_parser(
+	'list', help='List contents')
+list_parser.add_argument(
+	'dirname', action='store',
+	help='Directory to list')
+
+# A create command
+create_parser = subparser.add_parser(
+	'create', help='Create a directory')
+create_parser.add_argument(
+	'dirname', action='store',
+	help='New directory to create')
+create_parser.add_argument(
+	'--read-only', default=False, action='store_true',
+	help='Set permissions to prevent writing to the directory',
+	)
+
+# A delete command
+delete_parser = subparser.add_parser(
+	'delete', help='Remove a directory')
+delete_parser.add_argument(
+	'dirname', action='store',
+	help='The directory to remove')
+delete_parser.add_argument(
+	'--recursive', '-r', default=False, action='store_true',
+	help='Remove the contents of the directory, too',
+	)
+
+print parser.parse_args()
+
+    帮助输出显示子解析器名为“commands”，可以在命令行上作为位置参数指定这个子解析器
+    每个子解析器还有自己的帮助，描述该命令的参数和选项。
+    解析参数时，parse_args() 返回的 Namespace 对象只包括与指定命令相关的值。
+高级参数处理
