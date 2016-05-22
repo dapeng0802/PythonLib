@@ -416,7 +416,131 @@ print parser.parse_args()
         +     |    所有（至少 1 个）参数
     ————————————————————————————————————————————————
 
+import argparse
 
+parser = argparse.ArgumentParser()
 
-    解析器会执行参数统计指令，
+parser.add_argument('--three', nargs=3)
+parser.add_argument('--optional', nargs='?')
+parser.add_argument('--all', nargs='*', dest='all')
+parser.add_argument('--one-or-more', nargs='+')
+
+print parser.parse_args()
+
+    解析器会执行参数统计指令，并生成一个准确的语法图作为命令帮助文档的一部分。
+    2. 参数类型
+    argparse 将所有参数值都处理为字符串，除非明确要求将字符串转换为另一个类型。add_argument() 的 type 参数定义了一个转换器函数，ArgumentParser 使用这个函数将参数值从字符串转换为另一种类型。
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-i', type=int)
+parser.add_argument('-f', type=float)
+parser.add_argument('--file', type=file)
+
+try:
+	print parser.parse_args()
+except IOError, msg:
+	parser.error(str(msg))
+
+    所有取一个字符串参数的可调用对象（callable）都可以作为 type 参数传入，包括内置类型，如 int()、float() 和 file()。
+    如果类型转换失败，argparse 会生成一个异常。TypeError 或 ValueError 异常会自动截获，并转换为一个简单的错误消息提供给客户。其他异常，如输入文件不存在时产生的 IOError，则必须由调用者来处理。
+    要限制输出参数为预定义集合中的一个值，可以使用 choices 参数。
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--mode', choices=('read-only', 'read-write'))
+
+print parser.parse_args()
+
+    如果 --mode 的参数不是允许的某个值，会生成一个错误，处理将停止。
+    3. 文件参数
+    尽管可以用一个字符串参数实例化 file 对象，但是未能包括访问模式参数。FileType 提供了一种更为灵活的方式来指定一个参数应当是文件，而且包括模式和缓冲区大小。
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-i', metavar='in-file',
+					type=argparse.FileType('rt'))
+parser.add_argument('-o', metavar='out-file',
+					type=argparse.FileType('wt'))
+
+try:
+	results = parser.parse_args()
+	print 'Input file:', results.i
+	print 'Output file:', results.o
+except IOError, msg:
+	parser.error(str(msg))
+
+    与参数名关联的值是打开文件句柄。不再使用这个文件时，应用要负责关闭文件。
+    4. 定制动作
+    除了前面描述的内置动作之外，还可以提供一个实现了 Action API 的对象来定义定制动作。作为动作（action）传入 add_argument() 的对象要有一些形参描述所定义的参数（为 add_argument() 指定的所有参数），并返回一个可调用对象，它的形参包括 parser（用来处理参数）、namespace（包含解析结果）、value（所处理参数的值），以及触发动作的 option_string。
+    已经提供了类 Action，可以把它作为定义新动作的起点。构造函数处理参数定义，所以只需要在子类中覆盖 __call__()。
+
+import argparse
+
+class CustomAction(argparse.Action):
+	def __init__(self,
+				 option_strings,
+				 dest,
+				 nargs=None,
+				 const=None,
+				 default=None,
+				 type=None,
+				 choices=None,
+				 required=False,
+				 help=None,
+				 metavar=None):
+	    argparse.Action.__init__(self,
+	    						 option_strings=option_strings,
+	    						 dest=dest,
+	    						 nargs=nargs,
+	    						 const=const,
+	    						 default=default,
+	    						 type=type,
+	    						 choices=choices,
+	    						 required=required,
+	    						 help=help,
+	    						 metavar=metavar,
+	    						 )
+	    print 'Initializing CustomAction'
+	    for name, value in sorted(locals().items()):
+	    	if name == 'self' or value is None:
+	    		continue
+	    	print '  %s = %r' % (name, value)
+	    print
+	    return
+
+	def __call__(self, parser, namespace, values,
+				 option_string=None):
+		print 'Processing CustomAction for "%s"' % self.dest
+		print '  parser = %s' % id(parser)
+		print '  values = %r' % values
+		print '  option_string = %r' % option_string
+
+		# Do some arbitrary processing of the input values
+		if isinstance(values, list):
+			values = [ v.upper()  for v in values ]
+		else:
+			values = values.upper()
+		# Save the results in the namespace using the destination
+		setattr(namespace, self.dest, values)
+		print
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-a', action=CustomAction)
+parser.add_argument('-m', nargs='*', action=CustomAction)
+results = parser.parse_args(['-a', 'value',
+							 '-m', 'multivalue',
+							 'second'])
+
+print results
+
+    values 的类型取决于 nargs 的值。如果参数允许多个值，values 就是一个列表（即使其中只包含一项）。
+    option_string 的值也取决于最初的参数规范。对于必要的位置参数，option_string 总是 None。
 
