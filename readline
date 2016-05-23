@@ -1,0 +1,95 @@
+[Python标准库]readline——GNU Readline 库
+    作用：为 GNU Readline 库提供一个接口，用于在命令提示窗口与用户交互。
+    Python 版本：1.4 及以后版本
+    readline 模块可以用于改进交互式命令行程序，使之更易于使用。这个模块主要用于提供命令行文本完成特殊，即“tab 完成”功能（tab completion）。
+配置
+    有两种方法配置底层 readline 库，可以使用一个配置文件，或者利用 parse_and_bind() 函数。配置选项包括调用完成特性的按键绑定、编译模式（vi 或 emacs），以及其他一些值。有关的详细信息可以参考 GNU Readline 库的文档。
+    要启用“tab 完成”，最容易的方法就是利用一个对 parse_bind() 调用。其他选项可以同时设置。下面这个例子会改变编辑控制，将使用“vi”模式而不是默认的“emacs”。要编辑当前输入行，可以按下 Esc 键，然后使用常规的 vi 导航键，如 j、k、l 和 h。
+
+import readline
+
+readline.parse_and_bind('tab: complete')
+readline.parse_and_bind('set editing-mode vi')
+while True:
+	line = raw_input('Prompt ("stop" to quit): ')
+	if line == 'stop':
+		break
+	print 'ENTERED: "%s"' % line
+
+    这个配置可以作为指令存储在一个文件中，由库利用一个调用来读取。如果 myreadling.rc 包含
+    # Turn on tab completion
+    tab: complete
+    
+    # Use vi editing mode instead of emacs
+    set editing-mode vi
+    可以用 read_init_file() 读取这个文件。
+
+import readline
+
+readline.read_init_file('myreadline.rc')
+
+while True:
+	line = raw_input('Prompt ("stop" to quit): ')
+	if line == 'stop':
+		break
+	print 'ENTERED: "%s"' % line
+
+完成文本
+    这个程序有一组内置命令，用户输入指令时将使用 tab 完成功能。
+
+import readline
+import logging
+
+LOG_FILENAME = '/tmp/completer.log'
+logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
+
+class SimpleCompleter(object):
+
+	def __init__(self, options):
+		self.options = sorted(options)
+		return
+
+	def complete(self, text, state):
+		response = None
+		if state == 0:
+			# This is the first time for this text,
+			# so build a match list.
+			if text:
+				self.matches = [s
+								for s in self.options
+								if s and s.startswith(text)]
+				logging.debug('%s matches: %s',
+							  repr(text), self.matches)
+			else:
+				self.matches = self.options[:]
+				logging.debug('(empty input) matches: %s',
+							  self.matches)
+			# Return the state'th item from the match list,
+			# if we have that many.
+			try:
+				response = self.matches[state]
+			except IndexError:
+				response = None
+			logging.debug('complete(%s, %s) => %s',
+						  repr(text), state, repr(response))
+			return response
+
+def input_loop():
+	line = ''
+	while line != 'stop':
+		line = raw_input('Prompt ("stop" to quit): ')
+		print 'Dispatch %s' % line
+
+# Register the completer function
+OPTIONS = ['start', 'stop', 'list', 'print']
+readline.set_completer(SimpleCompleter(OPTIONS).complete)
+
+# Use the tab key for completion
+readline.parse_and_bind('tab: complete')
+
+# Prompt the user for text
+input_loop()
+
+    input_loop() 函数逐行读取，直至输入值为“stop”。更复杂的程序还可以具体解析输入行，并运行命令。
+    SimpleCompleter 类维护了一个“选项”列表，作为自动完成的候选。实例的 complete() 方法要向 readling 注册为完成源。参数是一个要完成的文本串（text）和一个状态值（state），状态值指示对这个文本调用函数的次数。这个函数会反复调用，每次将状态值递增。如果对应这个状态值有一个候选动作，则应返回一个串，如果没有更多的候选，则返回 None。这里的 complete() 实现会在 state 为 0 时查找一组匹配，然后在后续调用时返回所有候选匹配，一次返回一个。
+访问完成缓冲区
