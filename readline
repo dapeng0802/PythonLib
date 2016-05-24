@@ -55,24 +55,21 @@ class SimpleCompleter(object):
 			# This is the first time for this text,
 			# so build a match list.
 			if text:
-				self.matches = [s
-								for s in self.options
-								if s and s.startswith(text)]
+				self.matches = [s for s in self.options if s and s.startswith(text)]
 				logging.debug('%s matches: %s',
 							  repr(text), self.matches)
 			else:
 				self.matches = self.options[:]
 				logging.debug('(empty input) matches: %s',
 							  self.matches)
-			# Return the state'th item from the match list,
-			# if we have that many.
-			try:
-				response = self.matches[state]
-			except IndexError:
-				response = None
-			logging.debug('complete(%s, %s) => %s',
-						  repr(text), state, repr(response))
-			return response
+		# Return the state'th item from the match list,
+		# if we have that many.
+		try:
+			response = self.matches[state]
+		except IndexError:
+			response = None
+		logging.debug('complete(%s, %s) => %s', repr(text), state, repr(response))
+		return response
 
 def input_loop():
 	line = ''
@@ -93,3 +90,233 @@ input_loop()
     input_loop() 函数逐行读取，直至输入值为“stop”。更复杂的程序还可以具体解析输入行，并运行命令。
     SimpleCompleter 类维护了一个“选项”列表，作为自动完成的候选。实例的 complete() 方法要向 readling 注册为完成源。参数是一个要完成的文本串（text）和一个状态值（state），状态值指示对这个文本调用函数的次数。这个函数会反复调用，每次将状态值递增。如果对应这个状态值有一个候选动作，则应返回一个串，如果没有更多的候选，则返回 None。这里的 complete() 实现会在 state 为 0 时查找一组匹配，然后在后续调用时返回所有候选匹配，一次返回一个。
 访问完成缓冲区
+    SimpleCompleter 中的完成算法很简化，因为它只查看传入函数的文本参数，而没有使用 readline 的更多内部状态。还可以使用 readline 函数来管理输入缓冲区的文本。
+
+import readline
+import logging
+
+LOG_FILENAME = '/tmp/completer.log'
+logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
+
+class BufferAwareCompleter(object):
+
+	def __init__(self, options):
+		self.options = options
+		self.current_candidates = []
+		return
+
+	def complete(self, text, state):
+		response = None
+		if state == 0:
+			# This is the first time for this text,
+			# so build a match list.
+
+			origline = readline.get_line_buffer()
+			begin = readline.get_begidx()
+			end = readline.get_endidx()
+			being_completed = origline[begin:end]
+			words = origline.split()
+
+			logging.debug('origline=%s', repr(origline))
+			logging.debug('begin=%s', begin)
+			logging.debug('end=%s', end)
+			logging.debug('being_completed=%s', being_completed)
+			logging.debug('words=%s', words)
+
+			if not words:
+				self.current_candidates = sorted(self.options.keys())
+			else:
+				try:
+					if begin == 0:
+						# first word
+						candidates = self.options.keys()
+					else:
+						# later word
+						first = words[0]
+						candidates = self.options[first]
+
+					if being_completed:
+						# match options with portion of input
+						# being completed
+						self.current_candidates = [
+							w for w in candidates
+							if w.startswith(being_completed)
+							]
+					else:
+						# matching empty string so use all candidates
+						self.current_candidates = candidates
+						logging.debug('candidates=%s', self.current_candidates)
+				except (KeyError, IndexError), err:
+					logging.error('completion error: %s', err)
+					self.current_candidates = []
+
+		try:
+			response = self.current_candidates[state]
+		except IndexError:
+			response = None
+		logging.debug('complete(%s, %s) => %s', repr(text), state, response)
+		return response
+
+def input_loop():
+	line = ''
+	while line != 'stop':
+		line = raw_input('Prompt ("stop" to quit): ')
+		print 'Dispatch %s' % line
+
+# Register our completer function
+readline.set_completer(BufferAwareCompleter(
+	{'list':['files', 'directories'],
+	 'print':['byname', 'bysize'],
+	 'stop':[],
+	}).complete)
+	
+# Use the tab key for completion
+readline.parse_and_bind('tab: complete')
+
+# Prompt the user for text
+input_loop()
+
+    这个例子要完成有子选项的命令。complete() 方法需要在输入缓冲区中查看完成的位置，来确定它是第一个词还是后一个词的一部分。如果目标是第一个词，将使用选项字典的键作为候选。如果不是第一个词，则使用第一个词在选项字典中查询候选。
+    这里有 3 个顶层命令，其中两个有子命令。
+    list
+      -- files
+      -- directories
+    print
+      -- byname
+      -- bysize
+    stop
+    运行脚本，两次按下 Tab 键会给出 3 个顶层命令。
+
+Prompt ("stop" to quit): 
+list   print  stop   
+Prompt ("stop" to quit): 
+
+    在日志中可以看到：
+
+DEBUG:root:origline=''
+DEBUG:root:begin=0
+DEBUG:root:end=0
+DEBUG:root:being_completed=
+DEBUG:root:words=[]
+DEBUG:root:complete('', 0) => list
+DEBUG:root:complete('', 1) => print
+DEBUG:root:complete('', 2) => stop
+DEBUG:root:complete('', 3) => None
+DEBUG:root:origline=''
+DEBUG:root:begin=0
+DEBUG:root:end=0
+DEBUG:root:being_completed=
+DEBUG:root:words=[]
+DEBUG:root:complete('', 0) => list
+DEBUG:root:complete('', 1) => print
+DEBUG:root:complete('', 2) => stop
+DEBUG:root:complete('', 3) => None
+
+    如果第一个词是“list”（单词后面有一个空格），完成候选是不同的。
+
+Prompt ("stop" to quit): list 
+Dispatch list 
+
+    从日志可以看到，所完成的文本不是一整行，只是 list 后的部分。
+
+DEBUG:root:origline='list '
+DEBUG:root:begin=5
+DEBUG:root:end=5
+DEBUG:root:being_completed=
+DEBUG:root:words=['list']
+DEBUG:root:candidates=['files', 'directories']
+DEBUG:root:complete('', 0) => files
+DEBUG:root:complete('', 1) => directories
+DEBUG:root:complete('', 2) => None
+
+输入历史
+    readline 会自动跟踪输入历史。有两组不同的函数来处理历史。当前会话的历史可以用 get_current_history_length() 和 get_history_item() 访问。这个历史可以保存到一个文件中，以后用 write_history_file() 和 read_history_file() 重新加载。默认会保存整个历史，不过可以用 set_history_length() 设置文件的最大长度。长度为 -1 表示没有限制。
+
+import readline
+import logging
+import os
+
+LOG_FILENAME = '/tmp/completer.log'
+HISTORY_FILENAME = '/tmp/completer.hist'
+
+logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
+
+def get_history_items():
+	num_items = readline.get_current_history_length() + 1
+	return [readline.get_history_item(i) for i in xrange(1, num_items)]
+
+
+class HistoryCompleter(object):
+
+	def __init__(self):
+		self.matches = []
+		return
+
+	def complete(self, text, state):
+		response = None
+		if state == 0:
+			history_values = get_history_items()
+			logging.debug('history: %s', history_values)
+			if text:
+				self.matches = sorted(h for h in history_values if h and h.startswith(text))
+			else:
+				self.matches = []
+			logging.debug('matches: %s', self.matches)
+
+		try:
+			response = self.matches[state]
+		except IndexError:
+			response = None
+		logging.debug('complete(%s, %s) => %s', repr(text), state, repr(response))
+		return response
+
+def input_loop():
+	if os.path.exists(HISTORY_FILENAME):
+		readline.read_history_file(HISTORY_FILENAME)
+	print 'Max history file length:', readline.get_history_length()
+	print 'Start-up history:', get_history_items()
+	try:
+		while True:
+			line = raw_input('Prompt ("stop" to quit): ')
+			if line == 'stop':
+				break
+			if line:
+				print 'Adding "%s" to the history' % line
+	finally:
+		print 'Final history:', get_history_items()
+		readline.write_history_file(HISTORY_FILENAME)
+
+# Register our completer function
+readline.set_completer(HistoryCompleter().complete)
+
+# Use the tab key for completion
+readline.parse_and_bind('tab: complete')
+
+# Prompt the user for text
+input_loop()
+
+    HistoryCompleter 记住键入的所有内容，并在完成后续输入时使用这些值。
+hook
+    模块提供了一些 hook 来触发动作，可以作为交互序列的一部分。打印提示符之前会调用启动（start-up）hook，显示提示符之后但从用户读取文本之前会运行预输入（preinput）hook。
+
+import readline
+
+def startup_hook():
+	readline.insert_text('from start up_hook')
+
+def pre_input_hook():
+	readline.insert_text(' from pre_input_hook')
+	readline.redisplay()
+
+readline.set_startup_hook(startup_hook)
+readline.set_pre_input_hook(pre_input_hook)
+readline.parse_and_bind('tab: complete')
+
+while True:
+	line = raw_input('Prompt ("stop" to quit): ')
+	if line == 'stop':
+		break
+	print 'ENTERED: "%s"' % line
+
+    可以充分利用机会，在各个 hook 中使用 insert_text() 修改输入缓冲区。
+    如果在预输入 hook 中修改缓冲区，必须调用 redisplay() 更新屏幕。
