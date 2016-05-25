@@ -1,0 +1,52 @@
+[Python标准库]getpass——安全密码提示
+    作用：提示用户输入一个值，通常是一个密码，但不在控制台回显键入的内容。
+    Python 版本：1.5.2 及以后版本
+    很多程序通过终端与用户交互，这些程序需要向用户询问密码值，但不在屏幕上显示用户键入的内容。getpass 模块提供了一种可移植的方法，可以安全地处理这种口令提示。
+示例
+    getpass() 函数会打印一个提示语，然后从用户读取输入，直至用户按下回车。输入会作为一个字符串返回给调用者。
+
+import getpass
+
+try:
+	p = getpass.getpass()
+except Exception, err:
+	print 'ERROR:', err
+else:
+	print 'You entered:', p
+
+    如果调用者没有指定提示语，默认的提示语为“Password:”。
+    可以把这个提示语改为所需的任何值。
+
+import getpass
+
+p = getpass.getpass(prompt='What is your favorite color? ')
+if p.lower() == 'blue':
+	print 'Right.  Off you go.'
+else:
+	print 'Auuuuugh!'
+
+    有些程序要求一个“通行短语”（pass phrase），而不是一个简单的密码，从而提供更好的安全性。
+    默认情况下，getpass() 使用 sys.stdout 来打印提示语字符串。如果程序会在 sys.stdout 生成有用的输入，将提示与发送到另一个流通常会更好，如 sys.stderr。
+
+import getpass
+import sys
+
+p = getpass.getpass(stream=sys.stderr)
+print 'You entered:', p
+
+    对提示语使用 sys.stderr 表示标准输出可以重定向（到一个管道或一个文件），而不会看到密码提示。用户输入的值仍然不会在屏幕上回显。
+无终端使用 getpass
+    在 UNIX 下，getpass() 往往需要一个 tty， 它能通过 termios 控制这个 tty，从而禁用输入回显。这说明，不会从一个重定向到标准输入的非终端流读取值。标准输入重定向时，其结果可能根据 Python 版本而有所不同。如果替换了 sys.stdin，Python 2.5 会生成一个异常。
+    Python 2.6 和 2.7 得到了改进，会进一步尝试访问 tty 来完成处理，如果可以访问则不会产生错误。
+    要由调用者检测输入流并非一个 tty 的情况，并在这种情况下使用一个候选方法来读取。
+
+import getpass
+import sys
+
+if sys.stdin.isatty():
+	p = getpass.getpass('Using getpass: ')
+else:
+	print 'Using readline'
+	p = sys.stdin.readline().rstrip()
+
+print 'Read: ', p
