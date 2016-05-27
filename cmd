@@ -116,3 +116,88 @@ if __name__ == '__main__':
 	HelloWorld().cmdloop()
 
     如果有输入文本，complete_greet() 会返回一个匹配的朋友列表。否则，返回整个朋友列表。如果给定的名字不在朋友列表中，会给出正式的欢迎词。
+覆盖基类方法
+    Cmd 包括的很多方法可以覆盖为 hook，用来采取动作或改变基类行为。下面这个例子并不详尽，不过其中包括很多通常很有用的方法。
+
+import cmd
+
+class Illustrate(cmd.Cmd):
+	"Illustrate the base class method use."
+
+	def cmdloop(self, intro=None):
+		print 'cmdloop(%s)' % intro
+		return cmd.Cmd.cmdloop(self, intro)
+
+	def preloop(self):
+		print 'preloop()'
+
+	def postloop(self):
+		print 'postloop()'
+
+	def parseline(self, line):
+		print 'parseline(%s) =>' % line,
+		ret = cmd.Cmd.parseline(self, line)
+		print ret
+		return ret
+
+	def onecmd(self, s):
+		print 'onecmd(%s)' % s
+		return cmd.Cmd.onecmd(self, s)
+
+	def emptyline(self):
+		print 'emptyline()'
+		return cmd.Cmd.emptyline(self)
+
+	def default(self, line):
+		print 'default(%s)' % line
+		return cmd.Cmd.default(self, line)
+
+	def precmd(self, line):
+		print 'precmd(%s)' % line
+		return cmd.Cmd.precmd(self, line)
+
+	def postcmd(self, stop, line):
+		print 'postcmd(%s, %s)' % (stop, line)
+		return cmd.Cmd.postcmd(self, stop, line)
+
+	def do_greet(self, line):
+		print 'hello,', line
+
+	def do_EOF(self, line):
+		"Exit"
+		return True
+
+if __name__ == '__main__':
+	Illustrate().cmdloop('Illustrating the methods of cmd.Cmd')
+
+    cmdloop() 是解释器的主处理循环。通常没有必要覆盖这个循环，因为可以使用 preloop() 和 postloop() hook。
+    每次 cmdloop() 迭代都会调用 onecmd()， 将命令分派到其处理器。实际输入行用 parseline() 解析来创建一个元组，其中包含命令和该行上的其余部分。
+    如果这一行为空，则调用 emptyline()。默认实现会再次运行前面的命令。如果这一行包含一个命令，将调用一个 precmd()，然后查看并调用处理器。如果没有找到，则调用 default()。最后调用 postcmd()。
+通过属性配置 Cmd
+    除了前面描述的方法，还有很多属性可以用来控制命令解释器。可以把 prompt 设置为一个字符串，每次要求用户输入一个新命令时就显示这个字符串。intro 是程序开始时打印的“欢迎”消息。cmdloop() 取对应这个值的一个参数，或者也可以在类上直接设置。打印帮助时，可以用 doc_header、misc_header、undoc_header 和 ruler 属性对输出进行格式化。
+
+import cmd
+
+class HelloWorld(cmd.Cmd):
+	"""Simple command processor example."""
+
+	prompt = 'prompt: '
+	intro = "Simple command processor example."
+
+	doc_header = 'doc_header'
+	misc_header = 'misc_header'
+	undoc_header = 'undoc_header'
+
+	ruler = '-'
+
+	def do_prompt(self, line):
+		"Change the interactive prompt"
+		self.prompt = line + ': '
+
+	def do_EOF(self, line):
+		return True
+
+if __name__ == '__main__':
+	HelloWorld().cmdloop()
+
+    这个示例类显示了一个命令处理器，允许用户控制交互式会话的提示语。
