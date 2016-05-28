@@ -201,3 +201,91 @@ if __name__ == '__main__':
 	HelloWorld().cmdloop()
 
     这个示例类显示了一个命令处理器，允许用户控制交互式会话的提示语。
+运行 shell 命令
+    作为对标准命令处理的补充，Cmd 包括两个特殊的命令前缀。问号（?）等价于内置的 help 命令，可以用同样的方式使用。感叹号（!）对应 do_shell()，它要“作为外壳”运行其他命令，如下例所示。
+
+import cmd
+import subprocess
+
+class ShellEnable(cmd.Cmd):
+
+	last_output = ''
+
+	def do_shell(self, line):
+		"Run a shell command"
+		print "running shell command:", line
+		sub_cmd = subprocess.Popen(line, shell=True, stdout=subprocess.PIPE)
+		output = sub_cmd.communicate()[0]
+		print output
+		self.last_output = output
+
+	def do_echo(self, line):
+		"""Print the input, replacing '$out' with
+		the output of the last shell command.
+		"""
+		# Obviously not robust
+		print line.replace('$out', self.last_output)
+
+	def do_EOF(self, line):
+		return True
+
+if __name__ == '__main__':
+	ShellEnable().cmdloop()
+
+    这个 echo 命令实现将其参数中的串 $out 替换为前面 shell 命令的输出。
+候选输入
+    Cmd() 的默认模式是通过 readline 库与用户交互，不过也可以使用标准 UNIX shell 重定向为标准输入传递一系列命令。
+    要让程序直接读取一个脚本文件，可能还需要另外一些修改。因为 readline 与终端 /tty 设备交互，而不是与标准输入流交互，从文件读取脚本时应当将其禁用。另外，为了避免打印多余的提示语，可以把提示语设置为一个空串。下面的例子显示了如何打开一个文件，并作为输入将它传递到 HelloWorld 例子的一个修改版本。
+
+import cmd
+
+class HelloWorld(cmd.Cmd):
+	"""Simple command processor example."""
+
+	# Disable rawinput module use
+	use_rawinput = False
+
+	# Do not show a prompt after each command read
+	prompt = ''
+
+	def do_greet(self, line):
+		print "hello,", line
+
+	def do_EOF(self, line):
+		return True
+
+if __name__ == '__main__':
+	import sys
+	with open(sys.argv[1], 'rt') as input:
+		HelloWorld(stdin=input).cmdloop()
+
+    将 use_rawinput 设置为 False，prompt 设置为一个空串，现在可以在这个输入文件上调用这个脚本。
+
+greet
+greet Alice and Bob
+
+sys.argv 的命令
+    也可以将程序的命令行参数处理为命令，提供给解释器类，而不是从控制台或文件读取命令。要使用命令行参数，可以直接调用 onecmd()，如下例所示。
+
+import cmd
+import subprocess
+
+class InteractiveOrCommandLine(cmd.Cmd):
+	"""Accepts commands via the normal interactive
+	prompt or on the command line.
+	"""
+
+	def do_greet(self, line):
+		print 'hello,', line
+
+	def do_EOF(self, line):
+		return True
+
+if __name__ == '__main__':
+	import sys
+	if len(sys.argv) > 1:
+		InteractiveOrCommandLine().onecmd(' '.join(sys.argv[1:]))
+	else:
+		InteractiveOrCommandLine().cmdloop()
+
+    由于 onecmd() 取一个字符串作为输入，在参数传入之前，需要把程序的参数连接起来。
