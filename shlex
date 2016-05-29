@@ -1,0 +1,69 @@
+[Python标准库]shlex——解析 shell 语法
+    作用：shell 语法的词法分析。
+    Python 版本：1.5.2 及以后版本
+    shlex 模块实现了一个类来解析简单的类 shell 语法，可以用来编写领域特定的语言，或者解析加引号的字符串（这个任务没有表面看起来那么简单）。
+加引号的字符串
+    处理输入文本时有一个常见的问题，往往要把一个加引号的单词序列标识为一个实体。根据引号划分文本可能与预想的并不一样，特别是嵌套有多层引号时。以下面的文本为例。
+
+This string has embedded "double quotes" and 'single quotes' in it,
+and even "a 'nested example'".
+
+    一种简单的方法是构造一个正则表达式，来查找引号之外的文本部分，将它们与引号内的文本分开，或者反之。这可能带来不必要的复杂性，而且很容易因为边界条件出错，如撇号或者拼写错误。更好的解决方案是使用一个真正的解析器，如 shlex 模块提供的解析器。以下是一个简单的例子，它使用 shlex 类打印输入文件中找到的 token。
+
+import shlex
+import sys
+
+if len(sys.argv) != 2:
+	print 'Please specify one filename on the command line.'
+	sys.exit(1)
+
+filename = sys.argv[1]
+body = file(filename, 'rt').read()
+print 'ORIGINAL:', repr(body)
+print
+
+print 'TOKENS:'
+lexer = shlex.shlex(body)
+for token in lexer:
+	print repr(token)
+
+    对包含嵌入引号的数据运行这个解析器时，会得到期望的 token 列表。
+    孤立的引号（如撇号）也会处理。例如以下的输入文件。
+
+This string has an embedded apostrophe, doesn't it?
+
+    完全可以找出包含嵌入撇号的 token。
+嵌入注释
+    由于解析器要用于处理命令语言，所以也需要处理注释。默认情况下，# 后面的文本会认为是注释的一部分，并被忽略。由于解析器的特点，它只支持单字符注释前缀。可以通过 commenters 属性配置使用注释字符集。
+分解
+    要把一个现有的字符串分解为其组成 token，可以使用便利函数 split()，这是解析器的一个简单包装器。
+
+import shlex
+
+text = """This text has "quoted parts" inside it."""
+print 'ORIGINAL:', repr(text)
+print
+
+print 'TOKENS:'
+print shlex.split(text)
+
+    结果是一个列表。
+包含其他 Token 源
+    shlex 类包括很多配置属性来控制其行为。source 属性可以启用代码（或配置）重用特性，允许一个 token 流包含另一个 token 流。这类似于 Bourne shell 的 source 操作符，也因此得名。
+
+import shlex
+
+text = """This text says to source quotes.txt before contining."""
+print 'ORIGINAL:', repr(text)
+print
+
+lexer = shlex.shlex(text)
+lexer.wordchars += '.'
+lexer.source = 'source'
+
+print 'TOKENS:'
+for token in lexer:
+	print repr(token)
+
+    原文本中的字符串 source quotes.txt 会得到特殊处理。由于 lexer 的 source 属性设置为“source”，遇到这个关键字时，会自动包含下一行上出现的文件名。为了让文件名作为单个 token 出现，需要在单词所包含字符的列表中添加 . 字符（否则“quotes.txt”会变成 3 个 token：“quotes”、“.” 和 “txt”）。
+    “source”特性使用了一个名为 sourcehook() 的方法加载额外的输入源，所以 shlex 的子类可以提供一个候选实现，从非文件的其他位置加载数据。
