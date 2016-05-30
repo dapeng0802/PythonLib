@@ -67,3 +67,149 @@ for token in lexer:
 
     原文本中的字符串 source quotes.txt 会得到特殊处理。由于 lexer 的 source 属性设置为“source”，遇到这个关键字时，会自动包含下一行上出现的文件名。为了让文件名作为单个 token 出现，需要在单词所包含字符的列表中添加 . 字符（否则“quotes.txt”会变成 3 个 token：“quotes”、“.” 和 “txt”）。
     “source”特性使用了一个名为 sourcehook() 的方法加载额外的输入源，所以 shlex 的子类可以提供一个候选实现，从非文件的其他位置加载数据。
+控制解析器
+    前面的例子展示了可以改变 workchars 值来控制单词中包含哪些字符。还可以设置 quotes 字符来使用额外或替代引号。每个引号必须是单个字符，所以不可能有不同的开始和结束引号（例如，不会解析括号）。
+
+import shlex
+
+text = """|Col 1||Col 2||Col 3|"""
+print 'ORIGINAL:', repr(text)
+print
+
+lexer = shlex.shlex(text)
+lexer.quotes = '|'
+
+print 'TOKENS:'
+for token in lexer:
+	print repr(token)
+
+    在这个例子中，每个表单元格用竖线包围。
+    还可以控制用来分解单词的空白字符。
+
+import shlex
+import sys
+
+if len(sys.argv) != 2:
+	print 'Please specify one filename on the command line.'
+	sys.exit(1)
+
+filename = sys.argv[1]
+body = file(filename, 'rt').read()
+print 'ORIGINAL:', repr(body)
+print
+
+print 'TOKENS:'
+lexer = shlex.shlex(body)
+lexer.whitespace += '.,'
+for token in lexer:
+	print repr(token)
+
+    如果 shlex_example.py 中的例子修改为包含点号和逗号，结果会改变。
+错误处理
+    所有加引号的串结束之前，如果解析器提前遇到输入末尾，则会产生 ValueError。出现这种情况时，可以检查解析器处理输入时维护的一些属性，这很有用。例如，infile 指示所处理的文件的名称（如果一个文件用 source 包含另一个文件，则可能与原文件不同）。lineno 会报告发现错误时的文本行。lineno 通常是文件末尾，这可能与第一个引号相距很远。token 属性包含尚未包括在一个合法 token 中的文本缓冲区。error_lerder() 方法会用类似 UNIX 编译器的样式生成一个消息前缀，这将启用编辑器（如 emacs）来解析错误，并向用户指示有问题的那一行。
+
+import shlex
+import sys
+
+text = """This line is ok.
+This line has an "unfinished quote.
+This line is ok, too.
+"""
+
+print 'ORIGINAL:', repr(text)
+print
+
+lexer = shlex.shlex(text)
+
+print 'TOKENS:'
+try:
+	for token in lexer:
+		print repr(token)
+except ValueError, err:
+	first_line_of_error = lexer.token.splitlines()[0]
+	print 'ERROR:', lexer.error_leader(), str(err)
+	print 'fllowing "' + first_line_of_error + '"'
+
+    这个例子会生成以下输出：
+
+ORIGINAL: 'This line is ok.\nThis line has an "unfinished quote.\nThis line is ok, too.\n'
+
+TOKENS:
+'This'
+'line'
+'is'
+'ok'
+'.'
+'This'
+'line'
+'has'
+'an'
+ERROR: "None", line 4:  No closing quotation
+fllowing ""unfinished quote."
+
+POSIX 与非 POSIX 解析
+    解析器的默认行为是使用一种向后兼容方式，这不符合 POSIX 规范。要想符合 POSIX 规范，构造解析器时要设置 posix 参数。
+
+import shlex
+
+for s in [ 'Do"Not"Separate',
+		   '"Do:"Separate',
+		   'Escaped \e Character not in quotes',
+		   'Escaped "\e" Character in double quotes',
+		   "Escaped '\e' Character in single quotes",
+		   r"Escaped '\'' \"\'\" single quote",
+		   r'Escaped "\"" \'\"\' double quote',
+		   "\"'Strip extra layer of quotes'\"",
+		   ]:
+	print 'ORIGINAL :', repr(s)
+	print 'non-POSIX:',
+
+	non_posix_lexer = shlex.shlex(s, posix=False)
+	try:
+		print repr(list(non_posix_lexer))
+	except ValueError, err:
+		print 'error(%s)' % err
+
+	print 'POSIX    :',
+	posix_lexer = shlex.shlex(s, posix=True)
+	try:
+		print repr(list(posix_lexer))
+	except ValueError, err:
+		print 'error(%s)' % err
+
+	print
+
+    下面几个例子将展示解析行为的差别。
+
+ORIGINAL : 'Do"Not"Separate'
+non-POSIX: ['Do"Not"Separate']
+POSIX    : ['DoNotSeparate']
+
+ORIGINAL : '"Do:"Separate'
+non-POSIX: ['"Do:"', 'Separate']
+POSIX    : ['Do:Separate']
+
+ORIGINAL : 'Escaped \\e Character not in quotes'
+non-POSIX: ['Escaped', '\\', 'e', 'Character', 'not', 'in', 'quotes']
+POSIX    : ['Escaped', 'e', 'Character', 'not', 'in', 'quotes']
+
+ORIGINAL : 'Escaped "\\e" Character in double quotes'
+non-POSIX: ['Escaped', '"\\e"', 'Character', 'in', 'double', 'quotes']
+POSIX    : ['Escaped', '\\e', 'Character', 'in', 'double', 'quotes']
+
+ORIGINAL : "Escaped '\\e' Character in single quotes"
+non-POSIX: ['Escaped', "'\\e'", 'Character', 'in', 'single', 'quotes']
+POSIX    : ['Escaped', '\\e', 'Character', 'in', 'single', 'quotes']
+
+ORIGINAL : 'Escaped \'\\\'\' \\"\\\'\\" single quote'
+non-POSIX: error(No closing quotation)
+POSIX    : ['Escaped', '\\ \\"\\"', 'single', 'quote']
+
+ORIGINAL : 'Escaped "\\"" \\\'\\"\\\' double quote'
+non-POSIX: error(No closing quotation)
+POSIX    : ['Escaped', '"', '\'"\'', 'double', 'quote']
+
+ORIGINAL : '"\'Strip extra layer of quotes\'"'
+non-POSIX: ['"\'Strip extra layer of quotes\'"']
+POSIX    : ["'Strip extra layer of quotes'"]
+
