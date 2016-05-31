@@ -1,0 +1,210 @@
+[Python标准库]ConfigParser——处理配置文件
+    作用：读写类似于 Windows INI 文件的配置文件。
+    Python 版本： 1.5
+    使用 ConfigParser 模块可以为应用管理用户可编辑的配置文件。配置文件的内容可以组织为组，还支持多个选项值（option-value）类型，包括整数、浮点值和布尔值。可以使用 Python 格式化字符串组合选项值来建立更长的值，如由主机名和端口号等较短的值构造 URL。
+配置文件格式
+    ConfigParser 使用的文件格式类似于 Microsoft Windows 较早版本使用的格式。它由一个或多个命名的节（section）组成，每一节包含由名和值构成的选项（option）。
+    可以通过查找以“[”开头并以“]”结束的行来标识配置文件的节。中括号之间的值是节名，其中可以包含除中括号以外的任何字符。
+    在一节中，每行列出一个选项。行以选项名开头，选项名与值之间用一个冒号（:）或一个等号（=）分开。解析文件时，分隔符两边的空白符会被忽略。
+    这个示例配置文件有一个名为“bug_tracker”的节，其中包含 3 个选项。
+
+[bug_tracker]
+url = http://localhost:8080/bugs/
+username = dhellmann
+password = SECRET
+
+读取配置文件
+    配置文件最常见的用法是允许用户或系统管理员用一个常规的文本编辑器编辑文件，以设置默认的应用行为，然后让应用读取这个文件，并进行解析，根据其内容采取动作。可以使用 SafeConfigParser 的 read() 方法来读取配置文件。
+
+from ConfigParser import SafeConfigParser
+
+parser = SafeConfigParser()
+parser.read('simple.ini')
+
+print parser.get('bug_tracker', 'url')
+
+    这个程序读取上一节的 simple.ini 文件，打印 bug_tracker 节中的 url 选项的值。
+    read() 方法还接受一个文件名列表。会依次检查各个名，如果文件存在，则打开该文件并读取。
+
+from ConfigParser import SafeConfigParser
+import glob
+
+parser = SafeConfigParser()
+
+candidates = [ 'does_not_exist.ini', 'also_does_not_exist.ini',
+			   'simple.ini', 'multisection.ini',
+			   ]
+
+found = parser.read(candidates)
+
+missing = set(candidates) - set(found)
+print 'Found config files:', sorted(found)
+print 'Missing files     :', sorted(missing)
+
+    read() 返回一个列表，其中包含成功加载的文件的名称，所以程序可以发现缺少那些配置文件，并确定是否将其忽略。
+    包含 Unicode 数据的配置文件应当使用 codecs 模块打开，来设置适当的编码值。将原输入的密码改为包含 Unicode 字符，并采用 UTF-8 编码保存结果。可以将 codecs 文件句柄传递到 readfp()，后者使用其参数的 readline() 方法从文件得到行，并进行解析。
+
+from ConfigParser import SafeConfigParser
+import codecs
+
+parser = SafeConfigParser()
+
+# Open the file with the correct encoding
+with codecs.open('unicode.ini', 'r', encoding='utf-8') as f:
+	parser.readfp(f)
+
+password = parser.get('bug_tracker', 'password')
+
+print 'Password:', password.encode('utf-8')
+print 'Type    :', type(password)
+print 'repr()  :', repr(password)
+
+    get() 返回的值是一个 unicode 对象，所以为了安全地打印这个对象，必须将它重新编码为 UTF-8。
+访问配置设置
+    SafeConfigParser 包含一些方法来检查所解析配置的结构，包括列出节和选项，以及得到它们的值。下面这个配置文件包含两个节，分别对应不同的 Web 服务。
+
+[bug_tracker]
+url = http://localhost:8080/bugs/
+username = dhellmann
+password = SECRET
+
+[wiki]
+url = http://localhost:8080/wiki/
+username = dhellmann
+password = SECRET
+
+    这个示例程序使用了一些方法来查看配置数据，包括 sections()、options() 和 items()。
+
+from ConfigParser import SafeConfigParser
+
+parser = SafeConfigParser()
+parser.read('multisection.ini')
+
+for section_name in parser.sections():
+	print 'Section:', section_name
+	print '  Options:', parser.options(section_name)
+	for name, value in parser.items(section_name):
+		print '  %s = %s' % (name, value)
+	print
+
+    sections() 和 options() 会返回字符串列表，而 items() 返回一个包含名-值对的元组列表。
+    1. 测试值是否存在
+    要测试一节是否存在，可以使用 has_section()，并传入节名。
+
+from ConfigParser import SafeConfigParser
+
+parser = SafeConfigParser()
+parser.read('multisection.ini')
+for candidate in [ 'wiki', 'bug_tracker', 'dvcs' ]:
+	print '%-12s: %s' % (candidate, parser.has_section(candidate))
+
+    调用 get() 之前先测试一个节是否存在，这样可以避免因为缺少数据而导致异常。
+    使用 has_option() 可以测试一个节中某个选项是否存在。
+
+from ConfigParser import SafeConfigParser
+
+parser = SafeConfigParser()
+parser.read('multisection.ini')
+
+SECTIONS = [ 'wiki', 'none' ]
+OPTIONS = [ 'username', 'password', 'url', 'description' ]
+
+for section in SECTIONS:
+	has_section = parser.has_section(section)
+	print '%s section exists: %s' % (section, has_section)
+	for candidate in OPTIONS:
+		has_option = parser.has_option(section, candidate)
+		print '%s.%-12s: %s' % (section, candidate, has_option)
+	print
+
+    如果这个节不存在，has_option() 会返回 False。
+    2. 值类型
+    所有节和选项名都处理为字符串，不过选项值可以是字符串、整数、浮点数或者布尔值。有一些可能的布尔值可以转换为 true 或 false。下面的示例文件分别包含了各类选项值。
+
+[ints]
+positive = 1
+negative = -5
+
+[floats]
+positive = 0.2
+negative = -3.14
+
+[boolean]
+number_true = 1
+number_false = 0
+yn_true = yes
+yn_false = no
+tf_true = true
+tf_false = false
+onoff_true = on
+onoff_false = off
+
+    SafeConfigParser 不会尝试去了解选项类型，而希望应用使用正确的方法来获取所需类型的值。get() 总会返回一个字符串。使用 getint() 可以到达整数，getfloat() 得到浮点数，使用 getboolean() 得到布尔值。
+
+from ConfigParser import SafeConfigParser
+
+parser = SafeConfigParser()
+parser.read('types.ini')
+
+print 'Integers:'
+for name in parser.options('ints'):
+	string_value = parser.get('ints', name)
+	value = parser.getint('ints', name)
+	print '  %-12s : %-7r -> %d' % (name, string_value, value)
+print '\nFloats:'
+for name in parser.options('floats'):
+	string_value = parser.get('floats', name)
+	value = parser.getfloat('floats', name)
+	print '  %-12s : %-7r -> %0.2f' % (name, string_value, value)
+print '\nBooleans: '
+for name in parser.options('booleans'):
+	string_value = parser.get('booleans', name)
+	value = parser.getboolean('booleans', name)
+	print '  %-12s : %-7r -> %s' % (name, string_value, value)
+
+    使用示例输入运行这个程序，可以生成以下结果：
+
+Integers:
+  positive     : '1'     -> 1
+  negative     : '-5'    -> -5
+
+Floats:
+  positive     : '0.2'   -> 0.20
+  negative     : '-3.14' -> -3.14
+
+Booleans: 
+  number_true  : '1'     -> True
+  number_false : '0'     -> False
+  yn_true      : 'yes'   -> True
+  yn_false     : 'no'    -> False
+  tf_true      : 'true'  -> True
+  tf_false     : 'false' -> False
+  onoff_true   : 'on'    -> True
+  onoff_false  : 'off'   -> False
+
+    3. 选项作为标志
+    通常，解析器要求每个选项都有一个明确的值，不过，如果 SafeConfigParser 参数 allow_no_value 设置为 True，选项可以在输入文件一行上单独出现，用作一个标志。
+
+import ConfigParser
+
+# Require values
+try:
+	parser = ConfigParser.SafeConfigParser()
+	parser.read('allow_no_value.ini')
+except ConfigParser.ParsingError, err:
+	print 'Could not parse:', err
+
+# Allow stand-alone option names
+print '\nTrying again with allow_no_value=True'
+parser = ConfigParser.SafeConfigParser(allow_no_value=True)
+parser.read('allow_no_value.ini')
+for flag in [ 'turn_feature_on', 'turn_other_feature_on' ]:
+	print
+	print flag
+	exists = parser.has_option('flags', flag)
+	print '  has_option:', exists
+	if exists:
+		print '         get:', parser.get('flags', flag)
+
+    选项没有明确的值时，has_option() 会报告这个选项存在，get() 返回 None。
+修改设置
