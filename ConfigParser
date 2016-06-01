@@ -208,3 +208,248 @@ for flag in [ 'turn_feature_on', 'turn_other_feature_on' ]:
 
     选项没有明确的值时，has_option() 会报告这个选项存在，get() 返回 None。
 修改设置
+    SafeConfigParser 主要通过从文件读取设置来进行配置，不过也可以以后填充设置，调用 add_section() 创建一个新的节，另外可以调用 set() 增加或修改一个选项。
+
+import ConfigParser
+
+parser = ConfigParser.SafeConfigParser()
+
+parser.add_section('bug_tracker')
+parser.set('bug_tracker', 'url', 'http://localhost:8080/bugs')
+parser.set('bug_tracker', 'username', 'dhellmann')
+parser.set('bug_tracker', 'password', 'secret')
+
+for section in parser.sections():
+	print section
+	for name, value in parser.items(section):
+		print '  %s = %r' % (name, value)
+
+    所有选项都必须设置为字符串，即使作为整数、浮点数或布尔值来获取。
+    可以用 remove_section() 和 remove_option() 从 SafeConfigParser 删除节和选项。
+
+import ConfigParser
+
+parser = ConfigParser.SafeConfigParser()
+parser.read('multisection.ini')
+
+print 'Read values:\n'
+for section in parser.sections():
+	print section
+	for name, value in parser.items(section):
+		print '  %s = %r' % (name, value)
+
+parser.remove_option('bug_tracker', 'password')
+parser.remove_section('wiki')
+
+print '\nModified values:\n'
+for section in parser.sections():
+	print section
+	for name, value in parser.items(section):
+		print '  %s = %r' % (name, value)
+
+    删除一节也会删除其中包含的所有选项。
+保存配置文件
+    用所需的数据填充 SafeConfigParser 后，就可以调用 write() 方法将它保存到一个文件。这样一来，可以提供一个用户界面来编辑配置设置，而不用编写任何代码管理文件。
+
+import ConfigParser
+import sys
+
+parser = ConfigParser.SafeConfigParser()
+
+parser.add_section('bug_tracker')
+parser.set('bug_tracker', 'url', 'http://localhost:8080/bugs')
+parser.set('bug_tracker', 'username', 'dhellmann')
+parser.set('bug_tracker', 'password', 'secret')
+
+parser.write(sys.stdout)
+
+    write() 方法取一个类文件的对象作为参数。它采用 INI 格式写出数据，以便再由 SafeConfigParser 解析。
+选项搜索路径
+    SafeConfigParser 查找选项时使用了一个多步搜索过程。
+    开始搜索选项之前，首先会测试节名。如果这个节不存在，而且名不是特殊值 DEFAULT，则产生一个 NoSectionError 异常。
+    (1) 如果选项名出现在传递到 get() 的 vars 字典中，会返回 vars 的值。
+    (2) 如果选项名出现在指定的节中，则返回该节中的值。
+    (3) 如果选项名出现在 DEFAULT 节中，会返回相应的值。
+    (4) 如果选项名出现在传递到构造函数的 defaults 字典中，会返回相应的值。如果这个名未出现在以上任何位置，则产生 NoOptionError。
+    可以使用以下配置文件来展示搜索路径行为。
+
+[DEFAULT]
+file-only = value from DEFAULT section
+init-and-file = value from DEFAULT section
+from-section = value from DEFAULT section
+from-vars = value from DEFAULT section
+
+[sect]
+section-only = value from section in file
+from-section = value from section in file
+from-vars = value from section in file
+
+    这个测试程序包括配置文件中未指定的一些选项默认设置，并覆盖了文件中定义的一些值。
+
+import ConfigParser
+
+# Define the names of the options
+option_names = [
+	'from-default',
+	'from-section', 'section-only',
+	'file-only', 'init-only', 'init-and-file',
+	'from-vars',
+	]
+
+# Initialize the parser with some defaults
+parser = ConfigParser.SafeConfigParser(
+	defaults={'from-default':'value from defaults passed to init',
+			  'init-only':'value from defaults passed to init',
+			  'init-and-file':'value from defaults passed to init',
+			  'from-section':'value from defaults passed to init',
+			  'from-vars':'value from defaults passed to init'
+			  })
+
+print 'Defaults before loading file:'
+defaults = parser.defaults()
+for name in option_names:
+	if name in defaults:
+		print '  %-15s = %r' % (name, defaults[name])
+
+# Load the configuration file
+parser.read('with_defaults.ini')
+
+print '\nDefaults after loading file:'
+defaults = parser.defaults()
+for name in option_names:
+	if name in defaults:
+		print '  %-15s = %r' % (name, defaults[name])
+
+# Define some local overrides
+vars = {'from-vars':'value from vars'}
+# Show the values of all the options
+print '\nOption lookup:'
+for name in option_names:
+	value = parser.get('sect', name, vars=vars)
+	print '  %-15s = %r' % (name, value)
+
+# Show error messages for options that do not exist
+print '\nError cases:'
+try:
+	print 'No such option :', parser.get('sect', 'no-option')
+except ConfigParser.NoOptionError, err:
+	print str(err)
+
+try:
+	print 'No such section:', parser.get('no-sect', 'no-option')
+except ConfigParser.NoSectionError, err:
+	print str(err)
+
+    输出显示了各个选项值的来源，并展示了不同来源的默认值如何覆盖现有值。
+
+Defaults before loading file:
+  from-default    = 'value from defaults passed to init'
+  from-section    = 'value from defaults passed to init'
+  init-only       = 'value from defaults passed to init'
+  init-and-file   = 'value from defaults passed to init'
+  from-vars       = 'value from defaults passed to init'
+
+Defaults after loading file:
+  from-default    = 'value from defaults passed to init'
+  from-section    = 'value from DEFAULT section'
+  file-only       = 'value from DEFAULT section'
+  init-only       = 'value from defaults passed to init'
+  init-and-file   = 'value from DEFAULT section'
+  from-vars       = 'value from DEFAULT section'
+
+Option lookup:
+  from-default    = 'value from defaults passed to init'
+  from-section    = 'value from section in file'
+  section-only    = 'value from section in file'
+  file-only       = 'value from DEFAULT section'
+  init-only       = 'value from defaults passed to init'
+  init-and-file   = 'value from DEFAULT section'
+  from-vars       = 'value from vars'
+
+Error cases:
+No such option : No option 'no-option' in section: 'sect'
+No such section: No section: 'no-sect'
+
+用接合合并值
+    SafeConfigParser 提供了一个特性，称为拼接（interpolation），可以用来将值接合在一起。如果值包含标准 Python 格式串，用 get() 获取这个值时就会触发拼接特性。获取的值中指定的选项会按顺序一次替换为相应的值，直到没有必要再做更多替换。
+    可以重写本节前面的 URL 例子，改为使用拼接，从而能更容易地只改变部分值。例如，这个配置文件将 URL 的协议、主机名和端口分开，作为单独的选项。
+
+[bug_tracker]
+protocol = http
+server = localhost
+port = 8080
+url = %(protocol)s://%(server)s:%(port)s/bugs/
+username = dhellmann
+password = SECRET
+
+    每次调用 get() 时会默认地完成拼接。在 raw 参数中传入一个 true 值可以获取原值，而不会拼接。
+
+from ConfigParser import SafeConfigParser
+
+parser = SafeConfigParser()
+parser.read('interpolation.ini')
+
+print 'Original value      :', parser.get('bug_tracker', 'url')
+
+parser.set('bug_tracker', 'port', '9090')
+print 'Altered port value  :', parser.get('bug_tracker', 'url')
+
+print 'Without interpolation:', parser.get('bug_tracker', 'url', raw=True)
+
+    由于值由 get() 计算，改变 url 值所用的某个设置也会改变返回值。
+    1. 使用默认值
+    并不要求拼接的值出现在原选项所在的同一节中。默认值可以与覆盖值混合使用。
+
+[DEFAULT]
+url = %(protocol)s://%(server)s:%(port)s/bugs/
+protocol = http
+server = bugs.example.com
+port = 80
+
+[bug_tracker]
+server = localhost
+port = 8080
+username = dhellmann
+password = SECRET
+
+    采用这个配置，url 的值来自 DEFAULT 节，替换从查看 bug_tracker 开始，未找到的值则在 DEFAULT 中查找。
+
+from ConfigParser import SafeConfigParser
+
+parser = SafeConfigParser()
+parser.read('interpolation_defaults.ini')
+
+print 'URL:', parser.get('bug_tracker', 'url')
+
+    hostname 和 port 值来自 bug_tracker 节，但是 protocol 来自 DEFAULT。
+    2. 替换错误
+    MAX_INTERPOLATION_DEPTH 步骤之后替换停止，以避免递归引用导致的问题。
+
+import ConfigParser
+
+parser = ConfigParser.SafeConfigParser()
+
+parser.add_section('sect')
+parser.set('sect', 'opt', '%(opt)s')
+
+try:
+	print parser.get('sect', 'opt')
+except ConfigParser.InterpolationDepthError, err:
+	print 'ERROR:', err
+
+    如果有太多替换步骤，就会产生一个 InterpolationDepthError 异常。
+    缺少值会导致一个 InterpolationMissingOptionError 异常。
+
+import ConfigParser
+
+parser = ConfigParser.SafeConfigParser()
+
+parser.add_section('bug_tracker')
+parser.set('bug_tracker', 'url', 'http://%(server)s:%(port)s/bugs')
+
+try:
+	print parser.get('bug_tracker', 'url')
+except ConfigParser.InterpolationMissingOptionError, err:
+	print 'ERROR:', err
+
+    由于没有定义 server 值，所以无法构造 url。
