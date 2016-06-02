@@ -1,0 +1,111 @@
+[Python标准库]日志——报告状态、错误和信息消息
+    作用：报告状态、错误和信息消息。
+    Python 版本：2.3 及以后版本
+    logging 模块定义了一个标准 API，用来报告应用和库的错误及状态信息。由一个标准库模块提供日志 API 的主要好处在于：所有 Python 模块都可以参与日志记录，所以一个应用的日志还可以包含来自第三方模块的消息。
+应用与库中的日志记录
+    应用开发人员和库作者都可以使用 logging，不过分别有不同的考虑。
+    应用开发人员要配置 logging 模块，将消息定向到适当的输出通道。可以采用不同的详细程度记录消息，或者记录到不同的目标。可以将日志消息写入文件、HTTP GET/POST 位置、通过 SMTP 写入 email 邮件、写入通用套接字或采用操作系统特定的日志机制，logging 模块中提供了所有这些处理器。对于内置类未能处理的特殊需求，还可以创建定制的日志目标类。
+    库开发人员也可以使用 logging，而且要做的工作更少。只需要为各个上下文分别创建一个日志记录器实例，使用一个适当的名字，然后使用标准级别记录日志。只要库使用 logging API，并提供一致命名和级别选择，就可以根据需要配置应用来显示或隐藏库的消息。
+记入文件
+    大多数应用都配置为将日志记入文件。使用 basicConfig() 函数建立默认处理器，从而将调试消息写至一个文件。
+
+import logging
+
+LOG_FILENAME = 'logging_example.out'
+logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
+
+logging.debug('This message should go to the log file')
+
+with open(LOG_FILENAME, 'rt') as f:
+	body = f.read()
+
+print 'FILE:'
+print body
+
+    运行脚本之后，日志消息写至 logging_example.out。
+旋转日志文件
+    反复运行这个脚本会将更多的消息追加到这个文件。要想每次程序运行时创建一个新文件，可以向 basicConfig() 的参数 filemode 传入值“w”。不过，最好不要采用这种方式管理文件的创建，更好的做法是使用一个 RotatingFileHandler，它会自动创建新文件，同时保留原来的日志文件。
+
+import logging
+import logging.handlers
+import glob
+
+LOG_FILENAME = 'logging_rotatingfile_example.out'
+my_logger = logging.getLogger('MyLogger')
+my_logger.setLevel(logging.DEBUG)
+# Add the log message handler to the logger
+handler = logging.handlers.RotatingFileHandler(LOG_FILENAME,
+	maxBytes=20,
+	backupCount=5)
+my_logger.addHandler(handler)
+
+# Log some messages
+for i in range(20):
+	my_logger.debug('i = %d' % i)
+
+# See what files are created
+logfiles = glob.glob('%s*' % LOG_FILENAME)
+for filename in logfiles:
+	print filename
+
+    最后会得到 6 个单独的文件，分别包含应用的部分日志历史。最新的文件总是 logging_rotatingfile_example.out，每次达到大小限制时，就会加后缀 .1 重命名。限制的各个备份文件也会重命名，使后缀递增（.1 变成 .2，等等），.5 文件会被删除。
+详细级别
+    logging API 还有一个有用的特性，能够采用不同的日志级别（log level）生成不同的消息。例如，这说明代码可以附带调试消息，可以适当地设置日志级别，从而不会在生产系统中写出这些调试信息。下表列出了 logging 定义的日志级别。
+    ------------------------
+        级别    |    值
+    ------------------------
+      CRITICAL  |    50
+    ------------------------
+      ERROR     |    40
+    ------------------------
+      WARNING   |    30
+    ------------------------
+      INFO      |    20
+    ------------------------
+      DEBUG     |    10
+    ------------------------
+      UNSET     |    0
+    ------------------------
+    对于某个级别的日志消息，只有当处理器和日志记录器配置为可以发布该级别（或更高级别）的消息时，才会发布这个日志消息。例如，如果一个消息的级别是 CRITICAL，而日志记录器设置为 ERROR，这个消息就会发出（50 > 40）。如果消息是 WARNING，而日志记录器设置为 ERROR 的消息，这个消息就不会发出（30 < 40）。
+
+import logging
+import sys
+
+LEVELS = { 'debug':logging.DEBUG,
+		   'info':logging.INFO,
+		   'warning':logging.WARNING,
+		   'error':logging.ERROR,
+		   'critical':logging.CRITICAL,
+		   }
+
+if len(sys.argv) > 1:
+	level_name = sys.argv[1]
+	level = LEVELS.get(level_name, logging.NOTSET)
+	logging.basicConfig(level=level)
+
+logging.debug('This is a debug message')
+logging.info('This is a info message')
+logging.warning('This is a warning message')
+logging.error('This is an error message')
+logging.critical('This is a critical error message')
+
+    运行这个脚本并提供参数（如“debug”或“warning”），查看在不同级别会显示哪些消息。
+命名日志记录器实例
+    前面的所有日志消息都内嵌有“根”。logging 模块支持一个日志记录器的层次结构，各个日志记录器有不同的名字。要指出一个特定的日志消息来自哪里，一种容易的方法是对各个模块使用一个单独的日志记录器对象。每个新的日志记录器会从其父对象继承配置，发送到一个日志记录器的日志消息会包含这个日志记录器的名。每个日志记录器可以采用不同的方式配置（这是可选的），从而以不同的方式处理来自不同模块的消息。下面的例子展示了如何记录来自不同模块的日志，以便跟踪消息的来源。
+
+import logging
+
+logging.basicConfig(level=logging.WARNING)
+
+logger1 = logging.getLogger('package.module1')
+logger2 = logging.getLogger('package.module2')
+
+logger1.warning('This message comes from one module')
+logger2.warning('And this message comes from another module')
+
+    输出如下：
+
+WARNING:package.module1:This message comes from one module
+WARNING:package.module2:And this message comes from another module
+
+    还有更多选项来配置日志记录，包括不同的日志消息格式化选项、将消息传送到多个目标，以及使用一个套接字接口动态改变一个长时间运行的应用的配置。所有这些选项都在库模块文档中做了详细介绍。
