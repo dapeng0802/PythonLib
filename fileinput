@@ -1,0 +1,96 @@
+[python标准库]fileinput——命令行过滤器框架
+    作用：创建命令行过滤器程序，以处理来自输入流的文本行。
+    Python 版本：1.5.2 及以后版本
+    fileinput 模块是一个框架，可以用来创建命令行程序作为过滤器处理文本文件。
+M3U 文件转换为 RSS
+    过滤器的一个例子是 m3utorss，这个程序可以将一组 MP3 文件转换为一个可以作为播客共享的 RSS 提要。程序的输入是一个或多个 m3u 文件，其中列出要发布的 MP3 文件。输出是一个打印到控制台的 RSS 提要。要处理输入，程序需要迭代处理文件名列表，并完成以下工作：
+    打开各个文件。
+    读取文件的各行。
+    明确这一行是否指示一个 MP3 文件。
+    如果是，则从 MP3 文件中抽取 RSS 提要所需的信息。
+    打印输出。
+    所有这些文件处理都可以手工编写代码完成。这并不太复杂，而且通过一些测试，甚至错误处理也可以自行编写。不过 fileinput 可以处理所有这些细节，使程序大为简化。
+
+for line in fileinput.input(sys.argv[1:]):
+	mp3filename = line.strip()
+	if not mp3filename or mp3filename.startswith('#'):
+		continue
+	item = SubElement(rss, 'item')
+	title = SubElement(item, 'title')
+	title.text = mp3filename
+	encl = SubElement(item, 'enclosure',
+		{'type':'audio/mpeg',
+		'url':mp3filename})
+
+    input() 函数取要检查的文件名列表作为参数。如果这个列表为空，模块会从标准输入读取数据。这个函数会返回一个迭代器，由所处理的文本文件生成各个文本行。调用者只需循环处理各行，跳过空格和注释，查找指向 MP3 文件的引用。
+    以下是完整的程序。
+
+import fileinput
+import sys
+import time
+from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.dom import minidom
+
+# Establish the RSS and channel nodes
+rss = Element('rss', {'xmlns:dc':"http://purl.org/dc/elements/1.1/",
+	'version':'2.0',
+	})
+channel = SubElement(rss, 'channel')
+title = SubElement(channel, 'title')
+title.text = 'Sample podcast feed'
+desc = SubElement(channel, 'description')
+desc.text = 'Generated for PyMOTW'
+pubdate = SubElement(channel, 'pubDate')
+pubdate.text = time.asctime()
+gen = SubElement(channel, 'generator')
+gen.text = 'http://www.doughellmann.com/PyMOTW/'
+
+for line in fileinput.input(sys.argv[1:]):
+	mp3filename = line.strip()
+	if not mp3filename or mp3filename.startswith('#'):
+		continue
+	item = SubElement(rss, 'item')
+	title = SubElement(item, 'title')
+	title.text = mp3filename
+	encl = SubElement(item, 'enclosure',
+		{'type':'audio/mpeg',
+		'url':mp3filename})
+rough_string = tostring(rss)
+reparsed = minidom.parseString(rough_string)
+print reparsed.toprettyxml(indent=" ")
+
+    这个示例输入文件包含多个 MP3 文件的文件名。
+
+# This is a sample m3u file
+episode-one.mp3
+episode-two.mp3
+
+    利用以上示例输入，运行脚本可以生成 RSS 格式的 XML 数据。
+进度元数据
+    在前面的例子中，文件名和正在处理的行号并不重要。但其他工具（如类 grep 的搜索）可能需要这个信息。fileinput 包含一些函数来访问有关当前行的所有元数据（filename()、filelineno() 和 lineno()）。
+
+import fileinput
+import sys
+import re
+
+pattern = re.compile(sys.argv[1])
+
+for line in fileinput.input(sys.argv[2:]):
+	if pattern.search(line):
+		if fileinput.isstdin():
+			fmt = '{lineno}:{line}'
+		else:
+			fmt = '{filename}:{lineno}:{line}'
+		print fmt.format(filename=fileinput.filename(),
+			lineno=fileinput.filelineno(),
+			line=line.rstrip())
+
+    可以用一个基本的模式匹配循环来查找串“fileinput”在这些示例源文件中的出现。
+
+python fileinput_grep.py fileinput *.py
+
+    还可以从标准输入读取文本。
+
+cat *.py | python fileinput_grep.py fileinput
+
+原地过滤
