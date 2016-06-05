@@ -94,3 +94,43 @@ python fileinput_grep.py fileinput *.py
 cat *.py | python fileinput_grep.py fileinput
 
 原地过滤
+    另一种常见的文件处理操作是原地（in-place）修改一个文件的内容。例如，如果一个子网范围改变，UNIX 主机文件就可能需要更新。
+    要自动完成这个修改，安全的做法是根据输入创建一个新文件，然后用编辑后的副本替换原来的文件。fileinput 使用 inplace 选项自动支持这个方法。
+
+import fileinput
+import sys
+
+from_base = sys.argv[1]
+to_base = sys.argv[2]
+files = sys.argv[3:]
+
+for line in fileinput.input(files, inplace=True):
+	line = line.rstrip().replace(from_base, to_base)
+	print line
+
+    尽管脚本使用了 print，但是由于 fileinput 将标准输出重定向到所覆盖的文件，所以不生成任何输出。
+    处理开始之前，会使用原来的文件名加上 .bak 创建一个备份文件。
+
+import fileinput
+import sys
+import glob
+
+from_base = sys.argv[1]
+to_base = sys.argv[2]
+files = sys.argv[3:]
+
+for line in fileinput.input(files, inplace=True):
+	if fileinput.isfirstline():
+		sys.stderr.write('Started processing %s\n' %
+			fileinput.filename())
+		sys.stderr.write('Directory contains %s\n' %
+			glob.glob('*'))
+	line = line.rstrip().replace(from_base, to_base)
+	print line
+
+sys.stderr.write('Finished processing %s\n' %
+	fileinput.filename())
+sys.stderr.write('Directory contains %s\n' %
+	glob.glob('*'))
+
+    输入结束时会删除这个备份文件。
