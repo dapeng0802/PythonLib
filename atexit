@@ -1,0 +1,109 @@
+[Python标准库]atexit——程序关闭回调
+    作用：注册程序关闭时调用的函数。
+    Python 版本：2.1.3 及以后版本
+    atexit 模块提供了一个接口，来注册程序正常关闭时调用的函数。sys 模块还提供了一个 hook，sys.exitfunc，不过这里只能注册一个函数。atexit 注册表可以由多个模块和库同时使用。
+示例
+    下面的例子通过 register() 注册了一个函数。
+
+import atexit
+
+def all_done():
+	print 'all_done()'
+
+print 'Registering'
+atexit.register(all_done)
+print 'Registered'
+
+    由于程序不做其他事情，会立即调用 all_done()。
+    还可以注册多个函数，并向注册的函数传递参数。这对于妥善地断开数据库连接、删除临时文件等等可能很有用。不用为需要释放的资源维护一个特殊的列表，完全可以对每个资源注册一个单独的清理函数。
+
+import atexit
+
+def my_cleanup(name):
+	print 'my_cleanup(%s)' % name
+
+atexit.register(my_cleanup, 'first')
+atexit.register(my_cleanup, 'second')
+atexit.register(my_cleanup, 'third')
+
+    退出函数会按注册的逆序来调用。这个方法以模块导入顺序（相应地，也就是注册其 atexit 函数的顺序）的逆序完成模块的清理，这会减少依赖冲突。
+什么情况下不调用 atexit 函数
+    如果满足以下任何一个条件，就不会调用为 atexit 注册的回调。
+    (1) 程序由于一个信号而终止。
+    (2) 直接被调用了 os._exit()。
+    (3) 检测到解释器中的一个致命错误。
+    可以更新 subprocess 一节的例子，显示程序因为一个信号中止时发生了什么。这里涉及两个文件，父程序和子程序。父程序启动子程序，暂停，然后将其中止。
+
+import os
+import signal
+import subprocess
+import time
+
+proc = subprocess.Popen('atexit_signal_child.py')
+print 'PARENT: Pausing before sending signal...'
+time.sleep(1)
+print 'PARENT: Signaling child'
+os.kill(proc.pid, signal.SIGTERM)
+
+    子程序建立一个 atexit 回调，然后休眠，直至信号到来。
+
+import atexit
+import time
+import sys
+def not_called():
+	print 'CHILD: atexit handler should not have been called'
+
+print 'CHILD: Registering atexit handler'
+sys.stdout.flush()
+atexit.register(not_called)
+
+print 'CHILD: Pausing to wait for signal'
+sys.stdout.flush()
+time.sleep(5)
+
+    子程序不会打印嵌在 not_called() 中的消息。
+    如果程序使用了 os._exit()，就不会再调用 atexit 回调。
+
+import atexit
+import os
+
+def not_called():
+	print 'This should not be called'
+
+print 'Registering'
+atexit.register(not_called)
+print 'Registered'
+
+print 'Exiting...'
+os._exit(0)
+
+    由于这个例子绕过了正常的退出路径，所以没有运行回调。
+    要确保回调运行，可以在句号外运行来执行或者调用 sys.exit() 使程序中止。
+
+import atexit
+import sys
+
+def all_done():
+	print 'all_done'
+
+print 'Registering'
+atexit.register(all_done)
+print 'Registered'
+
+print 'Exiting...'
+sys.exit()
+
+    这个例子调用了 sys.exit()，所以会调用注册的回调。
+处理异常
+    atexit 回调中所产生异常的 Traceback 会打印在控制台上，最后产生的异常会重新抛出，作为程序的最后一个错误消息。
+
+import atexit
+
+def exit_with_exception(message):
+	raise RuntimeError(message)
+
+atexit.register(exit_with_exception, 'Registered first')
+atexit.register(exit_with_exception, 'Registered second')
+
+    注册顺序会控制执行顺序。如果一个回调中的某个错误引入了另一个回调中的一个错误（越先注册，越后调用），最后的错误消息可能并不是为用户显示的最有用的错误消息。
+    通常最好在清理函数中处理异常并悄悄地记入日志，因为程序退出时显示一大堆错误会显得很乱。
