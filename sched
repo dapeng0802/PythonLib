@@ -1,0 +1,108 @@
+[Python标准库]sched——定时事件调度器
+    作用：通用事件调度器。
+    Python 版本：1.4 及以后版本
+    sched 模块实现了一个通用事件调度器，可以在指定时刻运行任务。调度器类使用一个时间（time）函数来掌握当前时间，另外利用一个延迟（delay）函数等待一个指定时段。具体的时间单位并不重要，从而使接口足够灵活，可以用于实现很多用途。
+    调用 time 函数时不带任何参数，它会返回一个表示当前时间的数。调用 delay 函数要提供一个整数参数，使用的单位与时间函数相同，返回之前会等待指定数目的时间单位。例如，time.time() 和 time.sleep() 函数就满足这些需求。
+    要支持多线程应用，生成各事件之后可以调用延迟函数并提供参数 0，确保其他线程也有机会运行。
+有延迟地运行事件
+    可以调度事件在一个延迟之后运行或在指定时间运行。要调用事件有一个延迟，可以使用 enter() 方法，它有 4 个参数：表示延迟的数、优先级值、要调用的函数和函数参数的元组。
+    这个例子调度两个不同的事件分别在 2 秒和 3 秒后运行。一旦达到事件的时间，会调用 print_event()，并打印当前时间和传至事件的 name 参数。
+
+import sched
+import time
+
+scheduler = sched.scheduler(time.time, time.sleep)
+
+def print_event(name, start):
+	now = time.time()
+	elapsed = int(now - start)
+	print 'EVENT: %s elapsed=%s name=%s' % (time.ctime(now), elapsed, name)
+
+start = time.time()
+print 'START:', time.ctime(start)
+scheduler.enter(2, 1, print_event, ('first', start))
+scheduler.enter(3, 1, print_event, ('second', start))
+
+scheduler.run()
+
+    运行这个程序会生成以下输出：
+
+START: Mon Jun  6 19:21:47 2016
+EVENT: Mon Jun  6 19:21:49 2016 elapsed=2 name=first
+EVENT: Mon Jun  6 19:21:50 2016 elapsed=3 name=second
+
+    为第一个事件打印的时间是距开始时间 2 秒，第二个事件的时间则为距开始时间 3 秒。
+重叠事件
+    run() 调用会阻塞，直至所有事件都已经处理。每个事件都在相同的线程中运行，所以如果一个事件需要很长时间运行，超出了事件之间的延迟，就会出现重叠。这个重叠可以通过推迟后面的事件来解决。这样不会丢失事件，不过有些事件可能比其调度时间更晚调用。在下面的例子中，long_event() 会调用 sleep 休眠，不过也可以通过完成一个复杂的计算或者是 I/O 阻塞来轻松延迟。
+
+import sched
+import time
+
+scheduler = sched.scheduler(time.time, time.sleep)
+
+def long_event(name):
+	print 'BEGIN EVENT :', time.ctime(time.time()), name
+	time.sleep(2)
+	print 'FINISH EVENT :', time.ctime(time.time()), name
+
+print 'START:', time.ctime(time.time())
+scheduler.enter(2, 1, long_event, ('first',))
+scheduler.enter(3, 1, long_event, ('second',))
+
+scheduler.run()
+
+    其结果是第一个事件一旦完成就会立即运行第二个事件，因为第一个事件花费的时间足够长，使时钟超过了第二个事件期望的开始时间。
+事件优先级
+    如果调度多个事件在同一时间运行，就要使用事件的优先级来确定它们以何种顺序运行。
+
+import sched
+import time
+
+scheduler = sched.scheduler(time.time, time.sleep)
+
+def print_event(name):
+	print 'EVENT:', time.ctime(time.time()), name
+	
+now = time.time()
+print 'START:', time.ctime(now)
+scheduler.enterabs(now+2, 2, print_event, ('first',))
+scheduler.enterabs(now+2, 1, print_event, ('second',))
+
+scheduler.run()
+
+    这个例子需要确保事件调用为在完全相同的时间运行，所以要使用 enterabs() 方法而不是 enter()。enterabs() 的第一个参数是运行事件的时间，而不是要延迟的时间。
+取消事件
+    enter() 和 enterabs() 都会返回事件的一个引用，以后可以用这个引用来取消事件。由于 run() 阻塞，必须在一个不同的线程中取消这个事件。对于这个例子，线程开始运行调度器，并用主处理线程来取消事件。
+
+import sched
+import threading
+import time
+
+scheduler = sched.scheduler(time.time, time.sleep)
+
+# Set up a global to be modified by the threads
+counter = 0
+
+def increment_counter(name):
+	global counter
+	print 'EVENT:', time.ctime(time.time()), name
+	counter += 1
+	print 'NOW:', counter
+
+print 'START:', time.ctime(time.time())
+e1 = scheduler.enter(2, 1, increment_counter, ('E1',))
+e2 = scheduler.enterabs(3, 1, increment_counter, ('E2',))
+
+# Start a thread to run the events
+t = threading.Thread(target=scheduler.run)
+t.start()
+
+# Back in the main thread, cancel the first scheduled event.
+scheduler.cancel(e1)
+
+# Wait for the scheduler to finish running in the thread
+t.join()
+
+print 'FINAL:', counter
+
+    这里调度了两个事件，不过第一个事件随后被取消了。只运行了第二个事件，所以 counter 变量只递增一次。
