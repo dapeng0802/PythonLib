@@ -1,0 +1,90 @@
+[Python标准库]gettext——消息编目
+    作用：完成国际化的消息编目 API。
+    Python 版本：2.1.3 及以后版本
+    gettext 模块提供了一个纯 Python 实现，与 GNU gettext 库兼容，用于完成消息转换和编目管理。利用 Python 源代码发布版提供的工具，可以从一组源文件中抽取消息，构建一个包含转换的消息编目，并使用这个消息编目在运行时为用户显示一个适当的消息。
+    消息编目可以用于为程序提供国际化接口，使用适合用户的语言来显示消息。还可以用于其他消息定制，包括为不同包装器或合作伙伴的界面“换肤”。
+转换工作流概述
+    建立和使用转换的过程包括 5 个步骤。
+    (1) 标识并标记源代码中包含待转换消息的字面量串。
+    首先在程序源代码中标识需要转换的消息，并标记字面量串，以便抽取程序发现这些字面量串。
+    (2) 抽取消息。
+    标识源代码中可转换的串之后，使用 xgettext 抽取出这些串，并创建一个 .pot 文件或转换模板（translation template）。这个模板是一个文本文件，包含标识的所有串的副本及对应其转换的占位符。
+    (3) 转换消息。
+    将 .pot 文件的一个副本提供给转换器，将扩展名改为 .po。这个 .po 文件是一个可编辑的源文件，用作下一步编译的输入。转换器要更新这个文件中的首部文件，提供所有串的转换。
+    (4) 由转换“编译”消息编目。
+    转换器发回完整的 .po 文件后，使用 msgfmt 将这个文本文件编译为二进制编目格式。运行时编目查找代码将使用这个二进制格式。
+    (5) 运行时加载并启动适当的消息编目。
+    最后一步是向应用添加几行代码，配置和加载消息编目，并安装转换函数。对此有几种方法，这些方法各有优缺点。
+    本节余下的内容将更详细地介绍这些步骤，首先从需要完成的代码修改开始。
+由源代码创建消息编目
+    gettext 首先在一个转换数据库中查找字面量串，并取出适当的转换串。访问这个编目的函数有很多变种，取决于字符串是否为 Unicode 编码。常用模式是将适当的查找函数与名“_”（单个下划线字符）绑定，使得代码中不会堆积大量长名函数调用。
+    消息抽取程序 xgettext 会查找嵌入在编目查找函数（catalog lookup function）调用中的消息。它知道不同的源语言，并分别使用适当的解析器。如果查找函数有别名，或者增加了额外的函数，要为 xgettext 提供这些额外符号的名称，从而在抽取消息时能够考虑到。
+    以下脚本提供了一个消息，可以完成转换。
+
+import gettext
+
+# Set up message catalog access
+t = gettext.translation('example', 'locale', fallback=True)
+_ = t.ugettext
+
+print _('This message is in the script.')
+
+    这个例子使用了查找函数的 Unicode 版本 ugettext()。文本“This message is in the script.”是将要由编目替换的消息。这里启用了 Fallback 模式，所以如果运行脚本时没有一个消息编目，则会打印内联的消息。
+    下一步是抽取消息，并创建 .pot 文件，这里可以使用 Python 的 pygettext.py 或 GNU 工具 xgettext。
+
+xgettext -o example.pot gettext_example.py
+
+    生成的输出文件包含以下内容：
+
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2016-06-07 20:32+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: gettext_example.py:7
+msgid "This message is in the script."
+msgstr ""
+
+    消息编目要安装到按域（domain）和语言（language）组织的目录中。域通常是一个唯一值，如应用名。在这里，域是 gettext_example。语言值则由用户环境在运行时通过某个环境变量（LANGUAGE、LC_ALL、LC_MESSAGES 或 LANG）提供，这取决于其配置和平台。这些例子运行时都将语言设置为 en_US。
+    模板已经准备好，下一步是创建必要的目录结构，并把模板复制到适当的位置。PyMOTW 源码树中的 locale 目录可以作为这些示例消息编目目录的根，不过通常最好使用全系统都可以访问的一个目录，从而使所有用户都能访问消息编目。这个编目输入源文件的完整路径为 $localedir/$language/LC_MESSAGES/$domain.po，实际编目的文件扩展名为 .mo。
+    将 example.pot 复制到 locale/en_US/LC_MESSAGES/example.po，编辑这个文件，改变首部中的值，并设置替换消息，从而创建编目。结果如下所示。
+
+# Messages from gettext_example.py.
+# Copyright (C) 2016 Doug Hellmann
+# Doug Hellmann <doug.hellmann@gmail.com>, 2016.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PyMOTW 1.92\n"
+"Report-Msgid-Bugs-To: Doug Hellmann <doug.hellmann@gmail.com>\n"
+"POT-Creation-Date: 2016-06-07 20:32+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Doug Hellmann <doug.hellmann@gmail.com>\n"
+"Language-Team: US English <doug.hellmann@gmail.com>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: gettext_example.py:7
+msgid "This message is in the script."
+msgstr "This message is in the en_US catalog."
+
+    使用 msgformat 从 .po 文件构建这个编目。
+
+cd locale/en_US/LC_MESSAGES/; msgfmt -o example.mo example.po
+
+    现在运行脚本时会打印编目中的消息而不是内联字符串。
