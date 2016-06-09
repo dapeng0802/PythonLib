@@ -88,3 +88,159 @@ msgstr "This message is in the en_US catalog."
 cd locale/en_US/LC_MESSAGES/; msgfmt -o example.mo example.po
 
     现在运行脚本时会打印编目中的消息而不是内联字符串。
+运行时查找消息编目
+    如前所述，包含消息编码的 locale 目录根据语言来组织，编目按程序的域命名。不同的操作系统分别定义了自己的默认值，不过 gettext 并不知道所有这些默认值。它使用了一个默认的 locale 目录 sys.prefix + '/share/locale'，但是大多数情况下，更安全的做法是显式地提供一个 localedir 值而不是依赖于这个默认值有效。find() 函数负责在运行时找到一个合适的消息编目。
+
+import gettext
+
+catalogs = gettext.find('example', 'locale', all=True)
+print 'Catalogs:', catalogs
+
+    路径的语言部分（language）由某个环境变量（LANGUAGE、LC_ALL、LC_MESSAGES 和 LANG）得到，这些环境变量可以用于配置本地化特性。总会使用第一个已设置的变量。通过将值用冒号（:）分隔，可以选择多种语言。要看这是如何做到的，可以再使用另一个消息编目做一些试验。
+
+$cd locale/en_CA/LC_MESSAGES/; msgfmt -o example.mo example.po
+
+$ python gettext_find.py 
+Catalogs: ['locale/en_US/LC_MESSAGES/example.mo']
+
+$ LANGUAGE=en_CA python gettext_find.py Catalogs: ['locale/en_CA/LC_MESSAGES/example.mo']
+
+$ LANGUAGE=en_CA:en_US python gettext_find.py 
+Catalogs: ['locale/en_CA/LC_MESSAGES/example.mo', 'locale/en_US/LC_MESSAGES/example.mo']
+
+$ LANGUAGE=en_US:en_CA python gettext_find.py 
+Catalogs: ['locale/en_US/LC_MESSAGES/example.mo', 'locale/en_CA/LC_MESSAGES/example.mo']
+
+    尽管 find() 显示了完整的编目列表，不过实际上只加载了这个序列的第一个编目来完成消息查找。
+
+$ python gettext_example.py 
+This message is in the en_US catalog.
+
+$ LANGUAGE=en_CA python gettext_example.py 
+This message is in the en_CA catalog.
+
+$ LANGUAGE=en_CA:en_US python gettext_example.py 
+This message is in the en_CA catalog.
+
+$ LANGUAGE=en_US:en_CA python gettext_example.py 
+This message is in the en_US catalog.
+
+复数值
+    简单的消息替换可以处理大多数转换需求，不过 gettext 将复数处理为一种特殊情况。一个消息的单数和复数形式之间会有差别，而且根据具体语言这种差别可能也有所不同，有些只是单词末尾不同，有些则是整个句子结构都不同。根据复数的层次，可能还会有不同的形式。为了更容易地管理复数（在某些情况下，甚至是为了能管理复数），模块提供了一组单独的函数来询问一个消息的复数形式。
+
+from gettext import translation
+import sys
+
+t = translation('gettext_plural', 'locale', fallback=True)
+num = int(sys.argv[1])
+msg = t.ungettext('%(num)d means singular.',
+	'%(num)d means plural.',
+	num)
+
+# Still need to add the values to the message ourself.
+print msg % {'num':num}
+
+    使用 ungettext() 来访问一个消息的复数形式的 Unicode 版本。参数是要转换的消息和项数。
+
+$ xgettext -L Python -o plural.pot gettext_plural.py
+
+    由于转换的候选形式有多种，这些替换形式会列在一个数组中。通过使用数组，就可以对有多种复数形式的语言完成转换（例如，波兰语就用不同的形式来表示相对数量）。
+
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2016-06-08 19:53+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: gettext_plural.py:6
+#, python-format
+msgid "%(num)d means singular."
+msgid_plural "%(num)d means plural."
+msgstr[0] ""
+msgstr[1] ""
+
+    除了填入转换串之外，还需要告诉库采用哪种复数形式，使它知道对应给定的数量值如何在数组中索引。行 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n" 包含两个值，需要手工替换。nplurals 是一个整数，指示数组的大小（使用的转换数），plural 是一个 C 语言表达式，用于将得到的数量转换为查找转换时需要的数组索引。字面量串 n 会替换为传递给 ungettext() 的数量。
+    例如，英语包括两种复数形式。数量 0 会除了为复数（“0 bananas”）。这是 Plural-Forms 项。
+
+Plural-Forms: nplurals=2; plural=n != 1;
+
+    单数转换则在位置 0，复数转换在位置 1。
+
+# Messages from gettext_example.py.
+# Copyright (C) 2016 Doug Hellmann
+# This file is distributed under the same license
+# as the PyMOTW package.
+# Doug Hellmann <doug.hellmann@gmail.com>, 2016.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PyMOTW 1.92\n"
+"Report-Msgid-Bugs-To: Doug Hellmann <doug.hellmann@gmail.com>\n"
+"POT-Creation-Date: 2016-06-08 19:53+0800\n"
+"PO-Revision-Date: 2016-06-08 19:53+0800\n"
+"Last-Translator: Doug Hellmann <doug.hellmann@gmail.com>\n"
+"Language-Team: en_US <doug.hellmann@gmail.com>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+
+#: gettext_plural.py:6
+#, python-format
+msgid "%(num)d means singular."
+msgid_plural "%(num)d means plural."
+msgstr[0] "In en_US, %(num)d is singular."
+msgstr[1] "In en_US, %(num)d is plural."
+
+    编译编目之后，运行几次测试脚本，展示不同的 n 值如何转换为对应转换字符串的索引。
+
+$ cd locale/en_US/LC_MESSAGES/; msgfmt -o plural.mo plural.po
+
+$ python gettext_plural.py 0
+0 means plural.
+
+$ python gettext_plural.py 1
+1 means singular.
+
+$ python gettext_plural.py 2
+2 means plural.
+
+应用与模块本地化
+    转换的作用域定义了如何安装 gettext，以及如何用于一个代码体。
+    1. 应用本地化
+    对于全应用范围的转换，可以让作者使用 __builtins__ 命名空间全局地安装类似 ungettext() 的函数，这是可以接受的，因为它们可以在应用代码的顶层加以控制。
+
+import gettext
+gettext.install('gettext_example', 'locale',
+	unicode=True, names=['ngettext'])
+
+print _('This message is in the script.')
+
+    install() 函数将 gettext() 绑定到 __builtins__ 命名空间中的名 _()。它还增加了 ngettext() 和 names 中列出的其他函数。如果 unicode 为 true，将使用函数的 Unicode 版本而不是默认的 ASCII 版本。
+    2. 模块本地化
+    对于一个库或单个模块，修改 __builtins__ 并不是一个好的想法，因为这可能引入与某个应用全局值的冲突。相反，应当在模块前面手工地导入或重新绑定转换函数名。
+
+import gettext
+t = gettext.translation('gettext_example', 'locale', fallback=True)
+_ = t.ugettext
+ngettext = t.ungettext
+
+print _('This message is in the script.')
+
+切换转换
+    前面的例子在整个程序期间都使用了一个转换。有些情况下，特别是对于 Web 应用，还需要在不同时间使用不同的消息编目，而不是退出和重新设置环境。对于这些情况，gettext 中提供的基于类的 API 会更为方便。这些 API 调用实际上与这一节中介绍的全局调用相同，不过会发布消息编目对象，而且可以直接管理，因此可以使用对个编目。
