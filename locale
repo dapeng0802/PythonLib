@@ -1,0 +1,121 @@
+[Python标准库]locale——文化本地化 API
+    作用：格式化和解析依赖于位置或语言的值。
+    Python 版本：1.5 及以后版本
+    locale 模块是 Python 国际化和本地化支持库的一部分。它提供了一种标准方法，来处理可能依赖于用户语言位置的操作。例如，它会处理如何将数字格式化为货币形式，比较字符串来完成排序，以及处理日期。它不涉及转换或 Unicode 编码。
+探查当前本地化环境
+    要让用户改变应用的本地化环境设置，最常见的方式是通过一个环境变量（LC_ALL、
+LC_CTYPE、LANG 或 LANGUAGE，这取决于使用哪个平台）。然后应用调用 setlocale() 而不是指定硬编码的值，并使用环境值。
+
+import locale
+import os
+import pprint
+import codecs
+import sys
+
+sys.stdout = codecs.getwriter('UTF-8')(sys.stdout)
+
+# Default settings based on the user's environment.
+locale.setlocale(locale.LC_ALL, '')
+
+print 'Environment settings:'
+for env_name in ['LC_ALL', 'LC_CTYPE', 'LANG', 'LANGUAGE']:
+	print '\t%s = %s' % (env_name, os.environ.get(env_name, ''))
+
+# What is the locale?
+print
+print 'Locale from environment:', locale.getlocale()
+
+template = """
+Numeric formatting:
+
+    Decimal point      : "%(decimal_point)s"
+    Grouping positions : %(grouping)s
+    Thousands separator: "%(thousands_sep)s"
+
+Monetary formatting:
+
+    International currency symbol             : "%(int_curr_symbol)r"
+    Local currency symbol                     : %(currency_symbol)r
+      Unicode version                           %(currency_symbol_u)s
+    Symbol precedes positive value            : %(p_cs_precedes)s
+    Symbol precedes negative value            : %(n_cs_precedes)s
+    Decimal point                             : "%(mon_decimal_point)s"
+    Digits in fractional values               : %(frac_digits)s
+    Digits in fractional values, international: %(int_frac_digits)s
+    Grouping positions                        : %(mon_grouping)s
+    Thousands separator                       : "%(mon_thousands_sep)s"
+    Positive sign                             : "%(positive_sign)s"
+    Positive sign position                    : %(p_sign_posn)s
+    Negative sign                             : "%(negative_sign)s"
+    Negative sign position                    : %(n_sign_posn)s
+"""
+sign_positions = {
+	0 : 'Surrounded by parentheses',
+	1 : 'Before value and symbol',
+	2 : 'After value and symbol',
+	3 : 'Before value',
+	4 : 'After value',
+	locale.CHAR_MAX : 'Unspecified',
+	}
+
+info = {}
+info.update(locale.localeconv())
+info['p_sign_posn'] = sign_positions[info['p_sign_posn']]
+info['n_sign_posn'] = sign_positions[info['n_sign_posn']]
+# convert the currency symbol to unicode
+info['currency_symbol_u'] = info['currency_symbol'].decode('utf-8')
+
+print (template % info)
+
+    localeconv() 方法返回一个字典，其中包含本地化环境的约定。完整的值名和定义列表在标准库文档中已经给出。
+    在 Ubuntu 上（所有变量都未设置），会生成以下输出。
+
+$ export LANG=; export LC_CTYPE=; python locale_env_example.py 
+Environment settings:
+	LC_ALL = 
+	LC_CTYPE = 
+	LANG = 
+	LANGUAGE = en_US
+
+Locale from environment: (None, None)
+
+Numeric formatting:
+
+    Decimal point      : "."
+    Grouping positions : [3, 0]
+    Thousands separator: ","
+
+Monetary formatting:
+
+    International currency symbol             : "'CNY '"
+    Local currency symbol                     : '\xef\xbf\xa5'
+      Unicode version                           ￥
+    Symbol precedes positive value            : 1
+    Symbol precedes negative value            : 1
+    Decimal point                             : "."
+    Digits in fractional values               : 2
+    Digits in fractional values, international: 2
+    Grouping positions                        : [3, 0]
+    Thousands separator                       : ","
+    Positive sign                             : ""
+    Positive sign position                    : After value
+    Negative sign                             : "-"
+    Negative sign position                    : After value
+
+    运行同样的脚本，但设置了 LANG 变量，会显示本地化环境和默认编码如何改变。
+货币
+    从前面的示例输出可以看到，改变本地化环境会更新货币符号设置，还会改变分隔整数和小数部分的字符。这个例子循环处理多个不同的本地化环境，针对各个本地化环境，分别打印一个格式化的正货币值和负货币值。
+import locale
+
+sample_locales = [ ('USA',     'en_US'),
+                   ('France',  'fr_FR'),
+                   ('Spain',   'es_ES'),
+                   ('Portugal','pt_PT'),
+                   ('Poland',  'pl_PL'),
+                   ]
+
+for name, loc in sample_locales:
+    locale.setlocale(locale.LC_ALL, loc)
+    print '%20s: %10s %10s' % (name, locale.currency(1234.56), locale.currency(-1234.56))
+
+
