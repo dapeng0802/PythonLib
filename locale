@@ -118,4 +118,39 @@ for name, loc in sample_locales:
     locale.setlocale(locale.LC_ALL, loc)
     print '%20s: %10s %10s' % (name, locale.currency(1234.56), locale.currency(-1234.56))
 
+解析数字
+    除了以不同格式生成输出外，locale 模块还有助于解析输入。它包含 atoi() 和 atof() 函数，可以根据本地化环境的数值格式约定将字符串转换为整数和浮点值。
 
+import locale
+
+sample_data = [ ('USA',     'en_US', '1,234.56'),
+                ('France',  'fr_FR', '1234,56'),
+                ('Spain',   'es_ES' '1234,56'),
+                ('Portugal','pt_PT', '1234.56'),
+                ('Poland',  'pl_PL', '1 234,56'),
+                ]
+
+for name, loc, a in sample_data:
+    locale.setlocale(locale.LC_ALL, loc)
+    f = locale.atof(a)
+    print '%20s: %9s => %f' % (name, a, f)
+
+    解析器会识别本地化环境的分组和小数分隔符值。
+日期和时间
+    本地化的另一个重要方面是日期和时间格式化。
+
+import locale
+import time
+sample_locales = [ ('USA',     'en_US'),
+                   ('France',  'fr_FR'),
+                   ('Spain',   'es_ES'),
+                   ('Portugal','pt_PT'),
+                   ('Poland',  'pl_PL'),
+                   ]
+
+for name, loc in sample_locales:
+    locale.setlocale(locale.LC_ALL, loc)
+    format = locale.nl_langinfo(locale.D_T_FMT)
+    print '%20s: %s' % (name, time.strftime(format))
+
+    这个例子使用本地化环境的日期格式化串来打印当前日期和时间。
