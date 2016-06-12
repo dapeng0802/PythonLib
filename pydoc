@@ -1,0 +1,12 @@
+[Python标准库]pydoc——模块的联机帮助
+    作用：从代码为 Python 模块和类生成帮助。
+    Python 版本：2.1 及以后版本
+    pydoc 模块导入了一个 Python 模块，并使用其内容在运行时生成帮助文本。只要对象中包含 docstring，输出则包括所有这些对象的 docstring，另外包括所描述模块的所有类、方法和函数。
+纯文本帮助
+    运行 pydoc atexit 会在控制台上生成纯文本帮助，可能还会使用一个分页程序（如果已配置）。
+HTML 帮助
+    pydoc 还会生成 HTML 输出，可能将一个静态文件写至一个本地目录，或者启动一个 Web 服务器在线浏览文档。
+    pydoc -w atexit 将在当前目录创建 atexit.html。
+    pydoc -p 5000 将启动一个 Web 服务器监听 http://localhost:5000/。这个服务器会在你浏览时动态生成文档。
+交互式帮助
+    pydoc 还为 __builtins__ 添加了一个函数 help()，从而可以从解释器提示窗口访问同样的信息。
