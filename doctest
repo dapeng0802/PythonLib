@@ -1,0 +1,58 @@
+[Python标准库]doctest——通过文档完成测试
+    作用：编写自动化测试，作为模块文档的一部分。
+    Python 版本：2.1 及以后版本
+    doctest 会运行文档中嵌入的例子，并验证它们是否能生成所期望的结果，从而对源代码进行测试。其做法是解析帮助文档，找到例子，运行这些例子，然后将输出文本与所期望的值进行比较。很多开发人员发现 doctest 比 unittest 更易于使用，因为如果采用最简单的形式，使用 doctest 之前无须学习新的 API。不过，随着例子变得越来越复杂，由于缺乏固件管理，可能编写 doctest 测试比使用 unittest 更麻烦。
+开始
+    建立 doctest 的第一步是使用交互式解释器创建例子，然后把这些例子复制粘贴到模块的 docstring 中。在这里，my_function() 给出两个例子。
+
+def my_function(a, b):
+    """
+    >>> my_function(2, 3)
+    6
+    >>> my_function('a', 3)
+    'aaa'
+    """
+    return a * b
+
+    运行这些测试时，要通过 -m 选项将 doctest 用作主程序。运行测试时通常不会生成输出，所以下面的例子包含了 -v 选项，以得到更详细的输出。
+
+$ python -m doctest -v doctest_simple.py 
+Trying:
+    my_function(2, 3)
+Expecting:
+    6
+ok
+Trying:
+    my_function('a', 3)
+Expecting:
+    'aaa'
+ok
+1 items had no tests:
+    test
+1 items passed all tests:
+   2 tests in test.my_function
+2 tests in 2 items.
+2 passed and 0 failed.
+Test passed.
+
+    例子并不总能独立作为一个函数的解释，所以 doctest 还允许有包围文本。它会查找以解释器提示符（>>>）开头的行，来找出测试用例的开始，用例以一个空行结束，或者以下一个解释器提示符结束。介于中间的文本会被忽略，它们可以有任何格式（只要看上去不像是一个测试用例）。
+
+def my_function(a, b):
+    """Returns a * b
+
+    Works with numbers:
+
+    >>> my_function(2, 3)
+    6
+
+    and strings:
+    
+    >>> my_function('a', 3)
+    'aaa'
+    """
+    return a * b
+
+    更新的 docstring 中如果有包围文本，这些包围文本对人类读者来说更有用。由于它会被 doctest 忽略，所以结果是一样的。
+处理不可预测的输出
+
+
