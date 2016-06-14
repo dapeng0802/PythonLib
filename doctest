@@ -54,5 +54,179 @@ def my_function(a, b):
 
     更新的 docstring 中如果有包围文本，这些包围文本对人类读者来说更有用。由于它会被 doctest 忽略，所以结果是一样的。
 处理不可预测的输出
+    还有一些情况，可能无法预测准确的输出，不过仍可测试。例如，每次运行测试时本地日期和时间值及对象 id 会改变，浮点值表示中使用的默认精度取决于编译器选项，另外对象的串表示可能不是确定性的。尽管这些条件可能不能控制，但是确实有一些技术可以处理。
+    例如，在 CPython 中，对象标识符基于保存对象的数据结构的内存地址。
+
+class MyClass(object):
+    pass
+
+def unpredictable(obj):
+    """Returns a new list containing obj.
+
+    >>> unpredictable(MyClass())
+    [<doctest_unpredictable.MyClass object at 0x10055a2d0>]
+    """
+    return [obj]
+
+    每次程序运行时，这些 id 值都会改变，因为这些值会加载到内存的不同部分。
+
+$ python -m doctest -v doctest_unpredictable.py 
+Trying:
+    unpredictable(MyClass())
+Expecting:
+    [<doctest_unpredictable.MyClass object at 0x10055a2d0>]
+**********************************************************************
+File "doctest_unpredictable.py", line 7, in doctest_unpredictable.unpredictable
+Failed example:
+    unpredictable(MyClass())
+Expected:
+    [<doctest_unpredictable.MyClass object at 0x10055a2d0>]
+Got:
+    [<doctest_unpredictable.MyClass object at 0xb715b72c>]
+2 items had no tests:
+    doctest_unpredictable
+    doctest_unpredictable.MyClass
+**********************************************************************
+1 items had failures:
+   1 of   1 in doctest_unpredictable.unpredictable
+1 tests in 3 items.
+0 passed and 1 failed.
+***Test Failed*** 1 failures.
+
+    测试的值可能会以不可预测的方式改变时，如果具体值对于测试结果并不重要，可以使用 ELLIPSIS 选项来告诉 doctest 忽略验证值的某些部分。
 
 
+
+    unpredictable()（#doctest: +ELLIPSIS）调用后的注释告诉 doctest 打开这个测试的 ELLIPSIS 选项。...将替换对象 id 中的内存地址，这样就会忽略期望值中的这一部分。实际输出将匹配，并通过测试。
+
+$ python -m doctest -v doctest_ellipsis.py 
+Trying:
+    unpredictable(MyClass()) #doctest: +ELLIPSIS
+Expecting:
+    [<doctest_ellipsis.MyClass object at 0x...>]
+ok
+2 items had no tests:
+    doctest_ellipsis
+    doctest_ellipsis.MyClass
+1 items passed all tests:
+   1 tests in doctest_ellipsis.unpredictable
+1 tests in 3 items.
+1 passed and 0 failed.
+Test passed.
+
+    有些情况下，不能忽略不可预测的值，因为这会让测试不完备或不准确。例如，处理一些数据类型时，如果其数据串表示不一致，简单的测试很快会变得越来越复杂。举例来说，字典的串形式可能会根据增加键的顺序而改变。
+
+keys = [ 'a', 'aa', 'aaa' ]
+
+d1 = dict( (k, len(k)) for k in keys )
+d2 = dict( (k, len(k)) for k in reversed(keys) )
+
+print 'd1:', d1
+print 'd2:', d2
+print 'd1 == d2:', d1 == d2
+
+s1 = set(keys)
+s2 = set(reversed(keys))
+
+print
+print 's1:', s1
+print 's2:', s2
+print 's1 == s2:', s1 == s2
+
+    由于缓存冲突，两个字典的内部键列表顺序会有所不同，尽管它们包含相同的值，并被认为是相等的。集合（set）会使用相同的散列算法，并提供相同的行为。
+    要处理这些潜在的差异，最好的方法是创建测试来生成不太可能改变的值。对于字典和集合，这可能意味着需要分别查找特定的键，并生成数据结构内容的一个有序列表，或者与一个字面值比较相等性而不是依赖于串表示。
+
+def group_by_length(words):
+    """Returns a dictionary grouping words into sets by length.
+
+    >>> grouped = group_by_length([ 'python', 'module', 'of',
+    ... 'the', 'week' ])
+    >>> grouped == { 2:set(['of']),
+    ...              3:set(['the']),
+    ...              4:set(['week']),
+    ...              6:set(['python', 'module']),
+    ...              }
+    True
+
+    """
+    d = {}
+    for word in words:
+        s = d.setdefault(len(word), set())
+        s.add(word)
+    return d
+
+    这个例子实际上会解释为两个单独的测试，第一个没有任何控制台输出，第二个会得到比较操作的布尔结果。
+
+$ python -m doctest -v doctest_hashed_values_tests.py 
+Trying:
+    grouped = group_by_length([ 'python', 'module', 'of',
+    'the', 'week' ])
+Expecting nothing
+ok
+Trying:
+    grouped == { 2:set(['of']),
+                 3:set(['the']),
+                 4:set(['week']),
+                 6:set(['python', 'module']),
+                 }
+Expecting:
+    True
+ok
+1 items had no tests:
+    doctest_ellipsis
+1 items passed all tests:
+   2 tests in doctest_ellipsis.group_by_length
+2 tests in 2 items.
+2 passed and 0 failed.
+Test passed.
+
+Traceback
+    Traceback 是不断变化的数据的一个特殊情况。由于 traceback 中的路径取决于模块安装在给定系统文件系统上的具体位置，如果像其他输出一样处理，可能无法编写可移植的测试。
+
+def this_raises():
+    """This function always raises an exception.
+
+    >>> this_raises()
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "/no/such/path/doctest_traceback.py", line 14, in
+      this_raises
+        raise RuntimeError('here is the error')
+    RuntimeError: here is the error
+    """
+    raise RuntimeError('here is the error')
+
+    doctest 做了一些特殊工作来识别 traceback，并忽略因系统不同可能改变的部分。
+
+$ python -m doctest -v doctest_traceback.py 
+Trying:
+    this_raises()
+Expecting:
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "/no/such/path/doctest_traceback.py", line 14, in
+      this_raises
+        raise RuntimeError('here is the error')
+    RuntimeError: here is the error
+ok
+1 items had no tests:
+    doctest_traceback
+1 items passed all tests:
+   1 tests in doctest_traceback.this_raises
+1 tests in 2 items.
+1 passed and 0 failed.
+Test passed.
+
+    实际上，整个 traceback 体都将被忽略，可以略去。
+
+def this_raises():
+    """This function always raises an exception.
+
+    >>> this_raises()
+    Traceback (most recent call last):
+    RuntimeError: here is the error
+    """
+    raise RuntimeError('here is the error')
+
+    doctest 看到一个 traceback 首部行时（可能是“Traceback (most recentcall last):”或者“Traceback (innermost last):”，取决于所用的 Python 版本），它会跳过，继续查找异常类型和消息，完全忽略中间的各行。
+避开空白符
