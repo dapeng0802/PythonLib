@@ -230,3 +230,159 @@ def this_raises():
 
     doctest 看到一个 traceback 首部行时（可能是“Traceback (most recentcall last):”或者“Traceback (innermost last):”，取决于所用的 Python 版本），它会跳过，继续查找异常类型和消息，完全忽略中间的各行。
 避开空白符
+    在实际应用中，输出通常包括空白符，如空行、制表符和多余的空格，目的是使输出更可读。尤其是空行会导致 doctest 出现问题，因为一般会用空行作为测试的分界线。
+
+def double_space(lines):
+	"""Prints a list of lines double-spaced.
+
+	>>> double_space(['Line one.', 'Line two.'])
+	Line one.
+
+	Line two.
+
+	"""
+	for l in lines:
+		print l
+		print
+	return
+
+    double_space() 取一个输入行列表，在输入行之间加入空行，从而用双倍间隔打印。
+
+$ python -m doctest test.py
+**********************************************************************
+File "test.py", line 4, in test.double_space
+Failed example:
+    double_space(['Line one.', 'Line two.'])
+Expected:
+    Line one.
+Got:
+    Line one.
+    <BLANKLINE>
+    Line two.
+    <BLANKLINE>
+**********************************************************************
+1 items had failures:
+   1 of   1 in test.double_space
+***Test Failed*** 1 failures.
+
+    这个测试会失败，因为它把 docstring 中包含 Line one. 那一行后面的空行解析为示例输出的末尾。为了与空行匹配，要把示例输入中的空行替换为 <BLANKLINE>。
+
+def double_space(lines):
+	"""Prints a list of lines double-spaced.
+
+	>>> double_space(['Line one.', 'Line two.'])
+	Line one.
+	<BLANKLINE>
+	Line two.
+	<BLANKLINE>
+	"""
+	for l in lines:
+		print l
+		print
+	return
+
+    完成比较之前，doctest 将具体的空行替换为相同的字面量，所以现在具体值和期望值匹配，测试通过。
+
+$ python -m doctest -v test.py
+Trying:
+    double_space(['Line one.', 'Line two.'])
+Expecting:
+    Line one.
+    <BLANKLINE>
+    Line two.
+    <BLANKLINE>
+ok
+1 items had no tests:
+    test
+1 items passed all tests:
+   1 tests in test.double_space
+1 tests in 2 items.
+1 passed and 0 failed.
+Test passed.
+
+    使用文本比较完成测试还存在一个麻烦：嵌入的空白符还可能导致测试出现棘手的问题。下面这个例子在 6 后面有一个额外的空格。
+
+def my_function(a, b):
+    """
+    >>> my_function(2, 3)
+    6 
+    >>> my_function('a', 3)
+    'aaa'
+    """
+    return a * b
+
+    这个额外的空格可能是因为复制粘贴错误而引入代码，不过由于它们位于行末尾，可能在源文件中不被注意，在测试失败报告中也不可见。
+    使用某个基于 diff 的报告选项，如 REPORT_NDIFF，可以更详细地显示实际值和期望值之间的差异，这样就会看到这个额外的空格。
+
+def my_function(a, b):
+    """
+    >>> my_function(2, 3) #doctest: +REPORT_NDIFF
+    6 
+    >>> my_function('a', 3)
+    'aaa'
+    """
+    return a * b
+
+    对于有些输出，也可以使用统一 diff (REPORT_UDIFF) 和上下文 diff (REPORT_CDIFF)，这些格式将更可读。
+    有些情况下，可能要在测试的示例输出中添加额外的空白符，而让 doctest 忽略这些空白符。例如，尽管有些数据结构的表示可以显示在一行上，不过多行显示可能更易读。
+
+def my_function(a, b):
+	"""Returns a * b.
+
+	>>> my_function(['A', 'B'], 3) #doctest: +NORMALIZE_WHITESPACE
+	['A', 'B',
+	 'A', 'B',
+	 'A', 'B',]
+
+	This does not match because of the extra space after the [ in
+	the list.
+
+	>>> my_function(['A', 'B'], 2) #doctest: +NORMALIZE_WHITESPACE
+	[ 'A', 'B',
+	  'A', 'B', ]
+	"""
+	return a * b
+
+    NORMALIZE_WHITESPACE 打开时，实际值和期望值中的空白符会认为是匹配的。如果输出中不存在空白符，期望值就不能增加空白符，不过空白符序列和实际的空白字符不需要一致。第一个测试示例满足这个原则，测试通过，尽管这里有额外的空格和换行。第二个测试示例在 [“and before”]后面有额外的空白符，所以失败。
+
+$ python -m doctest -v test.py
+Trying:
+    my_function(['A', 'B'], 3) #doctest: +NORMALIZE_WHITESPACE
+Expecting:
+    ['A', 'B',
+     'A', 'B',
+     'A', 'B',]
+**********************************************************************
+File "test.py", line 4, in test.my_function
+Failed example:
+    my_function(['A', 'B'], 3) #doctest: +NORMALIZE_WHITESPACE
+Expected:
+    ['A', 'B',
+     'A', 'B',
+     'A', 'B',]
+Got:
+    ['A', 'B', 'A', 'B', 'A', 'B']
+Trying:
+    my_function(['A', 'B'], 2) #doctest: +NORMALIZE_WHITESPACE
+Expecting:
+    [ 'A', 'B',
+      'A', 'B', ]
+**********************************************************************
+File "test.py", line 12, in test.my_function
+Failed example:
+    my_function(['A', 'B'], 2) #doctest: +NORMALIZE_WHITESPACE
+Expected:
+    [ 'A', 'B',
+      'A', 'B', ]
+Got:
+    ['A', 'B', 'A', 'B']
+1 items had no tests:
+    test
+**********************************************************************
+1 items had failures:
+   2 of   2 in test.my_function
+2 tests in 2 items.
+0 passed and 2 failed.
+***Test Failed*** 2 failures.
+
+测试位置
