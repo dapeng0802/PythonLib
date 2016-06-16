@@ -386,3 +386,154 @@ Got:
 ***Test Failed*** 2 failures.
 
 测试位置
+    到目前为止的例子中，所有测试都写在所测试的函数的 docstring 中。对于查看 docstring 的用户来说也很方便，可以帮助他们使用这个函数（特别是利用 pydoc），不过 doctest 还会在其他地方查找测试。一个很明显的地方就是模块中的其他 docstring。
+
+#!/usr/bin/env python
+# encoding: utf-8
+
+"""Tests can appear in any docstring within the module.
+
+Module-level tests cross class and fuction boundaries.
+
+>>> A('a') == B('b')
+False
+"""
+
+class A(object):
+	"""Simple class.
+
+	>>> A('instance_name').name
+	'instance_name'
+	"""
+	def __init__(self, name):
+		self.name = name
+	def method(self):
+		"""Returns an unusual value.
+
+		>>> A('name').method()
+		'eman'
+		"""
+		return ''.join(reversed(list(self.name)))
+
+class B(A):
+	"""Another simple class.
+
+	>>> B('different_name').name
+	'different_name'
+	"""
+
+    模块级、类级和函数级的 docstring 都可以包含测试。
+
+$ python -m doctest -v test.py
+Trying:
+    A('a') == B('b')
+Expecting:
+    False
+ok
+Trying:
+    A('instance_name').name
+Expecting:
+    'instance_name'
+ok
+Trying:
+    A('name').method()
+Expecting:
+    'eman'
+ok
+Trying:
+    B('different_name').name
+Expecting:
+    'different_name'
+ok
+1 items had no tests:
+    test.A.__init__
+4 items passed all tests:
+   1 tests in test
+   1 tests in test.A
+   1 tests in test.A.method
+   1 tests in test.B
+4 tests in 5 items.
+4 passed and 0 failed.
+Test passed.
+
+    有些情况下，模块的测试应当包含在源代码中，而不是放在模块的帮助文本中，所以需要把测试放在 docstring 以外的位置。doctest 还会查找一个模块级变量，名为 __test__，用它来找到其他测试。__test__ 的值应当是一个字典，将测试集合名（字符串）映射到字符串、模块、类或函数。
+
+import doctest_private_tests_external
+
+__test__ = {
+	'numbers':"""
+>>> my_function(2, 3)
+6
+
+>>> my_function(2.0, 3)
+6.0
+""",
+
+    'strings':"""
+>>> my_function('a', 3)
+'aaa'
+
+>>> my_function(3, 'a')
+'aaa'
+""",
+
+    'external':doctest_private_tests_external,
+
+    }
+
+def my_function(a, b):
+	"""Returns a * b
+	"""
+	return a * b
+
+    如果与一个键关联的值是字符串，会处理为一个 docstring，并在其中扫描测试。如果值是一个类或函数，doctest 会递归地搜索 docstring，然后在其中扫描测试。在这个例子中，模块 doctest_private_tests_external 的 docstring 中有一个测试。
+
+#!/usr/bin/env python
+# encoding: utf-8
+
+"""External tests associated with doctest_private_tests.py
+
+>>> my_function(['A', 'B', 'C'], 2)
+['A', 'B', 'C', 'A', 'B', 'C']
+"""
+
+    扫描示例文件之后，doctest 总共找到 5 个要运行的测试。
+
+$ python -m doctest -v doctest_private_tests.py 
+Trying:
+    my_function(['A', 'B', 'C'], 2)
+Expecting:
+    ['A', 'B', 'C', 'A', 'B', 'C']
+ok
+Trying:
+    my_function(2, 3)
+Expecting:
+    6
+ok
+Trying:
+    my_function(2.0, 3)
+Expecting:
+    6.0
+ok
+Trying:
+    my_function('a', 3)
+Expecting:
+    'aaa'
+ok
+Trying:
+    my_function(3, 'a')
+Expecting:
+    'aaa'
+ok
+2 items had no tests:
+    doctest_private_tests
+    doctest_private_tests.my_function
+3 items passed all tests:
+   1 tests in doctest_private_tests.__test__.external
+   2 tests in doctest_private_tests.__test__.numbers
+   2 tests in doctest_private_tests.__test__.strings
+5 tests in 5 items.
+5 passed and 0 failed.
+Test passed.
+
+外部文档
