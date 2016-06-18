@@ -620,3 +620,170 @@ ok
 Test passed.
 
     正常情况下，doctest 会建立测试执行环境来包含所测试模块的成员，这样测试就不需要再显式地导入这个模块。不过，在这种情况下，测试不在 Python 模块中定义，doctest 不知道如何建立全局命名空间，所以这些例子需要自行完成导入工作。一个给定文件中的所有测试都共享相同的执行上下文，所以在文件最前面导入一次模块就足够了。
+运行测试
+    前面的例子都使用 doctest 内置的命令行测试运行工具。对于单个模块来说，这很容易也很方便，不过随着包划分为多个文件，这很快会变得很麻烦。还有很多其他方法来运行测试。
+    1. 由模块运行
+    可以在模块最下面包含对源代码运行 doctest 的指令。
+
+def my_function(a, b):
+	"""
+	>>> my_function(2, 3)
+	6
+	>>> my_function('a', 3)
+	'aaa'
+	"""
+	return a * b
+
+if __name__ == '__main__':
+	import doctest
+	doctest.testmod()
+
+    只有当前模块名是 __mian__ 时才会调用 testmod()，这可以确保仅当模块作为主程序调用时才运行测试。
+    testmod() 的第一个参数是一个模块，包含需要扫描的代码（检查其中是否有测试）。其他测试脚本可以使用这个特性导入实际代码，并依次运行各个模块中的测试。
+
+import doctest_simple
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod(doctest_simple)
+
+    通过导入各个模块并运行其测试，可以为工程构造一个测试套件。
+    2. 由文件运行
+    testfile() 的做法类似于 testmod()，允许在测试程序中从一个外部文件显式调用测试。
+
+import doctest
+
+if __name__ == '__main__':
+    doctest.testfile('doctest_in_help.rst')
+
+    testmod() 和 testfile() 包括一些可选的参数，能通过 doctest 选项来控制测试的行为。关于这些特性的更多详细信息可以参考标准库文档。
+    3. Unittest 套件
+    unittest 和 doctest 同时用于在不同情况测试相同代码时，可以使用 doctest 中的 unittest 集成让测试一起运行。有两个类（DocTestSuite 和 DocFileSuite）可以创建与 unittest 测试运行工具 API 兼容的测试套件。
+
+import doctest
+import unittest
+
+import doctest_simple
+
+suite = unittest.TestSuite()
+suite.addTest(doctest.DocTestSuite(doctest_simple))
+suite.addTest(doctest.DocFileSuite('doctest_in_help.rst'))
+
+runner = unittest.TextTestRunner(verbosity=2)
+runner.run(suite)
+
+    各个源文件的测试会合并到一个结果，而不是分别报告。
+
+$ python test.py
+my_function (doctest_simple)
+Doctest: doctest_simple.my_function ... ok
+doctest_in_help.rst
+Doctest: doctest_in_help.rst ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+
+OK
+
+测试上下文
+    doctest 运行测试时创建的执行上下文包含测试模块的模块级全局变量的一个副本。每个测试源（函数、类、模块）都有自己的一组全局值，是测试在某种程度上相互隔离，从而不太可能相互干扰。
+
+class TestGlobals(object):
+
+	def one(self):
+		"""
+		>>> var = 'value'
+		>>> 'var' in globals()
+		True
+		"""
+
+	def two(self):
+		"""
+		>>> 'var' in globals()
+		False
+		"""
+
+    TestGlobals 有两个方法：one() 和 two()。one() 的 docstring 中的测试设置了一个全局变量，two() 的测试要查找这个变量（期望找不到这个变量）。
+
+$ python -m doctest -v test.py
+Trying:
+    var = 'value'
+Expecting nothing
+ok
+Trying:
+    'var' in globals()
+Expecting:
+    True
+ok
+Trying:
+    'var' in globals()
+Expecting:
+    False
+ok
+2 items had no tests:
+    test
+    test.TestGlobals
+2 items passed all tests:
+   2 tests in test.TestGlobals.one
+   1 tests in test.TestGlobals.two
+3 tests in 4 items.
+3 passed and 0 failed.
+Test passed.
+
+    不过，这并不表示测试不能相互干扰，如果测试要改变模块中定义的可变变量的内容，反而希望它们能交互。
+
+_module_data = {}
+
+class TestGlobals(object):
+
+	def one(self):
+		"""
+		>>> TestGlobals().one()
+		>>> 'var' in _module_data
+		True
+		"""
+		_module_data['var'] = 'value'
+
+	def two(self):
+		"""
+		>>> 'var' in _module_data
+		False
+		"""
+
+    one() 的测试改变了模块变量 _module_data，导致 two() 的测试失败。
+
+$ python -m doctest -v test.py
+Trying:
+    TestGlobals().one()
+Expecting nothing
+ok
+Trying:
+    'var' in _module_data
+Expecting:
+    True
+ok
+Trying:
+    'var' in _module_data
+Expecting:
+    False
+**********************************************************************
+File "test.py", line 15, in test.TestGlobals.two
+Failed example:
+    'var' in _module_data
+Expected:
+    False
+Got:
+    True
+2 items had no tests:
+    test
+    test.TestGlobals
+1 items passed all tests:
+   2 tests in test.TestGlobals.one
+**********************************************************************
+1 items had failures:
+   1 of   1 in test.TestGlobals.two
+3 tests in 4 items.
+2 passed and 1 failed.
+***Test Failed*** 1 failures.
+
+    如果测试需要全局值，例如对应一个环境进行参数化，可以将值传递到 testmod() 和 testfile()，使用调用者控制的数据建立上下文。
