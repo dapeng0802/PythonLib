@@ -53,3 +53,270 @@ OK
         ERROR   |    测试产生 AssertionError 以外的某个异常
     --------------------------------------------------------------
     没有明确的方法让一个测试“通过”，所以一个测试的状态取决于是否出现异常。
+
+import unittest
+
+class OutcomesTest(unittest.TestCase):
+
+	def testPass(self):
+		return
+
+	def testFail(self):
+		self.failIf(True)
+
+	def testError(self):
+		raise RuntimeError('Test error')
+
+if __name__ == '__main__':
+	unittest.main()
+
+    一个测试失败或生成一个错误时，输出中会包含 traceback。
+
+$ python test.py
+EF.
+======================================================================
+ERROR: testError (__main__.OutcomesTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test.py", line 12, in testError
+    raise RuntimeError('Test error')
+RuntimeError: Test error
+
+======================================================================
+FAIL: testFail (__main__.OutcomesTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test.py", line 9, in testFail
+    self.failIf(True)
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+FAILED (failures=1, errors=1)
+
+    在前面的例子中，testFail() 失败，traceback 显示了失败代码所在的那一行。不过，要由读测试输出的人来查看代码，明确失败测试的含义。
+
+import unittest
+
+class FailureMessageTest(unittest.TestCase):
+
+	def testFail(self):
+		self.failIf(True, 'failure message goes here')
+
+if __name__ == '__main__':
+	unittest.main()
+
+    为了更容易地理解一个测试失败的实质，fail*() 和 assert*() 方法都接受一个参数 msg，可以用来生成一个更详细的错误消息。
+
+$ python test.py -v
+testFail (__main__.FailureMessageTest) ... FAIL
+
+======================================================================
+FAIL: testFail (__main__.FailureMessageTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test.py", line 6, in testFail
+    self.failIf(True, 'failure message goes here')
+AssertionError: failure message goes here
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+
+断言真值
+    大多数测试会断言某个条件的真值。编写真值检查测试有几种不同的方法，取决于测试作者的偏好以及所测试的代码的预期结果。
+
+import unittest
+
+class TruthTest(unittest.TestCase):
+
+	def testFailUnless(self):
+		self.failUnless(True)
+	def testAssertTrue(self):
+		self.assertTrue(True)
+
+	def testFailIF(self):
+		self.failIf(False)
+
+	def testAssertFalse(self):
+		self.assertFalse(False)
+
+if __name__ == '__main__':
+	unittest.main()
+
+    如果代码生成一个可能为 true 的值，就应当使用方法 failUnless() 和 assertTrue()。如果代码生成一个 false 值，方法 failIf() 和 assertFalse() 则更有意义。
+
+$ python test.py -v
+testAssertFalse (__main__.TruthTest) ... ok
+testAssertTrue (__main__.TruthTest) ... ok
+testFailIF (__main__.TruthTest) ... ok
+testFailUnless (__main__.TruthTest) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.002s
+
+OK
+
+测试相等性
+    作为一种特殊情况，unittest 还包括测试两个值相等性的方法。
+
+import unittest
+
+class EqualityTest(unittest.TestCase):
+
+	def testExpectEqual(self):
+		self.failUnlessEqual(1, 3-2)
+
+	def testExpectEqualFails(self):
+		self.failUnlessEqual(2, 3-2)
+
+	def testExpectNotEqual(self):
+		self.failIfEqual(2, 3-2)
+
+	def testExpectNotEqualFails(self):
+		self.failIfEqual(1, 3-2)
+
+if __name__ == '__main__':
+	unittest.main()
+
+    如果失败，这些特殊的测试方法会生成错误消息，其中包括所比较的值。
+
+$ python test.py -v
+testExpectEqual (__main__.EqualityTest) ... ok
+testExpectEqualFails (__main__.EqualityTest) ... FAIL
+testExpectNotEqual (__main__.EqualityTest) ... ok
+testExpectNotEqualFails (__main__.EqualityTest) ... FAIL
+
+======================================================================
+FAIL: testExpectEqualFails (__main__.EqualityTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test.py", line 9, in testExpectEqualFails
+    self.failUnlessEqual(2, 3-2)
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: testExpectNotEqualFails (__main__.EqualityTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test.py", line 15, in testExpectNotEqualFails
+    self.failIfEqual(1, 3-2)
+AssertionError: 1 == 1
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.002s
+
+FAILED (failures=2)
+
+近似相等
+    除了严格相等性外，还可以使用 failIfAlmostEqual() 和 failUnlessAlmostEqual() 测试浮点数的近似相等性。
+
+import unittest
+
+class AlmostEqualTest(unittest.TestCase):
+
+	def testEqual(self):
+		self.failUnlessEqual(1.1, 3.3-2.2)
+
+	def testAlmostEqual(self):
+		self.failUnlessAlmostEqual(1.1, 3.3-2.2, places=1)
+
+	def testNotAlmostEqual(self):
+		self.failIfAlmostEqual(1.1, 3.3-2.0, places=1)
+
+if __name__ == '__main__':
+	unittest.main()
+
+    参数是要比较的值以及测试所用的小数位数。
+
+$ python test.py -v
+testAlmostEqual (__main__.AlmostEqualTest) ... ok
+testEqual (__main__.AlmostEqualTest) ... FAIL
+testNotAlmostEqual (__main__.AlmostEqualTest) ... ok
+
+======================================================================
+FAIL: testEqual (__main__.AlmostEqualTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test.py", line 6, in testEqual
+    self.failUnlessEqual(1.1, 3.3-2.2)
+AssertionError: 1.1 != 1.0999999999999996
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+FAILED (failures=1)
+
+测试异常
+    正如前面提到的，如果测试产生 AssertionError 以外的一个异常，会被处理为一个错误。这对于发现错误很有用，还有助于修改现有测试覆盖的代码。不过，有些情况下，测试要验证代码确实会产生一个异常。为对象的属性提供一个非法值就是这样一个例子。在这些情况下，与在测试中捕获异常相比，failUnlessRaises() 或 assertRaises() 可以使代码更简洁。比较以下两个测试。
+
+import unittest
+
+def raises_error(*args, **kwds):
+	raise ValueError('Invalid value: ' + str(args) + str(kwds))
+
+class ExceptionTest(unittest.TestCase):
+
+	def testTrapLocally(self):
+		try:
+			raises_error('a', b='c')
+		except ValueError:
+			pass
+		else:
+			self.fail('Did not see ValueError')
+
+	def testFailUnlessRaises(self):
+		self.failUnlessRaises(ValueError, raises_error, 'a', b='c')
+
+if __name__ == '__main__':
+	unittest.main()
+
+    这两个测试的结果是相同的，不过第二个使用 failUnlessRaises() 的测试更为简洁。
+
+$ python test.py -v
+testFailUnlessRaises (__main__.ExceptionTest) ... ok
+testTrapLocally (__main__.ExceptionTest) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.001s
+
+OK
+
+测试固件
+    固件是测试所需的外部资源。例如，一个类的所有测试可能都需要另一个类的实例（用来提供配置设置）或另一个共享资源。其他测试固件包括数据库连接和临时文件（很多人可能对此有争议，认为使用外部资源会使这些测试不再是“单元”测试，但它们仍是测试，而且仍然很有用）。TestCase 包括一个特殊的 hook，用来配置和清理所需的所有固件。配置固件需要覆盖 setUp()。要完成清理，则要覆盖 tearDown()。
+
+import unittest
+
+class FixturesTest(unittest.TestCase):
+
+	def setUp(self):
+		print 'In setUp()'
+		self.fixture = range(1, 10)
+
+	def tearDown(self):
+		print 'In tearDown()'
+		del self.fixture
+		
+	def test(self):
+		print 'In test()'
+		self.failUnlessEqual(self.fixture, range(1, 10))
+
+if __name__ == '__main__':
+	unittest.main()
+
+    运行这个示例测试时，固件和测试方法执行的顺序显而易见。
+
+$ python -u test.py
+In setUp()
+In test()
+In tearDown()
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+
+测试套件
+    标准库文档描述了如何手动地组织测试套件。对于很大的代码基，其中相关的测试并不都在同一个地方，对于这种情况，自动测试发现则更可管理。利用 nose 和 py.test 等工具，当测试分布在多个文件和目录中时，管理测试会更为容易。
