@@ -1,0 +1,152 @@
+[Python标准库]traceback——异常和栈轨迹
+    作用：抽取、格式化和打印异常及栈轨迹。
+    Python 版本：1.4 及以后版本
+    traceback 模块处理调用栈来生成错误消息。traceback 是从异常处理程序沿调用链向下直到产生异常那一点的栈轨迹。也可以在当前调用栈从调用位置（没有错误上下文）向上访问 traceback，这对于查找进入函数的路径很有用。
+    traceback 中的函数通常可以分为几类。有些函数用于从当前运行时环境（可能是一个 traceback 的异常处理程序或者是常规的栈）抽取原始 traceback。所抽取的栈轨迹是一个元组序列，元组中包含文件名、行号、函数名和源代码行文本。
+    一旦抽取了栈轨迹，可以使用类似 format_exception()、format_stack() 等等函数进行格式化。格式化函数会返回一个字符串列表，其中对消息进行了格式化以便打印。还有一些用于打印格式化值的简写函数。
+    traceback 中的函数默认地会模拟交互式解释器的行为，不仅如此，它们对于另外一些情况下异常的处理也很有，这些情况下并不需要将完整的栈轨迹转储到控制台。例如，一个 Web 应用可能需要格式化 traceback，从而采用 HTML 格式很好地显示，或者一个 IDE 可以将栈轨迹的元素转换为一个可点击的列表，以便用户浏览源文本。
+支持函数
+    本节中的例子使用了模块 traceback_example.py。
+
+import traceback
+import sys
+def produce_exception(recursion_level=2):
+	sys.stdout.flush()
+	if recursion_level:
+		produce_exception(recursion_level-1)
+	else:
+		raise RuntimeError()
+
+def call_function(f, recursion_level=2):
+	if recursion_level:
+		return call_function(f, recursion_level-1)
+	else:
+		return f()
+
+处理异常
+    要处理异常报告，最简单的方法是利用 print_exc()。它使用 sys.exc_info() 来得到当前线程的异常信息，格式化结果，并把文本打印到一个文件句柄（默认为 sys.stderr）。
+
+import traceback
+import sys
+from traceback_example import produce_exception
+
+print 'print_exc() with no exception:'
+traceback.print_exc(file=sys.stdout)
+print
+
+try:
+	produce_exception()
+except Exception, err:
+	print 'print_exc():'
+	traceback.print_exc(file=sys.stdout)
+	print
+	print 'print_exc(1):'
+	traceback.print_exc(limit=1, file=sys.stdout)
+
+    在这个例子中，替换为 sys.stdout 的文件句柄，使信息消息和 traceback 消息能够正确地混合。
+
+$ python test.py
+print_exc() with no exception:
+None
+
+print_exc():
+Traceback (most recent call last):
+  File "test.py", line 10, in <module>
+    produce_exception()
+  File "/home/rendp/workspace/py/traceback_example.py", line 6, in produce_exception
+    produce_exception(recursion_level-1)
+  File "/home/rendp/workspace/py/traceback_example.py", line 6, in produce_exception
+    produce_exception(recursion_level-1)
+  File "/home/rendp/workspace/py/traceback_example.py", line 8, in produce_exception
+    raise RuntimeError()
+RuntimeError
+
+print_exc(1):
+Traceback (most recent call last):
+  File "test.py", line 10, in <module>
+    produce_exception()
+RuntimeError
+
+    print_exc() 就是 print_exception() 的一个简写形式，它需要显式参数。
+
+import traceback
+import sys
+from traceback_example import produce_exception
+
+try:
+	produce_exception()
+except Exception, err:
+	print 'print_exception():'
+	exc_type, exc_value, exc_tb = sys.exc_info()
+	traceback.print_exception(exc_type, exc_value, exc_tb)
+
+    print_exception() 的参数由 sys.exc_info() 生成。
+
+$ python test.py
+print_exception():
+Traceback (most recent call last):
+  File "test.py", line 6, in <module>
+    produce_exception()
+  File "/home/rendp/workspace/py/traceback_example.py", line 6, in produce_exception
+    produce_exception(recursion_level-1)
+  File "/home/rendp/workspace/py/traceback_example.py", line 6, in produce_exception
+    produce_exception(recursion_level-1)
+  File "/home/rendp/workspace/py/traceback_example.py", line 8, in produce_exception
+    raise RuntimeError()
+RuntimeError
+
+    print_exception() 使用 format_exception() 来准备文本。
+
+import traceback
+import sys
+from pprint import pprint
+from traceback_example import produce_exception
+
+try:
+	produce_exception()
+except Exception, err:
+	print 'format_exception():'
+	exc_type, exc_value, exc_tb = sys.exc_info()
+	pprint(traceback.format_exception(exc_type, exc_value, exc_tb))
+
+    format_exception() 使用同样的 3 个参数：异常类型、异常值和 traceback。
+
+$ python test.py
+format_exception():
+['Traceback (most recent call last):\n',
+ '  File "test.py", line 7, in <module>\n    produce_exception()\n',
+ '  File "/home/rendp/workspace/py/traceback_example.py", line 6, in produce_exception\n    produce_exception(recursion_level-1)\n',
+ '  File "/home/rendp/workspace/py/traceback_example.py", line 6, in produce_exception\n    produce_exception(recursion_level-1)\n',
+ '  File "/home/rendp/workspace/py/traceback_example.py", line 8, in produce_exception\n    raise RuntimeError()\n',
+ 'RuntimeError\n']
+
+    要以另外某种方式处理 traceback，如以不同方式格式化，可以使用 extract_tb() 得到采用一种有用格式的数据。
+
+import traceback
+import sys
+import os
+from traceback_example import produce_exception
+
+try:
+	produce_exception()
+except Exception, err:
+	print 'format_exception():'
+	exc_type, exc_value, exc_tb = sys.exc_info()
+	for tb_info in traceback.extract_tb(exc_tb):
+		filename, linenum, funcname, source = tb_info
+		print '%-23s:%s "%s" in %s()' % \
+			(os.path.basename(filename),
+				linenum,
+				source,
+				funcname)
+
+    返回值是一个项列表，这些项来自 traceback 表示的栈中的各层。每一项是一个元组，包括 4 个部分：源文件名、该文件中的行号、函数名和该行的源文本（如果可以得到源文本，会去除其中的空白符）。
+
+$ python test.py
+format_exception():
+test.py                :7 "produce_exception()" in <module>()
+traceback_example.py   :6 "produce_exception(recursion_level-1)" in produce_exception()
+traceback_example.py   :6 "produce_exception(recursion_level-1)" in produce_exception()
+traceback_example.py   :8 "raise RuntimeError()" in produce_exception()
+
+处理栈
