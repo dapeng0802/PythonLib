@@ -150,3 +150,86 @@ traceback_example.py   :6 "produce_exception(recursion_level-1)" in produce_exce
 traceback_example.py   :8 "raise RuntimeError()" in produce_exception()
 
 处理栈
+    还有一组类似的函数，可以对当前调用栈而不是 traceback 完成同样的操作，print_stack() 会打印当前栈，而不生成异常。
+
+import traceback
+import sys
+from traceback_example import call_function
+
+def f():
+	traceback.print_stack(file=sys.stdout)
+
+print 'Calling f() directly:'
+f()
+
+print
+print 'Calling f() from 3 levels deep:'
+call_function(f)
+
+    输出看起来就像是一个 traceback 但没有错误消息。
+
+$ python test.py
+Calling f() directly:
+  File "test.py", line 9, in <module>
+    f()
+  File "test.py", line 6, in f
+    traceback.print_stack(file=sys.stdout)
+
+Calling f() from 3 levels deep:
+  File "test.py", line 13, in <module>
+    call_function(f)
+  File "/home/rendp/workspace/py/traceback_example.py", line 12, in call_function
+    return call_function(f, recursion_level-1)
+  File "/home/rendp/workspace/py/traceback_example.py", line 12, in call_function
+    return call_function(f, recursion_level-1)
+  File "/home/rendp/workspace/py/traceback_example.py", line 14, in call_function
+    return f()
+  File "test.py", line 6, in f
+    traceback.print_stack(file=sys.stdout)
+
+    类似于 format_exception() 准备 traceback，format_stack() 以同样的方式准备栈轨迹。
+
+import traceback
+import sys
+from pprint import pprint
+from traceback_example import call_function
+
+def f():
+	return traceback.format_stack()
+
+formatted_stack = call_function(f)
+pprint(formatted_stack)
+
+    它返回一个串列表，每个串构成输出的一行。
+
+$ python test.py
+['  File "test.py", line 9, in <module>\n    formatted_stack = call_function(f)\n',
+ '  File "/home/rendp/workspace/py/traceback_example.py", line 12, in call_function\n    return call_function(f, recursion_level-1)\n',
+ '  File "/home/rendp/workspace/py/traceback_example.py", line 12, in call_function\n    return call_function(f, recursion_level-1)\n',
+ '  File "/home/rendp/workspace/py/traceback_example.py", line 14, in call_function\n    return f()\n',
+ '  File "test.py", line 7, in f\n    return traceback.format_stack()\n']
+
+    extract_stack() 函数的工作类似于 extract_tb()。
+
+import traceback
+import sys
+import os
+from traceback_example import call_function
+
+def f():
+	return traceback.extract_stack()
+
+stack = call_function(f)
+for filename, linenum, funcname, source in stack:
+	print '%-26s:%s "%s" in %s()' % \
+		(os.path.basename(filename), linenum, source, funcname)
+
+    它还接受函数（这里没有显示），可以从栈中另一个位置开始，或者可以限制遍历的深度。
+
+$ python test.py
+test.py                   :9 "stack = call_function(f)" in <module>()
+traceback_example.py      :12 "return call_function(f, recursion_level-1)" in call_function()
+traceback_example.py      :12 "return call_function(f, recursion_level-1)" in call_function()
+traceback_example.py      :14 "return f()" in call_function()
+test.py                   :7 "return traceback.extract_stack()" in f()
+
