@@ -1,0 +1,187 @@
+[Python标准库]cgitb——详细的 traceback 报告
+    作用：cgitb 能提供比 traceback 更为详细的 traceback 信息。
+    Python 版本：2.2 及以后版本
+    cgitb 是标准库中一个很有价值的调试工具。它原先设计用来显示 Web 应用中的错误和调试信息。后来得到更新，又包含了纯文本输出，不过遗憾的是，更新后并没有相应地改名。这个名字容易引起歧义，以至于这个模块没有得到应有的关注，原本它应该更为常用。
+标准 traceback 转储
+    Python 的标准异常处理行为是向标准错误输出流打印一个 traceback，并提供直至错误位置的调用栈。这个基本输出包含的信息通常足以了解异常的原因并做出修正。
+
+def func2(a, divisor):
+	return a / divisor
+
+def func1(a, b):
+	c = b - 5
+	return func2(a, c)
+
+func1(1, 5)
+
+    这个示例程序在 func2() 中有一个小错误。
+启用详细 traceback
+    尽管基本 traceback 包括了足够的信息来发现错误，不过启用 cgitb 将给出更多详细信息。cgitb 将 sys.excepthook 替换为另一个函数，它能提供更丰富的 traceback。
+
+import cgitb
+cgitb.enable(format='text')
+
+    这个例子的错误报告比原先要丰富得多，会列出栈的每一帧，并提供以下信息：
+    1. 源文件的完整路径，而不只是基名；
+    2. 栈中各个函数的参数值；
+    3. 错误路径中当前行周围的几行源代码上下文；
+    4. 导致错误的表达式中的变量值。
+    由于能够访问错误栈中涉及的变量，这有助于找到栈中更高位置出现的一个逻辑错误，而不是生成实际异常的那一行代码。
+
+$ python test.py
+<type 'exceptions.ZeroDivisionError'>
+Python 2.7.6: /usr/bin/python
+Thu Jun 23 21:05:32 2016
+
+A problem occurred in a Python script.  Here is the sequence of
+function calls leading up to the error, in the order they occurred.
+
+ /home/rendp/workspace/py/test.py in <module>()
+    7 def func1(a, b):
+    8 	c = b - 5
+    9 	return func2(a, c)
+   10 
+   11 func1(1, 5)
+func1 = <function func1>
+
+ /home/rendp/workspace/py/test.py in func1(a=1, b=5)
+    7 def func1(a, b):
+    8 	c = b - 5
+    9 	return func2(a, c)
+   10 
+   11 func1(1, 5)
+global func2 = <function func2>
+a = 1
+c = 0
+
+ /home/rendp/workspace/py/test.py in func2(a=1, divisor=0)
+    3 
+    4 def func2(a, divisor):
+    5 	return a / divisor
+    6 
+    7 def func1(a, b):
+a = 1
+divisor = 0
+<type 'exceptions.ZeroDivisionError'>: integer division or modulo by zero
+    __class__ = <type 'exceptions.ZeroDivisionError'>
+    __delattr__ = <method-wrapper '__delattr__' of exceptions.ZeroDivisionError object>
+    __dict__ = {}
+    __doc__ = 'Second argument to a division or modulo operation was zero.'
+    __format__ = <built-in method __format__ of exceptions.ZeroDivisionError object>
+    __getattribute__ = <method-wrapper '__getattribute__' of exceptions.ZeroDivisionError object>
+    __getitem__ = <method-wrapper '__getitem__' of exceptions.ZeroDivisionError object>
+    __getslice__ = <method-wrapper '__getslice__' of exceptions.ZeroDivisionError object>
+    __hash__ = <method-wrapper '__hash__' of exceptions.ZeroDivisionError object>
+    __init__ = <method-wrapper '__init__' of exceptions.ZeroDivisionError object>
+    __new__ = <built-in method __new__ of type object>
+    __reduce__ = <built-in method __reduce__ of exceptions.ZeroDivisionError object>
+    __reduce_ex__ = <built-in method __reduce_ex__ of exceptions.ZeroDivisionError object>
+    __repr__ = <method-wrapper '__repr__' of exceptions.ZeroDivisionError object>
+    __setattr__ = <method-wrapper '__setattr__' of exceptions.ZeroDivisionError object>
+    __setstate__ = <built-in method __setstate__ of exceptions.ZeroDivisionError object>
+    __sizeof__ = <built-in method __sizeof__ of exceptions.ZeroDivisionError object>
+    __str__ = <method-wrapper '__str__' of exceptions.ZeroDivisionError object>
+    __subclasshook__ = <built-in method __subclasshook__ of type object>
+    __unicode__ = <built-in method __unicode__ of exceptions.ZeroDivisionError object>
+    args = ('integer division or modulo by zero',)
+    message = 'integer division or modulo by zero'
+
+The above is a description of an error in a Python program.  Here is
+the original traceback:
+
+Traceback (most recent call last):
+  File "test.py", line 11, in <module>
+    func1(1, 5)
+  File "test.py", line 9, in func1
+    return func2(a, c)
+  File "test.py", line 5, in func2
+    return a / divisor
+ZeroDivisionError: integer division or modulo by zero
+
+    对于这个存在 ZeroDivisionError 异常的代码，显然问题是因为 func1() 中 c 值的计算而引入的，而不是因为在 func2() 中使用了这个值。
+    输出的最后还包括异常对象的完整细节（除了 message 以外可能还有其他属性，对调试会很有用），以及 traceback 转储的原始形式。
+traceback 中的局部变量
+    cgitb 中的代码会检查帧中所使用的导致错误的变量，这些代码足够聪明，还可以计算对象属性并显示。
+
+import cgitb
+cgitb.enable(format='text', context=12)
+
+class BrokenClass(object):
+	"""This class has an error."""
+
+	def __init__(self, a, b):
+		"""Be careful passing arguments in here."""
+		self.a = a
+		self.b = b
+		self.c = self.a * self.b
+		# Really
+		# long
+		# comment
+		# goes
+		# here.
+		self.d = self.a / self.b
+		return
+
+o = BrokenClass(1, 0)
+
+    如果一个函数或方法包括大量内联注释、空白符或其他代码，使它篇幅很长，倘若只有默认的 5 行上下文可能无法提供足够的指示。如果将函数体从显示的代码窗口取出，则没有足够的上下文来了解出现错误的位置。可以对 cgitb 使用一个更大的上下文值来解决这个问题。向 enable() 传入一个整数作为上下文（context）参数，控制为 traceback 的各行显示多少代码。
+    这个输出显示容易出错的代码与 self.a 和 self.b 有关。
+
+$ python test.py | grep -v method
+<type 'exceptions.ZeroDivisionError'>
+Python 2.7.6: /usr/bin/python
+Thu Jun 23 21:32:06 2016
+
+A problem occurred in a Python script.  Here is the sequence of
+function calls leading up to the error, in the order they occurred.
+
+ /home/rendp/workspace/py/test.py in <module>()
+    9 		self.a = a
+   10 		self.b = b
+   11 		self.c = self.a * self.b
+   12 		# Really
+   13 		# long
+   14 		# comment
+   15 		# goes
+   16 		# here.
+   17 		self.d = self.a / self.b
+   18 		return
+   19 
+   20 o = BrokenClass(1, 0)
+o undefined
+BrokenClass = <class '__main__.BrokenClass'>
+
+ /home/rendp/workspace/py/test.py in __init__(self=<__main__.BrokenClass object>, a=1, b=0)
+    9 		self.a = a
+   10 		self.b = b
+   11 		self.c = self.a * self.b
+   12 		# Really
+   13 		# long
+   14 		# comment
+   15 		# goes
+   16 		# here.
+   17 		self.d = self.a / self.b
+   18 		return
+   19 
+   20 o = BrokenClass(1, 0)
+self = <__main__.BrokenClass object>
+self.d undefined
+self.a = 1
+self.b = 0
+<type 'exceptions.ZeroDivisionError'>: integer division or modulo by zero
+    __class__ = <type 'exceptions.ZeroDivisionError'>
+    __dict__ = {}
+    __doc__ = 'Second argument to a division or modulo operation was zero.'
+    args = ('integer division or modulo by zero',)
+    message = 'integer division or modulo by zero'
+
+The above is a description of an error in a Python program.  Here is
+the original traceback:
+
+Traceback (most recent call last):
+  File "test.py", line 20, in <module>
+    o = BrokenClass(1, 0)
+  File "test.py", line 17, in __init__
+    self.d = self.a / self.b
+ZeroDivisionError: integer division or modulo by zero
+
