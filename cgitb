@@ -185,3 +185,164 @@ Traceback (most recent call last):
     self.d = self.a / self.b
 ZeroDivisionError: integer division or modulo by zero
 
+异常属性
+    除了每个栈帧的局部变量，cgitb 还会显示异常对象的所有属性。定制异常类型的额外属性会作为错误报告的一部分打印。
+
+import cgitb
+cgitb.enable(format='text', context=12)
+
+class MyException(Exception):
+	"""Add extra properties to a special exception"""
+
+	def __init__(slef, message, bad_value):
+		self.bad_value = bad_value
+		Exception.__init__(self, message)
+		return
+
+raise MyException('Normal message', bad_value=99)
+
+    在这个例子中，除了标准的 message 和 args 值外，还包含 bad_value 属性。
+
+$ python test.py
+<class '__main__.MyException'>
+Python 2.7.6: /usr/bin/python
+Thu Jun 23 21:46:23 2016
+
+A problem occurred in a Python script.  Here is the sequence of
+function calls leading up to the error, in the order they occurred.
+
+ /home/rendp/workspace/py/test.py in <module>()
+    1 import cgitb
+    2 cgitb.enable(format='text', context=12)
+    3 
+    4 class MyException(Exception):
+    5 	"""Add extra properties to a special exception"""
+    6 
+    7 	def __init__(self, message, bad_value):
+    8 		self.bad_value = bad_value
+    9 		Exception.__init__(self, message)
+   10 		return
+   11 
+   12 raise MyException('Normal message', bad_value=99)
+MyException = <class '__main__.MyException'>
+bad_value undefined
+<class '__main__.MyException'>: Normal message
+    __class__ = <class '__main__.MyException'>
+    __delattr__ = <method-wrapper '__delattr__' of MyException object>
+    __dict__ = {'bad_value': 99}
+    __doc__ = 'Add extra properties to a special exception'
+    __format__ = <built-in method __format__ of MyException object>
+    __getattribute__ = <method-wrapper '__getattribute__' of MyException object>
+    __getitem__ = <method-wrapper '__getitem__' of MyException object>
+    __getslice__ = <method-wrapper '__getslice__' of MyException object>
+    __hash__ = <method-wrapper '__hash__' of MyException object>
+    __init__ = <bound method MyException.__init__ of MyException('Normal message',)>
+    __module__ = '__main__'
+    __new__ = <built-in method __new__ of type object>
+    __reduce__ = <built-in method __reduce__ of MyException object>
+    __reduce_ex__ = <built-in method __reduce_ex__ of MyException object>
+    __repr__ = <method-wrapper '__repr__' of MyException object>
+    __setattr__ = <method-wrapper '__setattr__' of MyException object>
+    __setstate__ = <built-in method __setstate__ of MyException object>
+    __sizeof__ = <built-in method __sizeof__ of MyException object>
+    __str__ = <method-wrapper '__str__' of MyException object>
+    __subclasshook__ = <built-in method __subclasshook__ of type object>
+    __unicode__ = <built-in method __unicode__ of MyException object>
+    __weakref__ = None
+    args = ('Normal message',)
+    bad_value = 99
+    message = 'Normal message'
+
+The above is a description of an error in a Python program.  Here is
+the original traceback:
+
+Traceback (most recent call last):
+  File "test.py", line 12, in <module>
+    raise MyException('Normal message', bad_value=99)
+MyException: Normal message
+
+HTML 输出
+    由于 cgitb 原来是为了处理 Web 应用中的异常开发的，如果不提到原来的 HTML 输出格式，就不能算是个完整的讨论。前面的例子都显示了纯文本输出。为了生成 HTML 输出，要省略格式（format）参数（或者指定“html”）。大多数现代 Web 应用都使用一个包含错误报告功能的框架来构造，很大程度上讲，HTML 格式已经过时。
+记录 traceback
+    很多情况下，将 traceback 细节打印到标准错误输出是最佳的解决方案。不过，在生产系统中，更好的做法是记录错误日志。enable() 函数包括一个可选参数 logdir，用来启用错误日志。提供一个目录名时，每个异常会记入指定目录该异常自己的文件中。
+
+import cgitb
+import os
+
+cgitb.enable(logdir=os.path.join(os.path.dirname(__file__), 'LOGS'),
+	display=False,
+	format='text',
+	)
+
+def func(a, divisor):
+	return a / divisor
+
+func(1, 0)
+
+    尽管“抑制”了错误显示，还是会打印一个消息来指出要到哪里查找错误日志。
+
+$ python test.py
+<p>A problem occurred in a Python script.
+/home/rendp/workspace/py/LOGS/tmpuenyd7.txt contains the description of this error.
+
+$ ls LOGS
+tmpuenyd7.txt
+
+$ cat LOGS/*.txt
+<type 'exceptions.ZeroDivisionError'>
+Python 2.7.6: /usr/bin/python
+Thu Jun 23 22:00:20 2016
+
+A problem occurred in a Python script.  Here is the sequence of
+function calls leading up to the error, in the order they occurred.
+
+ /home/rendp/workspace/py/test.py in <module>()
+    8 
+    9 def func(a, divisor):
+   10 	return a / divisor
+   11 
+   12 func(1, 0)
+func = <function func>
+
+ /home/rendp/workspace/py/test.py in func(a=1, divisor=0)
+    8 
+    9 def func(a, divisor):
+   10 	return a / divisor
+   11 
+   12 func(1, 0)
+a = 1
+divisor = 0
+<type 'exceptions.ZeroDivisionError'>: integer division or modulo by zero
+    __class__ = <type 'exceptions.ZeroDivisionError'>
+    __delattr__ = <method-wrapper '__delattr__' of exceptions.ZeroDivisionError object>
+    __dict__ = {}
+    __doc__ = 'Second argument to a division or modulo operation was zero.'
+    __format__ = <built-in method __format__ of exceptions.ZeroDivisionError object>
+    __getattribute__ = <method-wrapper '__getattribute__' of exceptions.ZeroDivisionError object>
+    __getitem__ = <method-wrapper '__getitem__' of exceptions.ZeroDivisionError object>
+    __getslice__ = <method-wrapper '__getslice__' of exceptions.ZeroDivisionError object>
+    __hash__ = <method-wrapper '__hash__' of exceptions.ZeroDivisionError object>
+    __init__ = <method-wrapper '__init__' of exceptions.ZeroDivisionError object>
+    __new__ = <built-in method __new__ of type object>
+    __reduce__ = <built-in method __reduce__ of exceptions.ZeroDivisionError object>
+    __reduce_ex__ = <built-in method __reduce_ex__ of exceptions.ZeroDivisionError object>
+    __repr__ = <method-wrapper '__repr__' of exceptions.ZeroDivisionError object>
+    __setattr__ = <method-wrapper '__setattr__' of exceptions.ZeroDivisionError object>
+    __setstate__ = <built-in method __setstate__ of exceptions.ZeroDivisionError object>
+    __sizeof__ = <built-in method __sizeof__ of exceptions.ZeroDivisionError object>
+    __str__ = <method-wrapper '__str__' of exceptions.ZeroDivisionError object>
+    __subclasshook__ = <built-in method __subclasshook__ of type object>
+    __unicode__ = <built-in method __unicode__ of exceptions.ZeroDivisionError object>
+    args = ('integer division or modulo by zero',)
+    message = 'integer division or modulo by zero'
+
+The above is a description of an error in a Python program.  Here is
+the original traceback:
+
+Traceback (most recent call last):
+  File "test.py", line 12, in <module>
+    func(1, 0)
+  File "test.py", line 10, in func
+    return a / divisor
+ZeroDivisionError: integer division or modulo by zero
+
