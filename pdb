@@ -4,3 +4,117 @@
     pdb 为 Python 程序实现了一个交互式调试环境。它包括一些特性，可以暂停程序，查看变量值，逐步监视程序执行，使你能了解程序具体做了什么，并查找逻辑中存在的 bug。
 启动调试工具
     使用 pdb 的第一步是让解释器在适当时进入调试工具。为此有很多不同的方法，取决于起始条件和所要调试的内容。
+    1. 从命令行运行
+    使用调试工具的最直接方式是从命令行运行调试工具，提供程序作为输入，使它知道要运行什么。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+class MyObj(object):
+
+	def __init__(self, num_loops):
+		self.count = num_loops
+
+	def go(self):
+		for i in range(self.count):
+			print i
+		return
+
+if __name__ == '__main__':
+	MyObj(5).go()
+
+    从命令行运行调试工具时，它会加载文件，并在找到的第一条语句处停止执行。在这里，它会在第 7 行类 MyObj 的定义之前停止。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> class MyObj(object):
+(Pdb) 
+
+    2. 在解释器中运行
+    很多 Python 开发人员开发模块的较早版本时会使用交互式解释器，因为这样他们能反复实验，而不用像创建独立脚本时那样，需要完整地保存/运行/重复周期。要在一个交互式解释器中运行调试工具，可以使用 run() 或 runenval()。
+
+$ python
+Python 2.7.6 (default, Jun 22 2015, 18:00:18) 
+[GCC 4.8.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import test
+>>> import pdb
+>>> pdb.run('test.MyObj(5).go()')
+> <string>(1)<module>()
+(Pdb) 
+
+    run() 的参数是一个串表达式，可以由 Python 解释器计算。调试工具会进行解析，然后在计算第一个表达式之前暂停执行。这里介绍的调试工具命令可以用来导航和控制执行。
+    3. 从程序中运行
+    前面的两个例子都是从程序一开始就启动调试工具。对于一个长时间运行的进程，问题可能出现在程序执行较后的时刻，更方便的做法是在程序中使用 set_trace() 启动调试工具。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+import pdb
+
+class MyObj(object):
+
+	def __init__(self, num_loops):
+		self.count = num_loops
+
+	def go(self):
+		for i in range(self.count):
+			pdb.set_trace()
+			print i
+		return
+
+if __name__ == '__main__':
+	MyObj(5).go()
+
+    示例脚本的第 16 行在执行到该点时触发调试工具。
+
+$ python test.py
+> .../test.py(17)go()
+-> print i
+(Pdb) 
+
+    set_trace() 只是一个 Python 函数，所以可以在程序中任意位置调用。这样就可以根据程序中的条件进入调试工具，包括从一个异常处理程序进入，或者通过一个控制语句的特定分支进入。
+    4. 失败后运行
+    在程序终止后调试失败称为事后剖析调试（post-mortem debugging）。pdb 通过 pm() 后 post_mortem() 函数支持事后剖析调试。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+class MyObj(object):
+
+	def __init__(self, num_loops):
+		self.count = num_loops
+
+	def go(self):
+		for i in range(self.num_loops):
+			print i
+		return
+
+    在这里第 13 行上不正确的属性名触发了一个 AttributeError 异常，导致执行停止，pm() 查找活动 traceback，在调用栈中出现异常的位置启动调试工具。
+
+$ python
+Python 2.7.6 (default, Jun 22 2015, 18:00:18) 
+[GCC 4.8.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> from test import MyObj
+>>> MyObj(5).go()
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "test.py", line 13, in go
+    for i in range(self.num_loops):
+AttributeError: 'MyObj' object has no attribute 'num_loops'
+>>> import pdb
+>>> pdb.pm()
+> .../test.py(13)go()
+-> for i in range(self.num_loops):
+(Pdb) 
+
