@@ -118,3 +118,185 @@ AttributeError: 'MyObj' object has no attribute 'num_loops'
 -> for i in range(self.num_loops):
 (Pdb) 
 
+控制调试工具
+    调试工具的接口是一个很小的命令语言，允许在调用栈中移动、检查和修改变量的值，以及控制调试工具如何执行程序。这个交互式调试工具使用 readline 来接受命令。输入一个空行会再次重新运行之前的命令，除非是一个 list 操作。
+    1. 导航执行栈
+    调试工具运行的任何时刻，使用 where（缩写为 w）可以得出正在执行哪一行，以及程序在调用栈的哪个位置。在这里，正在执行模块的 go() 方法中的第 17 行。
+
+$ python test.py
+> .../test.py(17)go()
+-> print i
+(Pdb) where
+  .../test.py(21)<module>()
+-> MyObj(5).go()
+> .../test.py(17)go()
+-> print i
+
+    要围绕当前位置添加更多上下文，可以使用 list(l)。
+
+(Pdb) list
+ 12  			self.count = num_loops
+ 13  	
+ 14  		def go(self):
+ 15  			for i in range(self.count):
+ 16  				pdb.set_trace()
+ 17  ->				print i
+ 18  			return
+ 19  	
+ 20  	if __name__ == '__main__':
+ 21  		MyObj(5).go()
+[EOF]
+(Pdb) 
+
+    默认会列出当前行周围共 11 行（前面 5 行，后面 5 行）。如果使用 list 并提供一个数值参数，则会列出指定行（而不是当前行）周围的 11 行。
+
+(Pdb) list 14
+  9  	class MyObj(object):
+ 10  	
+ 11  		def __init__(self, num_loops):
+ 12  			self.count = num_loops
+ 13  	
+ 14  		def go(self):
+ 15  			for i in range(self.count):
+ 16  				pdb.set_trace()
+ 17  ->				print i
+ 18  			return
+ 19  	
+
+    如果 list 接受两个参数，会把它们解释为输出中包含的第一行和最后一行。
+
+(Pdb) list 5, 19
+  5  	#
+  6  	
+  7  	import pdb
+  8  	
+  9  	class MyObj(object):
+ 10  	
+ 11  		def __init__(self, num_loops):
+ 12  			self.count = num_loops
+ 13  	
+ 14  		def go(self):
+ 15  			for i in range(self.count):
+ 16  				pdb.set_trace()
+ 17  ->				print i
+ 18  			return
+ 19  	
+
+    可以使用 up 和 down 在当前调用栈的帧之间移动。up（缩写为 u）向栈中较早的帧移动。down（缩写为 d）则移向较新的帧。
+
+(Pdb) up
+> .../test.py(21)<module>()
+-> MyObj(5).go()
+(Pdb) down
+> .../test.py(17)go()
+-> print i
+
+    每次在栈中上移或下移时，调试工具会打印当前位置，格式与 where 生成的格式相同。
+    2. 查找栈中的变量
+    栈中的各帧维护一组变量，包括所执行函数的局部值和全局状态信息。pdb 提供了多种方法来检查这些变量的内容。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+import pdb
+
+def recursive_fuction(n=5, output='to be printed'):
+	if n > 0:
+		recursive_fuction(n-1)
+	else:
+		pdb.set_trace()
+		print output
+	return
+
+if __name__ == '__main__':
+	recursive_fuction()
+
+    args 命令（缩写为 a）会打印当前帧中活动函数的所有参数。这个例子还使用了一个递归函数，以显示由 where 打印一个更深的栈时会得到什么结果。
+
+$ python test.py
+> .../test.py(14)recursive_fuction()
+-> print output
+(Pdb) where
+  .../test.py(18)<module>()
+-> recursive_fuction()
+  .../test.py(11)recursive_fuction()
+-> recursive_fuction(n-1)
+  .../test.py(11)recursive_fuction()
+-> recursive_fuction(n-1)
+  .../test.py(11)recursive_fuction()
+-> recursive_fuction(n-1)
+  .../test.py(11)recursive_fuction()
+-> recursive_fuction(n-1)
+  .../test.py(11)recursive_fuction()
+-> recursive_fuction(n-1)
+> .../test.py(14)recursive_fuction()
+-> print output
+(Pdb) args
+n = 0
+output = to be printed
+(Pdb) up
+> .../test.py(11)recursive_fuction()
+-> recursive_fuction(n-1)
+(Pdb) args
+n = 1
+output = to be printed
+
+    p 命令会计算作为参数给定的一个表达式，并打印其结果。也可以使用 Python 的 print 语句，不过要把它传至解释器来执行，而不是在调试工具中作为一个命令运行。
+
+(Pdb) p n
+1
+(Pdb) print n
+1
+
+    类似地，在一个表达式前面加上前缀 ! 就会把它传递到 Python 解释器进行计算。这个特性可以用来执行任意的 Python 语句，包括修改变量。下面这个例子在允许调试工具继续运行程序之前修改了 output 的值。set_trace() 调用后的下一条语句打印出 output 的值，会显示修改后的值。
+
+$ python test.py
+> .../test.py(14)recursive_fuction()
+-> print output
+(Pdb) !output
+'to be printed'
+(Pdb) !output='changed value'
+(Pdb) continue
+changed value
+
+    对于更复杂的值，如嵌套数据结构或大型数据结构，要使用 pp 以“完美打印”格式进行打印，下面这个程序从一个文件读取多个文本行。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+import pdb
+
+with open('lorem.txt', 'rt') as f:
+	lines = f.readlines()
+
+pdb.set_trace()
+
+    用 p 打印变量 lines 时，得到的输出很难读，因为它的换行很拙劣。pp 使用 pprint 格式化值以便美观地打印。
+
+$ python test.py
+--Return--
+> .../test.py(12)<module>()->None
+-> pdb.set_trace()
+(Pdb) p lines
+['Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Donec\r\n', 'egestas, enim et consectetuer ullamcorper, lectus ligula rutrum len,\r\n', 'a elementum elit tortor eu quam. Duis tincidunt nisi ut ante. Nulla\r\n', 'facilisi. Sed tristique eros eu libero. Pellentesque vel\r\n', 'arcu. Vivamus purus orci, iaculis ac, suscipit sit amet, pulvinar eu,\r\n', 'lacus. Praesent placerat tortor sed nisl. Nunc blandit diam egestas\r\n', 'dui. Pellentesque habitant morbi tristique senectus et netus et\r\n', 'malesuda fames ac turpis egestas. Aliquam viverra fringilla\r\n', 'leo. Nulla feugiat augue eleifend nulla. Vivamus mauris. Vivamus sed\r\n', 'mauris in nibh placerat egestas. Suspendisse potenti. Mauris\r\n', 'massa. Ut eget velit auctor tortor blandit sollicitudin. Suspendisse\r\n', 'imperdiet justo.']
+(Pdb) pp lines
+['Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Donec\r\n',
+ 'egestas, enim et consectetuer ullamcorper, lectus ligula rutrum len,\r\n',
+ 'a elementum elit tortor eu quam. Duis tincidunt nisi ut ante. Nulla\r\n',
+ 'facilisi. Sed tristique eros eu libero. Pellentesque vel\r\n',
+ 'arcu. Vivamus purus orci, iaculis ac, suscipit sit amet, pulvinar eu,\r\n',
+ 'lacus. Praesent placerat tortor sed nisl. Nunc blandit diam egestas\r\n',
+ 'dui. Pellentesque habitant morbi tristique senectus et netus et\r\n',
+ 'malesuda fames ac turpis egestas. Aliquam viverra fringilla\r\n',
+ 'leo. Nulla feugiat augue eleifend nulla. Vivamus mauris. Vivamus sed\r\n',
+ 'mauris in nibh placerat egestas. Suspendisse potenti. Mauris\r\n',
+ 'massa. Ut eget velit auctor tortor blandit sollicitudin. Suspendisse\r\n',
+ 'imperdiet justo.']
+
+    3. 单步执行程序
