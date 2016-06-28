@@ -300,3 +300,163 @@ $ python test.py
  'imperdiet justo.']
 
     3. 单步执行程序
+    除了程序暂停时在调用栈中上下导航外，还可以在进入调试工具那一点之后单步执行程序。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+import pdb
+
+def f(n):
+	for i in range(n):
+		j = i * n
+		print i, j
+	return
+
+if __name__ == "__main__":
+	pdb.set_trace()
+	f(5)
+
+    使用 step 执行当前行，然后在下一个执行点停止——这可能是所调用的函数中的第一条语句，也可能是当前函数的下一行语句。
+
+$ python test.py
+> .../test.py(17)<module>()
+-> f(5)
+
+    解释器会在 set_trace() 调用处暂停，将控制交给调试工具。第一步会导致执行进入 f()。
+
+(Pdb) step
+--Call--
+> .../test.py(9)f()
+-> def f(n):
+
+    再执行一步会执行到 f() 的第一行，并开始循环。
+
+(Pdb) step
+> .../test.py(10)f()
+-> for i in range(n):
+
+    执行下一步会移动到循环中的第一行，即定义 j 的代码。
+
+(Pdb) step
+> .../test.py(11)f()
+-> j = i * n
+(Pdb) p i
+0
+
+    i 的值为 0，所以再执行一步后，j 的值应当也是 0。
+
+(Pdb) step
+> .../test.py(12)f()
+-> print i, j
+(Pdb) p j
+0
+
+    像这样一次执行一步，如果在出现错误那一点之前需要执行很多代码，或者如果需要反复调用相同的函数，就会变得很麻烦。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+import pdb
+
+def calc(i, n):
+	j = i * n
+	return j
+
+def f(n):
+	for i in range(n):
+		j = calc(i, n)
+		print i, j
+	return
+
+if __name__ == "__main__":
+	pdb.set_trace()
+	f(5)
+
+    在这个例子中，calc() 没有错误，所以在 f() 的循环中每次调用它时如果都单步跟踪，执行时会显示 calc() 的所有代码行，这对有用的输出会造成干扰。
+
+$ python test.py
+> .../test.py(21)<module>()
+-> f(5)
+(Pdb) step
+--Call--
+> .../test.py(13)f()
+-> def f(n):
+(Pdb) step
+> .../test.py(14)f()
+-> for i in range(n):
+(Pdb) step
+> .../test.py(15)f()
+-> j = calc(i, n)
+(Pdb) step
+--Call--
+> .../test.py(9)calc()
+-> def calc(i, n):
+(Pdb) step
+> .../test.py(10)calc()
+-> j = i * n
+(Pdb) step
+> .../test.py(11)calc()
+-> return j
+(Pdb) step
+--Return--
+> .../test.py(11)calc()->0
+-> return j
+(Pdb) step
+> .../test.py(16)f()
+-> print i, j
+(Pdb) step
+0 0
+
+    next 命令有些类似 step，不过不会从正在执行的语句进入所调用的函数。实际上，它会用一个操作完成整个函数调用，而直接进入当前函数的下一条语句。
+
+> .../test.py(14)f()
+-> for i in range(n):
+(Pdb) step
+> .../test.py(15)f()
+-> j = calc(i, n)
+(Pdb) next
+> .../test.py(16)f()
+-> print i, j
+
+    until 命令类似于 next，只不过它会继续执行，直至执行到同一个函数中行号大于当前值的一行。例如，这说明，until 可以用于跳过循环末尾。
+
+> .../test.py(14)f()
+-> for i in range(n):
+(Pdb) step
+> .../test.py(15)f()
+-> j = calc(i, n)
+(Pdb) next
+> .../test.py(16)f()
+-> print i, j
+(Pdb) until
+0 0
+1 5
+2 10
+3 15
+4 20
+> .../test.py(17)f()
+-> return
+
+    运行 until 命令之前，当前行为 16，即循环的最后一行。运行 until 之后，执行位于第 17 行，循环已经结束。
+    return 命令也是绕开函数部分的一个捷径。它会继续执行，直至函数将要执行一个 return 语句，然后它会暂停，从而在函数返回前有时间查看返回值。
+
+> .../test.py(14)f()
+-> for i in range(n):
+(Pdb) return
+0 0
+1 5
+2 10
+3 15
+4 20
+--Return--
+> .../test.py(17)f()->None
+-> return
+
+断点
