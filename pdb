@@ -460,3 +460,124 @@ $ python test.py
 -> return
 
 断点
+    随着程序越来越长，即使使用 next 和 until 也会变得很慢，很繁琐。不用手动地单步跟踪程序，一种更好的解决方案是让它正常运行，直至达到某一点，调试工具要在这一点中断执行。set_trace() 可以启动调试工具，不过程序中只有一个要暂停的点时这才适用。更方便的做法是通过调试工具运行程序，但是使用断点（breakpoint）提前告诉调试工具在哪里停止。调试工具会监视程序，到达断点描述的位置时，程序会在执行那一行之前暂停。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+def calc(i, n):
+	j = i * n
+	print 'j =', j
+	if j > 0:
+		print 'Positive!'
+	return j
+
+def f(n):
+	for i in range(n):
+		print 'i =', i
+		j = calc(i, n)
+	return
+
+if __name__ == "__main__":
+	f(5)
+
+    break 命令行有很多选项用来设置断点，包括要暂停处理的行号、文件和函数。要在当前文件的一个特定行设置断点，可以使用 break lineno。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break 11
+Breakpoint 1 at .../test.py:11
+(Pdb) continue
+i = 0
+j = 0
+i = 1
+j = 5
+> .../test.py(11)calc()
+-> print 'Positive!'
+(Pdb) 
+
+    命令 continue 告诉调试工具继续运行程序，直到到达下一个断点。在这里，它会运行完 f() 中 for 循环的第一次迭代，第二次迭代期间在 calc() 中停止。
+    可以指定函数名而不是一个行号，把断点设置到一个函数的第一行。下面这个例子显示了为 calc() 函数增加一个断点会发生什么。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break calc
+Breakpoint 1 at .../test.py:7
+(Pdb) continue
+i = 0
+> .../test.py(8)calc()
+-> j = i * n
+(Pdb) where
+  /usr/lib/python2.7/bdb.py(400)run()
+-> exec cmd in globals, locals
+  <string>(1)<module>()
+  .../test.py(21)<module>()
+-> f(5)
+  .../test.py(17)f()
+-> j = calc(i, n)
+> .../test.py(8)calc()
+-> j = i * n
+(Pdb) 
+
+    要在另一个文件中指定一个断点，可以在行或函数参数前加一个文件名前缀。
+
+#!/usr/bin/env python
+# encoding: utf-8
+
+from test import f
+
+f(5)
+
+    在这里，开始主程序 test_remote.py 之后，为 test.py 的第 11 行设置了一个断点。
+
+$ python -m pdb test_remote.py 
+> .../test_remote.py(4)<module>()
+-> from test import f
+(Pdb) break test.py:11
+Breakpoint 1 at .../test.py:11
+(Pdb) continue
+i = 0
+j = 0
+i = 1
+j = 5
+> .../test.py(11)calc()
+-> print 'Positive!'
+(Pdb) 
+
+    文件名可以是源文件的完整路径，也可以是相对于 sys.path 上某个文件的相对路径。
+    要列出当前设置的断点，可以使用 break 而不带任何参数。输出包括文件和各个断点的行号，以及多少次遇到这个断点的有关信息。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break 11
+Breakpoint 1 at .../test.py:11
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:11
+(Pdb) continue
+i = 0
+j = 0
+i = 1
+j = 5
+> .../test.py(11)calc()
+-> print 'Positive!'
+(Pdb) continue
+Positive!
+i = 2
+j = 10
+> .../test.py(11)calc()
+-> print 'Positive!'
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:11
+	breakpoint already hit 2 times
+(Pdb) 
+
+    1. 管理断点
+
