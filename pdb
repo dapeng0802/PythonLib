@@ -581,3 +581,119 @@ Num Type         Disp Enb   Where
 
     1. 管理断点
     增加一个新断点时，会为它指定一个数值标识符。这些 id 号用于交互式地启用、禁用和删除断点。用 disable 关闭一个断点时，会告诉调试工具到达该行时不要停止。这个断点仍会记住，但是会将其忽略。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break calc
+Breakpoint 1 at .../test.py:7
+(Pdb) break 11
+Breakpoint 2 at .../test.py:11
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:7
+2   breakpoint   keep yes   at .../test.py:11
+(Pdb) disable 1
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep no    at .../test.py:7
+2   breakpoint   keep yes   at .../test.py:11
+(Pdb) continue
+i = 0
+j = 0
+i = 1
+j = 5
+> .../test.py(11)calc()
+-> print 'Positive!'
+(Pdb) 
+
+    下一个调试会话在程序中设置两个断点，然后禁用其中一个。程序会一直运行，直至遇到留下的那个断点，然后在执行继续之前用 enable 把另一个断点打开。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break calc
+Breakpoint 1 at .../test.py:7
+(Pdb) break 16
+Breakpoint 2 at .../test.py:16
+(Pdb) disable 1
+(Pdb) continue
+> .../test.py(16)f()
+-> print 'i =', i
+(Pdb) list
+ 11  			print 'Positive!'
+ 12  		return j
+ 13  	
+ 14  	def f(n):
+ 15  		for i in range(n):
+ 16 B->			print 'i =', i
+ 17  			j = calc(i, n)
+ 18  		return
+ 19  	
+ 20  	if __name__ == "__main__":
+ 21  		f(5)
+(Pdb) continue
+i = 0
+j = 0
+> .../test.py(16)f()
+-> print 'i =', i
+(Pdb) list
+ 11  			print 'Positive!'
+ 12  		return j
+ 13  	
+ 14  	def f(n):
+ 15  		for i in range(n):
+ 16 B->			print 'i =', i
+ 17  			j = calc(i, n)
+ 18  		return
+ 19  	
+ 20  	if __name__ == "__main__":
+ 21  		f(5)
+(Pdb) p i
+1
+(Pdb) enable 1
+(Pdb) continue
+i = 1
+> .../test.py(8)calc()
+-> j = i * n
+(Pdb) list
+  3  	#
+  4  	# Copyright (c) 2010 Doug Hellmann. All right reserved.
+  5  	#
+  6  	
+  7 B	def calc(i, n):
+  8  ->		j = i * n
+  9  		print 'j =', j
+ 10  		if j > 0:
+ 11  			print 'Positive!'
+ 12  		return j
+ 13  	
+(Pdb) 
+
+    list 的输出中带 B 前缀的行显示了程序中哪里设置了断点（第 7 行和第 16 行）。可以使用 clear 完全删除一个断点。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break calc
+Breakpoint 1 at .../test.py:7
+(Pdb) break 11
+Breakpoint 2 at .../test.py:11
+(Pdb) break 16
+Breakpoint 3 at .../test.py:16
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:7
+2   breakpoint   keep yes   at .../test.py:11
+3   breakpoint   keep yes   at .../test.py:16
+(Pdb) clear 2
+Deleted breakpoint 2
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:7
+3   breakpoint   keep yes   at .../test.py:16
+(Pdb) 
+
+    其他断点仍保留原来的标识符，不会重新编号。
+    2. 临时断点
+
