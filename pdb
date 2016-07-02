@@ -696,4 +696,75 @@ Num Type         Disp Enb   Where
 
     其他断点仍保留原来的标识符，不会重新编号。
     2. 临时断点
+    程序第一次执行到临时断点时会将它自动清除。通过使用临时断点，可以很快到达程序流中的特定位置，这与常规断点一样，只是它会立即清除。不过，如果这部分程序反复运行，临时断点不会干扰后续执行。
 
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) tbreak 11
+Breakpoint 1 at .../test.py:11
+(Pdb) continue
+i = 0
+j = 0
+i = 1
+j = 5
+Deleted breakpoint 1
+> .../test.py(11)calc()
+-> print 'Positive!'
+(Pdb) break
+(Pdb) continue
+Positive!
+i = 2
+j = 10
+Positive!
+i = 3
+j = 15
+Positive!
+i = 4
+j = 20
+Positive!
+The program finished and will be restarted
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) 
+
+    程序第一次到达第 11 行时，会将断点删除，在程序完成之前不会再停止执行。
+    3. 条件断点
+    可以对断点应用一些规则，仅当条件满足时执行才停止。相对于手动地启用和禁用断点，使用条件断点可以对调试工具如何暂停程序提供更精细的控制。可以用两种方式设置条件断点。第一种是使用 break 指定设置断点时的条件。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break 9, j>0
+Breakpoint 1 at .../test.py:9
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:9
+	stop only if j>0
+(Pdb) continue
+i = 0
+j = 0
+i = 1
+> .../test.py(9)calc()
+-> print 'j =', j
+(Pdb) 
+
+    条件参数必须是一个表达式，要使用定义断点的栈帧中可见的值。如果表达式计算为 true，则在断点处停止执行。
+    还可以使用 condition 命令对一个现有的断点应用条件。参数是断点 id 和表达式。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break 9
+Breakpoint 1 at .../test.py:9
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:9
+(Pdb) condition 1 j > 0
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:9
+	stop only if j > 0
+(Pdb) 
+
+    4. 忽略断点
