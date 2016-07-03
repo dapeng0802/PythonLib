@@ -768,3 +768,119 @@ Num Type         Disp Enb   Where
 (Pdb) 
 
     4. 忽略断点
+    有些程序包含有循环，或者使用了大量相同函数的递归调用，通过在执行中“前跳”（skipping ahead）可以更容易地调试这些程序，而不是监视每一个调用或断点。ignore 命令告诉调试工具跳过一个断点而不停止。每次处理遇到这个断点时，它将会忽略计数器递减。当这个计数器为 0 时，会再次启用这个断点。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break 17
+Breakpoint 1 at .../test.py:17
+(Pdb) continue
+i = 0
+> .../test.py(17)f()
+-> j = calc(i, n)
+(Pdb) next
+j = 0
+> .../test.py(15)f()
+-> for i in range(n):
+(Pdb) ignore 1 2
+Will ignore next 2 crossings of breakpoint 1.
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:17
+	ignore next 2 hits
+	breakpoint already hit 1 time
+(Pdb) continue
+i = 1
+j = 5
+Positive!
+i = 2
+j = 10
+Positive!
+i = 3
+> .../test.py(17)f()
+-> j = calc(i, n)
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:17
+	breakpoint already hit 4 times
+(Pdb) 
+
+    显式地重新设置忽略计数器为 0，可以立即再次启用这个断点。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break 17
+Breakpoint 1 at .../test.py:17
+(Pdb) ignore 1 2
+Will ignore next 2 crossings of breakpoint 1.
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:17
+	ignore next 2 hits
+(Pdb) ignore 1 0
+Will stop next time breakpoint 1 is reached.
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:17
+(Pdb) 
+
+    5. 在断点触发动作
+    除了纯交互式模式，pdb 还支持基本脚本模式。通过使用 commands，可以在遇到一个特定断点时执行一系列解释器命令，也包含 Python 语句。运行 commands 并提供断点号作为参数，调试工具提示符会变为 (com)。一次输入一个命令，用 end 结束命令列表来保存脚本，然后返回到主调试工具提示符。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def calc(i, n):
+(Pdb) break 9
+Breakpoint 1 at .../test.py:9
+(Pdb) commands 1
+(com) print 'debug i =', i
+(com) print 'debug j =', j
+(com) print 'debug n =', n
+(com) end
+(Pdb) continue
+i = 0
+debug i = 0
+debug j = 0
+debug n = 5
+> .../test.py(9)calc()
+-> print 'j =', j
+(Pdb) continue
+j = 0
+i = 1
+debug i = 1
+debug j = 5
+debug n = 5
+> .../test.py(9)calc()
+-> print 'j =', j
+(Pdb) 
+
+    如果代码使用了大量数据结构或变量，这个特性对于调试这些代码尤其有用，因为可以让调试工具自动打印出所有值，而不是每次遇到断点时手动地处理。
+改变执行流
+    jump 命令可以在运行时改变程序流，而不修改代码。它可以向前跳不再运行某些代码，或者向后跳再次运行某些代码。下面的示例程序会生成一个数字列表。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+def f(n):
+	result = []
+	j = 0
+	for i in range(n):
+		j = i * n + j
+		j += n
+		result.append(j)
+	return result
+
+if __name__ == "__main__":
+	print f(5)
+
+    不加干扰地运行时，输出是整除 5 的递增数字组成的一个序列。
+
+$ python test.py
+[5, 15, 30, 50, 75]
+
+    1. 前跳
