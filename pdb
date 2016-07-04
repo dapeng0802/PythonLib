@@ -884,3 +884,232 @@ $ python test.py
 [5, 15, 30, 50, 75]
 
     1. 前跳
+    前跳（Jump Ahead）会把执行点移至当前位置之后，而不再执行二者之间的任何语句。在下面的例子中，由于跳过了第 13 行，j 的值并不递增，后面所有依赖于它的值都会稍小一点。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) break 12
+Breakpoint 1 at .../test.py:12
+(Pdb) continue
+> .../test.py(12)f()
+-> j += n
+(Pdb) p j
+0
+(Pdb) step
+> .../test.py(13)f()
+-> result.append(j)
+(Pdb) p j
+5
+(Pdb) continue
+> .../test.py(12)f()
+-> j += n
+(Pdb) jump 13
+> .../test.py(13)f()
+-> result.append(j)
+(Pdb) p j
+10
+(Pdb) disable 1
+(Pdb) continue
+[5, 10, 25, 45, 70]
+The program finished and will be restarted
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) 
+
+    2. 后跳
+    也可以后跳，让程序执行之前已经执行过的语句，使它再次运行。在这里，j 值多递增一次，得到的序列中，数都比原本的值大一些。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) break 13
+Breakpoint 1 at .../test.py:13
+(Pdb) continue
+> .../test.py(13)f()
+-> result.append(j)
+(Pdb) p j
+5
+(Pdb) jump 12
+> .../test.py(12)f()
+-> j += n
+(Pdb) continue
+> .../test.py(13)f()
+-> result.append(j)
+(Pdb) p j
+10
+(Pdb) disable 1
+(Pdb) continue
+[10, 20, 35, 55, 80]
+The program finished and will be restarted
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) 
+
+    3. 非法跳转
+    跳入和跳出某些流控制语句，这样很危险，而且不确定，因此调试工具不允许这么做。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+def f(n):
+	if n < 0:
+		raise ValueError('Invalid n: %s' % n)
+	result = []
+	j = 0
+	for i in range(n):
+		j = i * n + j
+		j += n
+		result.append(j)
+	return result
+
+
+if __name__ == "__main__":
+	try:
+		print f(5)
+	finally:
+		print 'Always printed'
+
+	try:
+		print f(-5)
+	except:
+		print 'There was an error'
+	else:
+		print 'There was no error'
+
+	print 'Last statement'
+
+    可以使用 jump 进入一个函数，但是参数未定义，代码往往不能工作。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) break 21
+Breakpoint 1 at .../test.py:21
+(Pdb) jump 8
+> .../test.py(8)<module>()
+-> if n < 0:
+(Pdb) p n
+*** NameError: NameError("name 'n' is not defined",)
+(Pdb) args
+(Pdb) 
+
+    jump 不会进入类似 for 循环或 try:except 语句等代码块的中间。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) break 21
+Breakpoint 1 at .../test.py:21
+(Pdb) continue
+> .../test.py(21)<module>()
+-> print f(5)
+(Pdb) jump 26
+*** Jump failed: can't jump into the middle of a block
+(Pdb) 
+
+    finally 块中的代码必须全部执行，所以 jump 不会离开 finally 块。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) break 23
+Breakpoint 1 at .../test.py:23
+(Pdb) continue
+[5, 15, 30, 50, 75]
+> .../test.py(23)<module>()
+-> print 'Always printed'
+(Pdb) jump 25
+*** Jump failed: can't jump into or out of a 'finally' block
+(Pdb) 
+
+    最基本的限制是，跳转要受调用栈最底层帧的约束。在栈中上移检查变量之后，不能在这一点上改变执行流。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> def f(n):
+(Pdb) break 11
+Breakpoint 1 at .../test.py:11
+(Pdb) continue
+> .../test.py(11)f()
+-> j = 0
+(Pdb) where
+  /usr/lib/python2.7/bdb.py(400)run()
+-> exec cmd in globals, locals
+  <string>(1)<module>()
+  .../test.py(21)<module>()
+-> print f(5)
+> .../test.py(11)f()
+-> j = 0
+(Pdb) up
+> .../test.py(21)<module>()
+-> print f(5)
+(Pdb) jump 25
+*** You can only jump within the bottom frame
+(Pdb) 
+
+    4. 重启程序
+    调试工具到达程序末尾时，它会自动重启，不过也可以显式地重启而不用退出调试工具，也就不会丢失当前的断点或其他设置。
+
+#!/usr/bin/env python
+# encoding: utf-8
+#
+# Copyright (c) 2010 Doug Hellmann. All right reserved.
+#
+
+import sys
+
+def f():
+	print 'Command-line args:', sys.argv
+	return
+
+if __name__ == "__main__":
+	f()
+
+    在调试工具中运行这个程序直到结束，会打印脚本文件的名字，因为命令行上没有给出任何其他参数。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> import sys
+(Pdb) continue
+Command-line args: ['test.py']
+The program finished and will be restarted
+> .../test.py(7)<module>()
+-> import sys
+(Pdb) 
+
+    还可以使用 run 重启程序。传入 run 的参数将由 shlex 解析，并传递到程序，就好像它们是命令行参数一样，所以程序可以用不同的设置重启。
+
+(Pdb) run a b c "this is a long value"
+Restarting test.py with arguments:
+	a b c this is a long value
+> .../test.py(7)<module>()
+-> import sys
+(Pdb) continue
+Command-line args: ['test.py', 'a', 'b', 'c', 'this is a long value']
+The program finished and will be restarted
+> .../test.py(7)<module>()
+-> import sys
+(Pdb) 
+
+    还可以在处理中的任何其他位置使用 run 重启程序。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> import sys
+(Pdb) break 10
+Breakpoint 1 at .../test.py:10
+(Pdb) continue
+> .../test.py(10)f()
+-> print 'Command-line args:', sys.argv
+(Pdb) run one tow three
+Restarting test.py with arguments:
+	one tow three
+> .../test.py(7)<module>()
+-> import sys
+(Pdb) 
+
+用别名定制调试工具
