@@ -1113,3 +1113,76 @@ Restarting test.py with arguments:
 (Pdb) 
 
 用别名定制调试工具
+    可以使用 alias 定义一个快捷方式，从而无须反复键入复杂的命令。别名扩展应用于每个命令的第一个词。别名的体可以由可在调试工具提示窗口合法键入的任何命令组成，包括其他调试工具命令和纯 Python 表达式。别名定义中允许递归，所以一个别名甚至可以调用另一个别名。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> import pdb
+(Pdb) break 10
+Breakpoint 1 at .../test.py:10
+(Pdb) continue
+> .../test.py(10)recursive_fuction()
+-> if n > 0:
+(Pdb) pp locals().keys()
+['output', 'n']
+(Pdb) alias pl pp locals().keys()
+(Pdb) pl
+['output', 'n']
+(Pdb) 
+
+    运行 alias 而不带任何参数时，会显示已定义的别名的一个列表。如果给出一个参数，则认为这是别名的名，将打印这个别名的定义。
+
+(Pdb) alias
+pl = pp locals().keys()
+(Pdb) alias pl
+pl = pp locals().keys()
+(Pdb) 
+
+    alias 的参数使用 %n 来引用，其中 n 会替换为一个指示参数位置的数，从 1 开始。要利用所有参数，可以使用 %*。
+
+$ python -m pdb test.py
+> .../test.py(7)<module>()
+-> import pdb
+(Pdb) alias ph !help(%1)
+(Pdb) ph locals
+Help on built-in function locals in module __builtin__:
+
+locals(...)
+    locals() -> dictionary
+    
+    Update and return a dictionary containing the current scope's local variables.
+
+    可以用 unalias 删除一个别名的定义。
+
+(Pdb) unalias ph
+(Pdb) ph locals
+*** SyntaxError: invalid syntax (<stdin>, line 1)
+(Pdb) 
+
+保存配置设置
+    调试一个程序需要做大量重复：运行代码、观察输出、调整代码或输入，然后再次运行。pdb 努力减少所需的重复，来控制调试体验，使你能集中精力考虑代码而不是调试工具。为了有助于减少向调试工具发出相同命令的次数，pdb 可以从启动时解释的文本文件读取已保存的配置。
+    首先读取文件 ～/.pdbrc，得到所有调试会话的全局个人首选项。然后从当前工作目录读取 ./.pdbrc，设置特定项目的局部首选项。
+
+$ cat ~/.pdbrc
+# Show python help
+alias ph !help(%1)
+# Overridden alias
+alias redefined p 'home definition'
+$ cat .pdbrc 
+# Breakpoints
+break 10
+# Overridden alias
+alias redefined p 'local definition'
+$ python -m pdb test.py
+Breakpoint 1 at .../test.py:10
+> .../test.py(7)<module>()
+-> import pdb
+(Pdb) alias
+ph = !help(%1)
+redefined = p 'local definition'
+(Pdb) break
+Num Type         Disp Enb   Where
+1   breakpoint   keep yes   at .../test.py:10
+(Pdb) 
+
+    能在调试工具提示窗口键入的所有配置命令都可以保存到某个启动文件中，不过大多数控制执行的命令（continue、jump 等等）除外。run 是个例外，这说明可以在 ./.pdbrc 中设置一个调试会话的命令行参数，从而在多次运行时保持一致。
