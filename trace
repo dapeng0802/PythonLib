@@ -1,0 +1,67 @@
+[Python标准库]Python——执行程序流
+    作用：监视程序运行时执行了哪些语句和函数，来生成覆盖和调用图信息。
+    Python 版本：2.3 及以后版本
+    trace 模块对于了解程序以何种方式运行很有用。它会监视所执行的语句，生成覆盖报告，并有助于研究相互调用的函数之间的关系。
+示例程序
+    本节余下的例子都会使用这个程序。它导入另一个名为 recurse 的模块，然后运行其中的一个函数。
+
+from recurse import recurse
+
+def main():
+	print 'This is the main program.'
+	recurse(2)
+	return
+
+if __name__ == '__main__':
+	main()
+
+    recurse() 函数会调用其自身，直至 level 参数达到 0。
+
+def recurse(level):
+	print 'recurse(%s)' % level
+	if level:
+		recurse(level - 1)
+	return
+
+def not_called():
+	print 'This function is never called.'
+
+跟踪执行
+    可以从命令行直接使用 trace，这很容易。给定 --trace 选项时，会打印程序运行时执行的语句。
+
+$ python -m trace --trace test.py
+ --- modulename: test, funcname: <module>
+test.py(1): from recurse import recurse
+ --- modulename: recurse, funcname: <module>
+recurse.py(1): def recurse(level):
+recurse.py(7): def not_called():
+test.py(3): def main():
+test.py(8): if __name__ == '__main__':
+test.py(9): 	main()
+ --- modulename: test, funcname: main
+test.py(4): 	print 'This is the main program.'
+This is the main program.
+test.py(5): 	recurse(2)
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(2)
+recurse.py(3): 	if level:
+recurse.py(4): 		recurse(level - 1)
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(1)
+recurse.py(3): 	if level:
+recurse.py(4): 		recurse(level - 1)
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(0)
+recurse.py(3): 	if level:
+recurse.py(5): 	return
+recurse.py(5): 	return
+recurse.py(5): 	return
+test.py(6): 	return
+ --- modulename: trace, funcname: _unsettrace
+trace.py(80):         sys.settrace(None)
+
+    输出的第一部分显示了 trace 完成的建立操作。输出的余下部分显示了每个函数的入口，包括函数所在的模块，然后是执行时源文件的代码行。不出所料，根据 main() 中调用的方式，会 3 次进入 recurse() 函数。
+代码覆盖
