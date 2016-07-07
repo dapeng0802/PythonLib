@@ -65,3 +65,176 @@ trace.py(80):         sys.settrace(None)
 
     输出的第一部分显示了 trace 完成的建立操作。输出的余下部分显示了每个函数的入口，包括函数所在的模块，然后是执行时源文件的代码行。不出所料，根据 main() 中调用的方式，会 3 次进入 recurse() 函数。
 代码覆盖
+    给定 --count 选项时，从命令行运行 trace 会生成代码覆盖报告信息，详细列出运行了哪些代码行，哪些行被跳过。由于复杂的程序通常由多个文件组成，所以会为各个文件分别生成一个单独的覆盖报告。默认情况下，覆盖报告文件会写至模块所在的目录，根据模块来命名，不过扩展名是 .cover 而不是 .py。
+
+$ python -m trace --count test.py
+This is the main program.
+recurse(2)
+recurse(1)
+recurse(0)
+
+    这里会生成两个输出文件。以下是 test.cover。
+
+    1: from recurse import recurse
+       
+    1: def main():
+    1:         print 'This is the main program.'
+    1:         recurse(2)
+    1:         return
+       
+    1: if __name__ == '__main__':
+    1:         main()
+
+    下面是 recurse.cover。
+
+    1: def recurse(level):
+    3:         print 'recurse(%s)' % level
+    3:         if level:
+    2:                 recurse(level - 1)
+    3:         return
+       
+    1: def not_called():
+               print 'This function is never called.'
+
+    尽管代码行 def recurse(level): 计数为 1，但这并不表示这个函数只运行了一次。它表示只执行了一次函数定义。
+    还可以把这个程序运行多次，提供不同的选项，来保存覆盖数据并生成一个合并的报告。
+
+$ python -m trace --coverdir coverdir1 --count --file coverdir1/cove\rage_report.dat test.py
+This is the main program.
+recurse(2)
+recurse(1)
+recurse(0)
+Skipping counts file 'coverdir1/coverage_report.dat': [Errno 2] No such file or directory: 'coverdir1/coverage_report.dat'
+$ python -m trace --coverdir coverdir1 --count --file coverdir1/cove\rage_report.dat test.py
+This is the main program.
+recurse(2)
+recurse(1)
+recurse(0)
+$ python -m trace --coverdir coverdir1 --count --file coverdir1/cove\rage_report.dat test.py
+This is the main program.
+recurse(2)
+recurse(1)
+recurse(0)
+
+    一旦覆盖信息记录到 .cover 文件，要生成报告，可以使用 --report 选项。
+
+$ python -m trace --coverdir coverdir1 --report --summary --missing --file coverdir1/coverage_report.dat test.py
+lines   cov%   module   (path)
+    7    85%   recurse   (recurse.py)
+    7   100%   test   (test.py)
+  508     0%   trace   (/usr/lib/python2.7/trace.py)
+
+    由于这个程序运行了 3 次，覆盖报告显示出，值比第一个报告中大 3 倍。--summary 选项会在输出中增加百分比覆盖信息。recurse 模块只覆盖了 85%。查看 recurse 的覆盖文件可以看到，not_called() 的体实际上从未运行，可由 >>>>>> 前缀指示。
+
+    3: def recurse(level):
+    9:         print 'recurse(%s)' % level
+    9:         if level:
+    6:                 recurse(level - 1)
+    9:         return
+       
+    3: def not_called():
+>>>>>>         print 'This function is never called.'
+
+调用关系
+    除了覆盖信息外，trace 还会收集和报告相互调用的函数之间的关系。
+    要得到所调用的函数的一个简单列表，可以使用 --listfuncs。
+
+$ python -m trace --listfuncs test.pyThis is the main program.
+recurse(2)
+recurse(1)
+recurse(0)
+
+functions called:
+filename: /usr/lib/python2.7/trace.py, modulename: trace, funcname: _unsettrace
+filename: recurse.py, modulename: recurse, funcname: <module>
+filename: recurse.py, modulename: recurse, funcname: recurse
+filename: test.py, modulename: test, funcname: <module>
+filename: test.py, modulename: test, funcname: main
+
+    要得到调用者的更多详细信息，可以使用 --trackcalls。
+
+$ python -m trace --listfuncs --trackcalls test.py
+This is the main program.
+recurse(2)
+recurse(1)
+recurse(0)
+
+calling relationships:
+
+*** /usr/lib/python2.7/trace.py ***
+    trace.Trace.runctx -> trace._unsettrace
+  --> test.py
+    trace.Trace.runctx -> test.<module>
+
+*** recurse.py ***
+    recurse.recurse -> recurse.recurse
+
+*** test.py ***
+  --> recurse.py
+    test.<module> -> recurse.<module>
+    test.<module> -> test.main
+    test.main -> recurse.recurse
+
+编程接口
+    要想更多地控制 trace 接口，可以在程序中调用并使用一个 Trace 对象。Trace 支持运行一个函数或执行一个要跟踪的 Python 命令之前先建立固件和其他依赖对象。
+
+import trace
+from recurse import recurse
+
+tracer = trace.Trace(count=False, trace=True)
+tracer.run('recurse(2)')
+
+    由于这个例子只跟踪到 recurse() 函数，所以输出中不包含 test.py 的任何信息。
+
+$ python test.py
+ --- modulename: test, funcname: <module>
+<string>(1):   --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(2)
+recurse.py(3): 	if level:
+recurse.py(4): 		recurse(level - 1)
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(1)
+recurse.py(3): 	if level:
+recurse.py(4): 		recurse(level - 1)
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(0)
+recurse.py(3): 	if level:
+recurse.py(5): 	return
+recurse.py(5): 	return
+recurse.py(5): 	return
+ --- modulename: trace, funcname: _unsettrace
+trace.py(80):         sys.settrace(None)
+
+    用 runfunc() 方法也可以生成同样的输出。
+
+import trace
+from recurse import recurse
+
+tracer = trace.Trace(count=False, trace=True)
+tracer.runfunc(recurse, 2)
+
+    runfunc() 接受任意的位置和关键字参数，由 tracer 调用时这些参数会传递到函数。
+
+$ python test.py
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(2)
+recurse.py(3): 	if level:
+recurse.py(4): 		recurse(level - 1)
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(1)
+recurse.py(3): 	if level:
+recurse.py(4): 		recurse(level - 1)
+ --- modulename: recurse, funcname: recurse
+recurse.py(2): 	print 'recurse(%s)' % level
+recurse(0)
+recurse.py(3): 	if level:
+recurse.py(5): 	return
+recurse.py(5): 	return
+recurse.py(5): 	return
+
+保存结果数据
