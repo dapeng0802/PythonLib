@@ -238,3 +238,65 @@ recurse.py(5): 	return
 recurse.py(5): 	return
 
 保存结果数据
+    类似于命令行接口，还可以记录统计和覆盖信息。这些数据必须使用 Trace 对象的 CoverageResults 实例显示保存。
+
+import trace
+from recurse import recurse
+
+tracer = trace.Trace(count=True, trace=False)
+tracer.runfunc(recurse, 2)
+
+results = tracer.results()
+results.write_results(coverdir='coverdir2')
+
+    这个例子将覆盖结果保存到目录 coverdir2。
+
+$ python test.py
+recurse(2)
+recurse(1)
+recurse(0)
+$ find coverdir2
+coverdir2
+coverdir2/recurse.cover
+
+    输出文件包括以下内容。
+
+>>>>>> def recurse(level):
+    3:         print 'recurse(%s)' % level
+    3:         if level:
+    2:                 recurse(level - 1)
+    3:         return
+       
+>>>>>> def not_called():
+>>>>>>         print 'This function is never called.'
+
+    要保存统计数据来生成报告，可以对 Trace 使用 infile 和 outfile 参数。
+
+import trace
+from recurse import recurse
+
+tracer = trace.Trace(count=True, trace=False, outfile='trace_report.dat')
+tracer.runfunc(recurse, 2)
+
+report_tracer = trace.Trace(count=False, trace=False, infile='trace_report.dat')
+results = tracer.results()
+results.write_results(summary=True, coverdir='/tmp')
+
+    将一个文件名传至 infile 来读取先前存储的数据，将一个文件名传至 outfile 可以在跟踪之后将新结果写入该文件。如果 infile 和 outfile 相同，其效果就是用累积的数据更新文件。
+
+$ python test.py
+recurse(2)
+recurse(1)
+recurse(0)
+lines   cov%   module   (path)
+    7    57%   recurse   (.../recurse.py)
+
+选项
+    Trace 的构造函数有多个可选的参数，用来控制运行时行为。
+    count 布尔值	打开行号统计。默认为 True。
+    countfuncs 布尔值	打开运行期间调用的函数列表。默认为 False。
+    countcallers 布尔值	打开对调用这和被调用者的跟踪。默认为 False。
+    ignoremods 序列	跟踪覆盖情况时要忽略的模块或包列表。默认为一个空元组。
+    ignoredirs 序列	这个目录列表包含要忽略的模块或包。默认为一个空元组。
+    infile	包含缓存计数值的文件的文件名。默认为 None。
+    outfile	这个文件用来存储缓存计数文件。默认为 None，数据为存储。
