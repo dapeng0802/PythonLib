@@ -1,0 +1,108 @@
+[Python标准库]profile 和 pstats——性能分析
+    作用：Python 程序的性能分析。
+    Python 版本：1.4 及以后版本
+    profile 和 cProfile 模块提供了一些 API，用来收集和分析 Python 源代码消耗处理器资源的有关统计信息。
+运行性能分析工具
+    profile 模块中最基本的起点是 run()。它取一个字符串语句为参数，创建一个报告，指出运行这个语句时执行不同代码所花费的时间。
+
+import profile
+
+def fib(n):
+	# from literateprograms.org
+	# http://bit.ly/h1oQ5m
+	if n == 0:
+		return 0
+	elif n == 1:
+		return 1
+	else:
+		return fib(n-1) + fib(n-2)
+
+def fib_seq(n):
+	seq = [ ]
+	if n > 0:
+		seq.extend(fib_seq(n-1))
+	seq.append(fib(n))
+	return seq
+
+profile.run('print fib_seq(20); print')
+
+    这是一个递归版本的 Fibonacci 序列计算器，对于展示 profile 尤其有用，因为其性能可以显著改善。标准报告格式会显示一个总结，然后是给出执行的各个函数的详细信息。
+
+$ python test.py
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+
+         57356 function calls (66 primitive calls) in 0.372 seconds
+
+   Ordered by: standard name
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       21    0.000    0.000    0.000    0.000 :0(append)
+       20    0.000    0.000    0.000    0.000 :0(extend)
+        1    0.000    0.000    0.000    0.000 :0(setprofile)
+        1    0.000    0.000    0.372    0.372 <string>:1(<module>)
+        1    0.000    0.000    0.372    0.372 profile:0(print fib_seq(20); print)
+        0    0.000             0.000          profile:0(profiler)
+     21/1    0.000    0.000    0.372    0.372 test.py:13(fib_seq)
+ 57291/21    0.372    0.000    0.372    0.018 test.py:3(fib)
+
+    原始版本有 57356 个不同的函数调用，运行时间为 0.372 秒。实际上这里有 66 个基本调用，这个事实说明这 57000 多个调用中大部分都是递归调用。列表中所用时间的详细信息按函数分解，显示了调用数、函数花费的总时间，每个调用花费的时间（tottime/ncalls），一个函数花费的累积时间，以及累积时间与基本调用之比。
+    并不奇怪，这里大部分时间都花费在反复调用 fib() 上。添加一个 memoize 修饰符可以减少递归调用数，会对这个函数的性能有很大影响。
+
+import profile
+
+class memoize:
+	# from Avinash Vora's memoize decorator
+	# http://bit.ly/fGzfR7
+	def __init__(self, function):
+		self.function = function
+		self.memoized = {}
+
+	def __call__(self, *args):
+		try:
+			return self.memoized[args]
+		except KeyError:
+			self.memoized[args] = self.function(*args)
+			return self.memoized[args]
+
+@memoize
+def fib(n):
+	# from literateprograms.org
+	# http://bit.ly/h1oQ5m
+	if n == 0:
+		return 0
+	elif n == 1:
+		return 1
+	else:
+		return fib(n-1) + fib(n-2)
+
+def fib_seq(n):
+	seq = [ ]
+	if n > 0:
+		seq.extend(fib_seq(n-1))
+	seq.append(fib(n))
+	return seq
+
+if __name__ == '__main__':
+	profile.run('print fib_seq(20); print')
+
+    通过记住各层的 Fibonacci 值，大多数调用都可以避免，将运行的调用减至 145 个，这只需要 0.000 秒。fib() 的 ncalls 数显示出它完全没有递归。
+
+$ python test.py
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+
+         145 function calls (87 primitive calls) in 0.000 seconds
+
+   Ordered by: standard name
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       21    0.000    0.000    0.000    0.000 :0(append)
+       20    0.000    0.000    0.000    0.000 :0(extend)
+        1    0.000    0.000    0.000    0.000 :0(setprofile)
+        1    0.000    0.000    0.000    0.000 <string>:1(<module>)
+        1    0.000    0.000    0.000    0.000 profile:0(print fib_seq(20); print)
+        0    0.000             0.000          profile:0(profiler)
+    59/21    0.000    0.000    0.000    0.000 test.py:10(__call__)
+       21    0.000    0.000    0.000    0.000 test.py:17(fib)
+     21/1    0.000    0.000    0.000    0.000 test.py:28(fib_seq)
+
+在上下文中运行
