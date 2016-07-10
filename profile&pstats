@@ -106,3 +106,84 @@ $ python test.py
      21/1    0.000    0.000    0.000    0.000 test.py:28(fib_seq)
 
 在上下文中运行
+    有时，不用为 run() 构造复杂表达式，更容易的做法是构建一个简单的表达式，并使用 runctx() 通过一个上下文为它传递参数。
+
+profile.runctx('print fib_seq(n); print', globals(), {'n':20})
+
+    n 的值通过局部变量上下文传递，而不是直接嵌入到传至 runctx() 的语句中。
+
+$ python test.py
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+
+         145 function calls (87 primitive calls) in 0.000 seconds
+
+   Ordered by: standard name
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       21    0.000    0.000    0.000    0.000 :0(append)
+       20    0.000    0.000    0.000    0.000 :0(extend)
+        1    0.000    0.000    0.000    0.000 :0(setprofile)
+        1    0.000    0.000    0.000    0.000 <string>:1(<module>)
+        1    0.000    0.000    0.000    0.000 profile:0(print fib_seq(n); print)
+        0    0.000             0.000          profile:0(profiler)
+    59/21    0.000    0.000    0.000    0.000 test.py:10(__call__)
+       21    0.000    0.000    0.000    0.000 test.py:17(fib)
+     21/1    0.000    0.000    0.000    0.000 test.py:28(fib_seq)
+
+pstats：保存和处理统计信息
+    profile 函数创建的标准报告不太灵活。不过，可以保存 run() 和 runctx() 的原始性能数据并用 pstats.Stats 类单独处理，来生成定制报告。
+    下面的例子多次迭代运行同一个测试，并合并结果。
+
+import cProfile as profile
+import pstats
+from profile_fibonacci_memoized import fib, fib_seq
+
+# Create 5 set of stats
+filename = []
+for i in range(5):
+	filename = 'profile_stats_%d.stats' % i
+	profile.run('print %d, fib_seq(20)' % i, filename)
+
+# Read all 5 stats files into a single object
+stats = pstats.Stats('profile_stats_0.stats')
+for i in range(1, 5):
+	stats.add('profile_stats_%d.stats' % i)
+
+# Clean up filename for the report
+stats.strip_dirs()
+
+# Sort the statistics by the cumulative time spent in the function
+stats.sort_stats('cumulative')
+
+stats.print_stats()
+
+    输出报告按函数所花费累积时间的降序排序，另外打印的文件名中去掉了目录名，以节省页面上的水平空间。
+
+$ python test.py
+0 [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+1 [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+2 [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+3 [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+4 [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765]
+Sun Jul 10 20:25:40 2016    profile_stats_0.stats
+Sun Jul 10 20:25:40 2016    profile_stats_1.stats
+Sun Jul 10 20:25:40 2016    profile_stats_2.stats
+Sun Jul 10 20:25:40 2016    profile_stats_3.stats
+Sun Jul 10 20:25:40 2016    profile_stats_4.stats
+
+         484 function calls (346 primitive calls) in 0.002 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        5    0.000    0.000    0.002    0.000 <string>:1(<module>)
+    105/5    0.001    0.000    0.002    0.000 profile_fibonacci_memoized.py:28(fib_seq)
+  143/105    0.000    0.000    0.000    0.000 profile_fibonacci_memoized.py:10(__call__)
+       21    0.000    0.000    0.000    0.000 profile_fibonacci_memoized.py:17(fib)
+      100    0.000    0.000    0.000    0.000 {method 'extend' of 'list' objects}
+      105    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        5    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+限制报告内容
+    可以由函数限制输出。下面这个版本只显示 fib() 和 fib_seq() 性能的有关信息，这里使用一个正则表达式来匹配所需的 filename:lineno(function) 值。
+
