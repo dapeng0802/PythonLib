@@ -187,3 +187,80 @@ Sun Jul 10 20:25:40 2016    profile_stats_4.stats
 限制报告内容
     可以由函数限制输出。下面这个版本只显示 fib() 和 fib_seq() 性能的有关信息，这里使用一个正则表达式来匹配所需的 filename:lineno(function) 值。
 
+import profile
+import pstats
+from profile_fibonacci_memoized import fib, fib_seq
+
+# Read all 5 stats files into a single object
+stats = pstats.Stats('profile_stats_0.stats')
+for i in range(1, 5):
+	stats.add('profile_stats_%d.stats' % i)
+stats.strip_dirs()
+stats.sort_stats('cumulative')
+
+# limit output to lines with "(fib" in them
+stats.print_stats('\(fib')
+
+    正则表达式包含一个字面量（左括号 [(]），来匹配位置值的函数名部分。
+
+$ python test.py
+Sun Jul 10 20:25:40 2016    profile_stats_0.stats
+Sun Jul 10 20:25:40 2016    profile_stats_1.stats
+Sun Jul 10 20:25:40 2016    profile_stats_2.stats
+Sun Jul 10 20:25:40 2016    profile_stats_3.stats
+Sun Jul 10 20:25:40 2016    profile_stats_4.stats
+
+         484 function calls (346 primitive calls) in 0.002 seconds
+
+   Ordered by: cumulative time
+   List reduced from 7 to 2 due to restriction <'\\(fib'>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    105/5    0.001    0.000    0.002    0.000 profile_fibonacci_memoized.py:28(fib_seq)
+       21    0.000    0.000    0.000    0.000 profile_fibonacci_memoized.py:17(fib)
+
+调用图
+    Stats 还包括一些方法来打印函数的调用者和被调用者。
+
+import cProfile as profile
+import pstats
+from profile_fibonacci_memoized import fib, fib_seq
+
+# Read all 5 stats files into a single object
+stats = pstats.Stats('profile_stats_0.stats')
+for i in range(1, 5):
+	stats.add('profile_stats_%d.stats' % i)
+stats.strip_dirs()
+stats.sort_stats('cumulative')
+
+print 'INCOMING CALLERS:'
+stats.print_callers('\(fib')
+
+print 'OUTGOING CALLEES:'
+stats.print_callees('\(fib')
+
+    print_callers() 和 print_callees() 的参数与 print_stats() 的限制参数类似。输出会显示调用者、被调用者、调用数以及累积时间。
+
+$ python test.py
+INCOMING CALLERS:
+   Ordered by: cumulative time
+   List reduced from 7 to 2 due to restriction <'\\(fib'>
+
+Function                                   was called by...
+                                               ncalls  tottime  cumtime
+profile_fibonacci_memoized.py:28(fib_seq)  <-       5    0.000    0.002  <string>:1(<module>)
+                                                100/5    0.001    0.002  profile_fibonacci_memoized.py:28(fib_seq)
+profile_fibonacci_memoized.py:17(fib)      <-      21    0.000    0.000  profile_fibonacci_memoized.py:10(__call__)
+
+
+OUTGOING CALLEES:
+   Ordered by: cumulative time
+   List reduced from 7 to 2 due to restriction <'\\(fib'>
+
+Function                                   called...
+                                               ncalls  tottime  cumtime
+profile_fibonacci_memoized.py:28(fib_seq)  ->     105    0.000    0.000  profile_fibonacci_memoized.py:10(__call__)
+                                                100/5    0.001    0.002  profile_fibonacci_memoized.py:28(fib_seq)
+                                                  105    0.000    0.000  {method 'append' of 'list' objects}
+                                                  100    0.000    0.000  {method 'extend' of 'list' objects}
+profile_fibonacci_memoized.py:17(fib)      ->      38    0.000    0.000  profile_fibonacci_memoized.py:10(__call__)
