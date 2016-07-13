@@ -1,0 +1,66 @@
+[Python标准库]timeit——测量小段 Python 代码的执行时间
+    作用：测量小段 Python 代码的执行时间。
+    Python 版本：2.3 及以后版本
+    timeit 模块提供了一个简单的接口来确定小段 Python 代码的执行时间。它使用一个平台特定的时间函数，尽可能提供最准确的时间计算，并减少反复执行代码时启动或关闭对时间计算的影响。
+模块内容
+    timeit 定义了一个公共类 Timer。Timer 的构造函数有两个参数，一个是要测量时间的语句，另一个是“建立”语句（例如，用来初始化变量）。Python 语句应当是字符串，可以包含嵌入的换行符。
+    timeit() 方法会运行一次建立语句，然后反复执行主语句，并返回过去了多少时间。timeit() 的参数控制着要运行多少次语句：默认为 1000000。
+基本示例
+    为了展示如何使用 Timer 的各个参数，下面给出一个简单的例子，执行各个语句时会打印一个标识值。
+
+import timeit
+
+# using setitem
+t = timeit.Timer("print 'main statement'", "print 'setup'")
+print 'TIMEIT:'
+print t.timeit(2)
+
+print 'REPEAT:'
+print t.repeat(3, 2)
+
+    运行时，输出如下：
+
+$ python test.py
+TIMEIT:
+setup
+main statement
+main statement
+1.8835067749e-05
+REPEAT:
+setup
+main statement
+main statement
+setup
+main statement
+main statement
+setup
+main statement
+main statement
+[1.8835067749023438e-05, 1.71661376953125e-05, 1.811981201171875e-05]
+
+    timeit() 运行一次建立语句，然后调用 count 次主语句。它返回一个浮点值，表示运行主语句花费的累积时间。
+    使用 repeat() 时，它会调用多次 timeit()（在这里是 3 次），所有响应都返回到一个列表中。
+值存储在字典中
+    这个例子更为复杂，它比较了使用不同方法用大量值填充一个字典所需的时间。首先，需要一些常量来配置 Timer。setup_statement 变量初始化一个元组列表，这些元组中包含主语句用来构建字符串和整数，用字符串作为键，并存储整数作为关联值。
+
+import timeit
+import sys
+
+# A few constants
+range_size = 1000
+count = 1000
+setup_statement = "l = [ (str(x), x) for x in range(1000) ]; d = {}"
+
+    这里定义了一个工具函数 show_results()，它采用一种有用的格式打印结果。timeit() 方法返回反复执行这个语句所花费的时间。show_results() 的输出将这个时间转换为每次迭代花费的时间，然后进一步将这个值缩减为在字典中存储一项所花费的平均时间。
+
+def show_results(result):
+	"Print results in terms of microseconds per pass and per item."
+	global count, range_size
+	per_pass = 1000000 * (result / count)
+	print '%.2f usec/pass' % per_pass,
+	per_item = per_pass / range_size
+	print '%.2f usec/item' % per_item
+
+print "%d items" % range_size
+print "%d iterations" % count
+print
