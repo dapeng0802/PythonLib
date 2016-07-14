@@ -64,3 +64,79 @@ def show_results(result):
 print "%d items" % range_size
 print "%d iterations" % count
 print
+
+    为了建立一个基准，测试的第一个配置使用了 __setitem__()。所有其他版本都不会覆盖字典中已经有的值，所以这个简单版本应该是最快的。
+    Timer 的第一个参数是一个多行的字符串，这里保留了空白符以确保运行时能正确解析。第二个参数是一个常量，用来初始化值列表和字典。
+
+# Using __setitem__ without checking for existing values first
+print '__setitem__:',
+t = timeit.Timer("""
+	for s, i in l:
+		d[s] = i
+	""",
+	setup_statement)
+show_results(t.timeit(number=count))
+
+    下一个版本使用 setdefault() 来确保字典中已有的值不会被覆盖。
+
+# Using setdefault
+print 'setdefault :',
+t = timeit.Timer("""
+	for s, i in l:
+		d.setdefault(s, i)
+	""",
+	setup_statement)
+show_results(t.timeit(number=count))
+
+    要避免覆盖现有的值，另一种方法是使用 has_key() 显式地检查字典的内容。
+
+# Using has_key
+print 'has_key    :',
+t = timeit.Timer("""
+	for s, i in l:
+		if not d.has_key(s):
+			d[s] = i
+	""",
+	setup_statement)
+show_results(t.timeit(number=count))
+
+    如果查找现有值时产生一个 KeyError 异常，这个方法才会增加值。
+
+# Using exceptions
+print 'KeyError   :',
+t = timeit.Timer("""
+	for s, i in l:
+		try:
+			existing = d[s]
+		except KeyError:
+			d[s] = i
+	""",
+	setup_statement)
+show_results(t.timeit(number=count))
+
+    最后一个方法是一种相当新的格式，这里使用“in”来确定字典是否有某个特定的键。
+
+# Using "in"
+print '"not in"   :',
+t = timeit.Timer("""
+	for s, i in l:
+		if s not in d:
+			d[s] = i
+	""",
+	setup_statement)
+show_results(t.timeit(number=count))
+
+    运行时，脚本会生成以下输出。
+
+$ python test.py
+1000 items
+1000 iterations
+
+__setitem__: 89.12 usec/pass 0.09 usec/item
+setdefault : 188.17 usec/pass 0.19 usec/item
+has_key    : 130.05 usec/pass 0.13 usec/item
+KeyError   : 101.82 usec/pass 0.10 usec/item
+"not in"   : 75.94 usec/pass 0.08 usec/item
+
+    这是在运行 Python 2.7 的 Ubuntu 上得到的执行时间，取决于系统上运行的其他程序，这些结果可能会有所不同。可以尝试不同的 range_size 和 count 变量，因为不同的组合可能会生成不同的结果。
+从命令行执行
