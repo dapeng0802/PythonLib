@@ -140,3 +140,35 @@ KeyError   : 101.82 usec/pass 0.10 usec/item
 
     这是在运行 Python 2.7 的 Ubuntu 上得到的执行时间，取决于系统上运行的其他程序，这些结果可能会有所不同。可以尝试不同的 range_size 和 count 变量，因为不同的组合可能会生成不同的结果。
 从命令行执行
+    除了编程接口外，timeit 还提供了一个命令行接口来测试模块，而不需要自动化测试（instrumentation）。
+    要运行模块，可以对 Python 解释器使用 -m 选项来查找模块，并把它作为主程序。
+
+$ python -m timeit
+
+    例如，使用这个命令来获得帮助。
+
+$ python -m timeit -h
+Tool for measuring execution time of small code snippets.
+
+This module avoids a number of common traps for measuring execution
+times.  See also Tim Peters' introduction to the Algorithms chapter in
+the Python Cookbook, published by O'Reilly.
+...
+
+    命令行上的 statement 参数与 Timer 的参数稍有不同。并不是传入一个长字符串，而是要将每行指令作为一个单独的命令行参数。如果需要缩进行（如在一个循环中），可以用引号包围代码行从而在字符串中嵌入空格。
+
+$ python -m timeit -s "d={}" "for i in range(1000):" "    d[str(i)] = i"
+1000 loops, best of 3: 317 usec per loop
+
+    还可以用更复杂的代码定义一个函数，然后从命令行调用这个函数。
+
+def test_setitem(range_size=1000):
+	l = [ (str(x), x) for x in range(range_size) ]
+	d = {}
+	for s, i in l:
+		d[s] = i
+
+    要运行测试，可以传入导入模块并运行测试函数的代码。
+
+$ python -m timeit "import timeit_setitem; timeit_setitem.test_setitem()"
+1000 loops, best of 3: 443 usec per loop
