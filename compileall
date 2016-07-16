@@ -1,0 +1,94 @@
+[Python标准库]compileall——字节编译源文件
+    作用：将源文件转换为字节编译版本。
+    Python 版本：1.4 及以后版本
+    compileall 模块查找 Python 源文件，并把它们编译为字节码表示，将结果保存在 .pyc 或 .pyo 文件中。
+编译一个目录
+    compile_dir() 用于递归地扫描一个目录，并对其中的文件完成字节编译。
+
+import compileall
+
+compileall.compile_dir('examples')
+
+    默认情况下，所有子目录都会得到扫描，直至深度达到 10。
+
+$ python test.py
+Listing examples ...
+Compiling examples/a.py ...
+Listing examples/subdir ...
+Compiling examples/subdir/b.py ...
+
+    要筛选目录，可以使用 rx 参数提供一个正则表达式来匹配要排除的目录名。
+
+import compileall
+import re
+
+compileall.compile_dir('examples', rx=re.compile(r'/subdir'))
+
+    这个版本会排除 subdir 子目录中的文件。
+
+$ python test.py
+Listing examples ...
+Compiling examples/a.py ...
+Listing examples/subdir ...
+
+    maxlevels 参数控制递归深度。例如，要完全避免递归，可以传入 0。
+
+import compileall
+import re
+
+compileall.compile_dir('examples',
+maxlevels=0,
+rx=re.compile(r'/\.svn'))
+
+    这样一来，只会编译传递到 compile_dir() 的目录中的文件。
+
+$ python test.py
+Listing examples ...
+Compiling examples/a.py ...
+
+编译 sys.path
+    只需一个 compile_path() 调用，就可以编译 sys.path 中找到的所有 Python 源文件。
+
+import compileall
+import sys
+
+sys.path[:] = ['examples', 'notthere']
+print 'sys.path =', sys.path
+compileall.compile_path()
+
+    这个例子替换了 sys.path 的默认内容，以避免运行脚本时的权限错误，不过仍能很好地展示默认行为。注意 maxlevels 值默认为 0。
+
+$ python test.py
+sys.path = ['examples', 'notthere']
+Listing examples ...
+Compiling examples/a.py ...
+Listing notthere ...
+Can't list notthere
+
+从命令行执行
+    也可以从命令行调用 compileall，从而能通过一个 Makefile 与一个构建系统集成。下面给出一个例子。
+
+$ python -m compileall -h
+option -h not recognized
+usage: python compileall.py [-l] [-f] [-q] [-d destdir] [-x regexp] [-i list] [directory|file ...]
+
+arguments: zero or more file and directory names to compile; if no arguments given, 
+           defaults to the equivalent of -l sys.path
+
+options:
+-l: don't recurse into subdirectories
+-f: force rebuild even if timestamps are up-to-date
+-q: output only error messages
+-d destdir: directory to prepend to file paths for use in compile-time tracebacks and in
+            runtime tracebacks in cases where the source file is unavailable
+-x regexp: skip files matching the regular expression regexp; the regexp is searched for
+           in the full path of each file considered for compilation
+-i file: add all the files and directories listed in file to the list considered for
+         compilation; if "-", names are read from stdin
+
+    要重新创建之前的例子，跳过 subdir 目录，可以运行以下命令。
+
+$ python -m compileall -x '/subdir' examples
+Listing examples ...
+Compiling examples/a.py ...
+Listing examples/subdir ...
