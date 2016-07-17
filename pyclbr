@@ -1,0 +1,126 @@
+[Python标准库]pyclbr——类浏览器
+    作用：实现一个适用于源代码编辑器的 API，可以用来建立一个类浏览器。
+    Python 版本：1.4 及以后版本
+    pyclbr 可以扫描 Python 源代码来查找类和独立的函数。可以使用 tokenize 收集类、方法和函数名及行号的有关信息，而无须导入代码。
+    本节中的例子都使用以下源文件作为输入。
+
+"""Example source for pyclbr.
+"""
+
+class Base(object):
+	"""This is the base class."""
+
+	def method1(self):
+		return
+
+class Sub1(Base):
+	"""This is the first subclass."""
+
+class Sub2(Base):
+	"""This is the second subclass."""
+
+class Mixin:
+	"""A mixin class."""
+
+	def method2(self):
+		return
+
+class MixinUser(Sub2, Mixin):
+	"""Overrides method1 and method2"""
+
+	def method1(self):
+		return
+
+	def method2(self):
+		return
+
+	def method3(self):
+		return
+def my_function():
+	"""Stand-alone function."""
+	return
+
+扫描类
+    pyclbr 公布了两个公共函数。第一个是 readmodule()，它以模块名作为参数，并返回一个字典，将类名映射到 Class 对象，其中包含有关类源代码的元数据。
+
+import pyclbr
+import os
+from operator import itemgetter
+
+def show_class(name, class_data):
+	print 'Class:', name
+	filename = os.path.basename(class_data.file)
+	print '\tFile: {0} [{1}]'.format(filename, class_data.lineno)
+	show_super_classes(name, class_data)
+	show_methods(name, class_data)
+	print
+	return
+
+def show_methods(class_name, class_data):
+	for name, lineno in sorted(class_data.methods.items(),
+		key=itemgetter(1)):
+		print '\tMethod: {0} [{1}]'.format(name, lineno)
+	return
+
+def show_super_classes(name, class_data):
+	super_class_names = []
+	for super_class in class_data.super:
+		if super_class == 'object':
+			continue
+		if isinstance(super_class, basestring):
+			super_class_names.append(super_class)
+		else:
+			super_class_names.append(super_class.name)
+	if super_class_names:
+		print '\tSuper classes:', super_class_names
+	return
+example_data = pyclbr.readmodule('pyclbr_example')
+
+for name, class_data in sorted(example_data.items(),
+	key=lambda x:x[1].lineno):
+	show_class(name, class_data)
+
+    类的源数据包括定义这个类的文件及所在的行号，还包括超类的类名。类的方法保存为方法名与行号之间的一个映射。输出显示了这些类的方法（根据它们在源文件中的行号排序）。
+
+$ python pyclbr_readmodule.py
+Class: Base
+	File: pyclbr_example.py [4]
+	Method: method1 [7]
+
+Class: Sub1
+	File: pyclbr_example.py [10]
+	Super classes: ['Base']
+
+Class: Sub2
+	File: pyclbr_example.py [13]
+	Super classes: ['Base']
+
+Class: Mixin
+	File: pyclbr_example.py [16]
+	Method: method2 [19]
+
+Class: MixinUser
+	File: pyclbr_example.py [22]
+	Super classes: ['Sub2', 'Mixin']
+	Method: method1 [25]
+	Method: method2 [28]
+	Method: method3 [31]
+
+扫描函数
+    pyclbr 中的另一个公共函数是 readmodule_ex()。它能完成 readmodule() 所做的全部工作，并为结果集添加了一些函数。
+
+import pyclbr
+import os
+from operator import itemgetter
+
+example_data = pyclbr.readmodule_ex('pyclbr_example')
+
+for name, data in sorted(example_data.items(),
+	key=lambda x:x[1].lineno):
+	if isinstance(data, pyclbr.Function):
+		print 'Function: {0} [{1}]'.format(name, data.lineno)
+
+    每个 Function 对象的属性与 Class 对象很类似。
+
+$ python pyclbr_readmodule_ex.py 
+Function: my_function [33]
