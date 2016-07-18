@@ -1,0 +1,79 @@
+[Python标准库]site——全站点配置
+    site 模块处理站点特定的配置，特别是导入路径。
+导入路径
+    每次解释器启动时会自动导入 site。导入时，会用站点特定的名称扩展 sys.path，这个名称通过组合前缀值（sys.prefix 和 sys.exec_prefix）与一些后缀值来构造。使用的前缀值将保存在模块级变量 PREFIXES 中，以便以后引用。在 Windows 下，后缀值是一个空串和 lib/site-packages。对于类 UNIX 平台，后缀值是 lib/python$version/site-packages（其中 $version 要替换为解释器的主版本号和次版本号，如 2.7）和 lib/site-python。
+
+import sys
+import os
+import platform
+import site
+
+if 'Windows' in platform.platform():
+	SUFFIXES = [
+		'',
+		'lib/site-packages',
+		]
+else:
+	SUFFIXES = [
+		'lib/python%s/site-packages' % sys.version[:3],
+		'lib/site-python',
+		]
+
+print 'Path prefixes:'
+for p in site.PREFIXES:
+	print '  ', p
+
+for prefix in sorted(set(site.PREFIXES)):
+	print 
+	print prefix
+	for suffix in SUFFIXES:
+		print
+		print ' ', suffix
+		path = os.path.join(prefix, suffix).rstrip(os.sep)
+		print '   exists :', os.path.exists(path)
+		print '   in path:', path in sys.path
+
+    对组合得到的各个路径进行测试，将确实存在的路径添加到 sys.path。
+用户目录
+    除了全局的 site-packages 路径，site 还负责向导入路径添加用户特定的位置。用户特定的路径都基于 USER_BASE 目录，这通常位于当前用户拥有（而且可写）的部分文件系统。USER_BASE 目录中有一个 site-packages 目录，其中包含的路径可以用 USER_SITE 访问。
+
+import site
+
+print 'Base:', site.USER_BASE
+print 'Site:', site.USER_SITE
+
+    USER_SITE 路径名使用同样的平台特定后缀（如前所述）来创建。
+
+$ python test.py 
+Base: /home/rendp/.local
+Site: /home/rendp/.local/lib/python2.7/site-packages
+
+    用户基目录可以通过 PYTHONUSERBASE 环境变量设置，并有平台特定的默认值（对于 Windows 是 ~/Python$version/site-packages，对于非 Windows 平台为 ~/.local）。
+
+$ PYTHONUSERBASE=/tmp/$USER python test.py
+Base: /tmp/rendp
+Site: /tmp/rendp/lib/python2.7/site-packages
+
+    一些可能出现安全问题的情况下会禁用用户目录（例如，如果运行进程的用户或组 id 不同于 原先启动这个进程的实际用户）。应用可以通过查看 ENABLE_USER_SITE 来检查这个设置。
+
+import site
+
+status = {
+	None:'Disabled for security',
+	True:'Enabled',
+	False:'Disabled by command-line option',
+	}
+
+print 'Flag   :', site.ENABLE_USER_SITE
+print 'Meaning:', status[site.ENABLE_USER_SITE]
+
+    还可以在命令行用 -s 显式禁用用户目录。
+
+$ python test.py
+Flag   : True
+Meaning: Enabled
+
+$ python -s test.py
+Flag   : False
+Meaning: Disabled by command-line option
+
