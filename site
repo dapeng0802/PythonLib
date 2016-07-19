@@ -77,3 +77,89 @@ $ python -s test.py
 Flag   : False
 Meaning: Disabled by command-line option
 
+路径配置文件
+    随着路径添加到导入路径，还会在这些路径中扫描路径配置文件（path configuration file）。路径配置文件是一个纯文本文件，扩展名为 .pth。文件中的每一行可以有以下 4 种形式：
+    (1) 要添加到导入路径的另一个位置的完全或相对路径。
+    (2) 一个要执行的 Python 语句。所有这样的行都必须以一个 import 语句开头。
+    (3) 空行，这些行会被忽略。
+    (4) 以 # 开头的行，要处理为注释并被忽略。
+    路径配置文件可以用来扩展导入路径，来查看不能自动添加的路径。例如，Distribute 包使用 python setup.py develop 以开发模式安装一个包时会向 easy-install.pth 添加一个路径。
+    扩展 sys.path 的函数是公共的，可以在示例程序中用来显示路径配置文件如何工作。给定一个名为 with_modules 的目录，其中包含文件 mymodule.py，以下给出使用这个 print 语句的结果。它会显示模块如何导入。
+
+import os
+print 'Loaded', __name__, 'from', __file__[len(os.getcwd())+1:]
+
+    下面这个脚本显示了 addsitedir() 如何扩展导入路径，使解释器能够找到所需的模块。
+
+import site
+import os
+import sys
+
+script_directory = os.path.dirname(__file__)
+module_directory = os.path.join(script_directory, sys.argv[1])
+
+try:
+	import mymodule
+except ImportError, err:
+	print 'Could not import mymodule:', err
+
+print
+before_len = len(sys.path)
+site.addsitedir(module_directory)
+print 'New paths:'
+for p in sys.path[before_len:]:
+	print p.replace(os.getcwd(), '.') # shorten dirname
+
+print
+import mymodule
+
+    将包含模块的目录添加到 sys.path 之后，脚本可以毫无问题地导入 mymodule。
+
+$ python test.py with_modules
+Could not import mymodule: No module named mymodule
+
+New paths:
+./with_modules
+
+Loaded mymodule from with_modules/mymodule.py
+
+    addsitedir() 完成的路径调整不只是向 sys.path 追加参数。如果为 addsitedir() 提供的目录包括与模式 *.pth 匹配的文件，它们会作为路径配置文件加载。例如，如果 with_pth/pymotw.pth 包含以下内容：
+
+# Add a single subdirectory to the path.
+./subdir
+
+    而且 mymodule.py 已经复制为 with_pth/subdir/mymodule.py，则可以通过添加 with_pth 作为一个站点目录将这个模块导入。即使模块不在那个目录中也是可以的，因为 with_pth 和 with_pth/subdir 都会添加到导入路径。
+
+$ python test.py with_pth
+Could not import mymodule: No module named mymodule
+
+New paths:
+./with_pth
+./with_pth/subdir
+
+Loaded mymodule from with_pth/subdir/mymodule.py
+
+    如果一个站点目录包含多个 .pth 文件，会按字母顺序进行处理。
+
+$ ls -F multiple_pth
+a.pth  b.pth  from_a/  from_b/
+
+$ cat multiple_pth/a.pth
+./from_a
+
+$ cat multiple_pth/b.pth
+./from_b
+
+    在这里，模块会在 multiple_pth/from_a 中找到，因为 a.pth 比 b.pth 先读取。
+
+$ python test.py multiple_pth
+Could not import mymodule: No module named mymodule
+
+New paths:
+./multiple_pth
+./multiple_pth/from_a
+./multiple_pth/from_b
+
+Loaded mymodule from multiple_pth/from_a/mymodule.py
+
+定制站点配置
