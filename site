@@ -163,3 +163,39 @@ New paths:
 Loaded mymodule from multiple_pth/from_a/mymodule.py
 
 定制站点配置
+    site 模块还负责加载站点范围的定制设置，这个设置在 sitecustomize 模块中由本地站点所有者定义。sitecustomize 可以用来扩展导入路径，并启用覆盖、性能分析或其他开发工具。
+    例如，下面这个 sitecustomize.py 脚本用一个基于当前平台的目录扩展导入路径。/opt/python 中的平台特定路径会添加到导入路径，从而可以导入其中安装的所有包。如果网络中不同主机中间要通过一个共享文件系统来共享包含编译扩展模块的包，类似这样的系统会很有用。只需要在各个主机上安装 sitecustomize.py 脚本，其他包都可以从文件服务器访问。
+
+print 'Loading sitecustomize.py'
+
+import site
+import platform
+import os
+import sys
+
+path = os.path.join('/opt',
+	'python',
+	sys.version[:3],
+	platform.platform(),
+	)
+print 'Adding new path', path
+
+site.addsitedir(path)
+
+    可以用一个简单的脚本来显示 Python 开始运行你自己的代码之前会先导入 sitecustomize.py。
+
+import sys
+
+print 'Running main program'
+
+print 'End of path:', sys.path[-1]
+
+    由于 sitecustomize 要用来建立全系统范围的配置，所以应当安装在默认路径上的某个位置（通常在 site-packages 目录中）。下面这个例子显式地设置了 PYTHONPATH，以确保模块可以导入。
+
+$ PYTHONPATH=with_sitecostomize python test.py
+Loading sitecustomize.py
+Adding new path /opt/python/2.7/Linux-3.16.0-76-generic-i686-with-Ubuntu-14.04-trusty
+Running main program
+End of path: /opt/python/2.7/Linux-3.16.0-76-generic-i686-with-Ubuntu-14.04-trusty
+
+定制用户配置
