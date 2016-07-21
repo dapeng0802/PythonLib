@@ -192,10 +192,53 @@ print 'End of path:', sys.path[-1]
 
     由于 sitecustomize 要用来建立全系统范围的配置，所以应当安装在默认路径上的某个位置（通常在 site-packages 目录中）。下面这个例子显式地设置了 PYTHONPATH，以确保模块可以导入。
 
-$ PYTHONPATH=with_sitecostomize python test.py
+$ PYTHONPATH=with_sitecustomize python test.py
 Loading sitecustomize.py
 Adding new path /opt/python/2.7/Linux-3.16.0-76-generic-i686-with-Ubuntu-14.04-trusty
 Running main program
 End of path: /opt/python/2.7/Linux-3.16.0-76-generic-i686-with-Ubuntu-14.04-trusty
 
 定制用户配置
+    类似于 sitecustomize，可以用 usercustomize 模块建立每次解释器启动时的用户特定设置。usercustomize 在 sitecustomize 之后加载，所以可以覆盖全站点范围的定制设置。
+    有些环境下，多个运行不同操作系统或不同版本的服务器会共享用户的主目录，标准用户目录机制可能不适用于用户特定的包包装。在这些情况下，可以使用一个平台特定的目录树。
+
+print 'Loading usercustomize.py'
+
+import site
+import platform
+import os
+import sys
+
+path = os.path.expanduser(os.path.join('~',
+	'python',
+	sys.version[:3],
+	platform.platform(),
+	))
+print 'Adding new path', path
+
+site.addsitedir(path)
+
+    类似于介绍 sitecustomize 时所用的脚本，可以用另一个简单的脚本来显示 Python 开始运行其他代码之前会先导入 usercostomize.py。
+
+import sys
+
+print 'Running main program'
+
+print 'End of path:', sys.path[-1]
+
+    由于 usercustomize 要用来建立一个用户的用户特定配置，所以应当安装在用户默认路径上的某个位置，而不是放在全站点路径上。默认的 USER_BASE 目录就是一个很好的位置。这个例子显示地设置了 PYTHONPATH，以确保模块可以导入。
+
+$ PYTHONPATH=with_usercustomize python test.py
+Loading usercustomize.py
+Adding new path /home/rendp/python/2.7/Linux-3.16.0-76-generic-i686-with-Ubuntu-14.04-trusty
+Running main program
+End of path: /home/rendp/python/2.7/Linux-3.16.0-76-generic-i686-with-Ubuntu-14.04-trusty
+
+    禁用用户站点目录特性时，不会导入 usercustomize，不论它位于用户站点目录还是在其他位置。
+
+$ PYTHONPATH=with_usercustomize python -s test.py
+Running main program
+End of path: /usr/lib/python2.7/dist-packages/ubuntu-sso-client
+
+禁用 site 模块
+    之前的 Python 版本没有添加自动导入特性，要维护与这些版本的向后兼容性，解释器还接受一个 -S 选项。
