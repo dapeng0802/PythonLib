@@ -1,0 +1,43 @@
+[Python标准库]sys——系统特定的配置
+    作用：提供系统特定的配置和操作。
+    Python 版本：1.4 及以后版本
+    sys 模块包括一组服务，可以探查或修改解释器的运行时配置以及资源，从而与当前程序之外的操作环境交互。
+解释器设置
+    sys 包含有一些属性和函数，可以访问解释器的编译时或运行时配置设置。
+    1. 构建时版本信息
+    构建 C 解释器所用的版本可以有多种形式。sys.version 是一个人类可读的串，通常包含完整的版本号，以及有关构建日期、编译器和平台的信息。sys.hexversion 可以更容易地检查解释器版本，因为它是一个简单的整数。使用 hex() 格式化时，可以清楚地看出，sys.hexversion 的某些部分来自更可读的 sys.version_info 中同样可见的版本信息（这是一个包含 5 部分的元组，只表示版本号）。
+    对于加入构建中的源文件，有关的更多特定信息可以从 sys.subversion 元组找到，其中包括签出和构建的具体分支及版本修订。当前解释器使用的 C API 版本保存在 sys.api_version 中。
+
+import sys
+
+print 'Version info:'
+print
+print 'sys.version      =', repr(sys.version)
+print 'sys.version_info =', sys.version_info
+print 'sys.hexversion   =', hex(sys.hexversion)
+print 'sys.subversion   =', sys.subversion
+print 'sys.api_version  =', sys.api_version
+
+    所有这些值都依赖于运行示例程序的具体解释器。
+
+$ python test.py
+Version info:
+
+sys.version      = '2.7.6 (default, Jun 22 2015, 18:00:18) \n[GCC 4.8.2]'
+sys.version_info = sys.version_info(major=2, minor=7, micro=6, releaselevel='final', serial=0)
+sys.hexversion   = 0x20706f0
+sys.subversion   = ('CPython', '', '')
+sys.api_version  = 1013
+
+    用来构建解释器的操作系统平台保存为 sys.platform。
+
+import sys
+
+print 'This interpreter was built for:', sys.platform
+
+    对于大多数 UNIX 系统，这个值由命令 uname -s 的输出与 uname -r 中版本的第一部分组合而成。对于其他操作系统，则有一个硬编码的值表。
+
+$ python test.py
+This interpreter was built for: linux2
+
+    2. 命令行选项
