@@ -41,3 +41,85 @@ $ python test.py
 This interpreter was built for: linux2
 
     2. 命令行选项
+    CPython 解释器接受一些命令行选项来控制解释器的行为；这些选项如表 1.71 所列。
+    -----------------------------------------------------------------
+        选  项    |              含  义
+    -----------------------------------------------------------------
+          -B      |    导入时不写入 .py[co] 文件
+    -----------------------------------------------------------------
+          -d      |    调试解析器的输出
+    -----------------------------------------------------------------
+          -E      |    忽略 PYTHON* 环境变量（如 PYTHONPATH）
+    -----------------------------------------------------------------
+          -i      |    运行脚本后交互式检查
+    -----------------------------------------------------------------
+          -O      |    对生成的字节码稍做优化
+    -----------------------------------------------------------------
+         -OO      |    除了 -O 优化外，还会删除 docstring
+    -----------------------------------------------------------------
+          -s      |    不向 sys.path 添加用户站点目录
+    -----------------------------------------------------------------
+          -S      |    不在初始化时运行“import site”
+    -----------------------------------------------------------------
+          -t      |    发出警告，指出 tab 使用不一致
+    -----------------------------------------------------------------
+         -tt      |    发出错误，指出 tab 使用不一致
+    -----------------------------------------------------------------
+          -v      |    详细显示
+    -----------------------------------------------------------------
+          -3      |    关于 Python 3.x 不兼容性的警告
+    -----------------------------------------------------------------
+    其中一些选项可以用于程序，可以通过 sys.flags 来检查。
+
+import sys
+
+if sys.flags.debug:
+	print 'Debuging'
+if sys.flags.py3k_warning:
+	print 'Warning about Python 3.x incompatibilities'
+if sys.flags.division_warning:
+	print 'Warning about division change'
+if sys.flags.division_new:
+	print 'New division behavior enabled'
+if sys.flags.inspect:
+	print 'Will enter interactive mode after running'
+if sys.flags.optimize:
+	print 'Optimizing byte-code'
+if sys.flags.dont_write_bytecode:
+	print 'Not writing byte-code files'
+if sys.flags.no_site:
+	print 'Not importing "site"'
+if sys.flags.ignore_environment:
+	print 'Ignore environment'
+if sys.flags.tabcheck:
+	print 'Checking for mixed tabs and spaces'
+if sys.flags.verbose:
+	print 'Verbose mode'
+if sys.flags.unicode:
+	print 'Unicode'
+
+    可以尝试使用 sys_flags.py 来了解命令行选项如何映射到标志设置。
+
+$ python -3 -S -E sys_flags.py 
+Warning about Python 3.x incompatibilities
+Warning about division change
+Not importing "site"
+Ignore environment
+Checking for mixed tabs and spaces
+
+    3. Unicode 默认编码
+    要得到解释器使用的默认 Unicode 编码名，可以使用 getdefaulttencoding()。这个值在启动时由 site 设置，它会调用 sys.setdefaultencoding()，然后从 sys 的命名空间将其删除，避免再次调用。
+    对于某些操作系统，内部编码默认设置和文件系统编码可能不同，所以要有另外一种方法获取文件系统设置。getfile systemencoding() 会返回一个操作系统特定的值（而不是文件系统特定的值）。
+
+import sys
+
+print 'Default encoding     :', sys.getdefaultencoding()
+print 'File system encoding :', sys.getfilesystemencoding()
+
+    大多数 Unicode 专家并不建议改变全局默认编码，而是推荐让应用显式地设置 Unicode。这种方法提供了两个好处：不同的数据源有不同的 Unicode 编码，这样可以更简洁地处理，而且可以减少对应用代码中编码的假设。
+
+$ python test.py
+Default encoding     : ascii
+File system encoding : UTF-8
+
+    4. 交互式提示语
