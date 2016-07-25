@@ -123,3 +123,117 @@ Default encoding     : ascii
 File system encoding : UTF-8
 
     4. 交互式提示语
+    交互式解释器使用两种不同的提示语来指示默认输入级（ps1）和多行语句的“继续”（ps2）。这些值只用于交互式解释器。
+
+>>> import sys
+>>> sys.ps1
+'>>> '
+>>> sys.ps2
+'... '
+>>> 
+
+    这两个提示语都可以改为一个不同的串。
+
+>>> sys.ps1 = ':::'
+:::sys.ps2 = '~~~'
+:::for i in range(3):
+~~~    print i
+~~~
+0
+1
+2
+:::
+
+    或者，只要一个对象可以转换为字符串（通过 __str__ ），就可以用作提示语。
+
+import sys
+
+class LineCounter(object):
+	def __init__(self):
+		self.count = 0
+	def __str__(self):
+		self.count += 1
+		return '(%3d)> ' % self.count
+
+    LineCounter 会记录它使用了多少次，所以提示语中的数字每次都会增加。
+
+$ python
+Python 2.7.6 (default, Jun 22 2015, 18:00:18) 
+[GCC 4.8.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> from sys_ps1 import LineCounter
+>>> import sys
+>>> sys.ps1 = LineCounter()
+(  1)> 
+(  2)> 
+(  3)> 
+
+    5. 显示 hook
+    每次用户进入一个表达式时交互式解释器都会调用 sys.displayhook。这个表达式的结果将作为唯一的参数传至函数。
+
+import sys
+
+class ExpressionCounter(object):
+	def __init__(self):
+		self.count = 0
+		self.previous_value = self
+	def __call__(self, value):
+		print 
+		print '  Previous:', self.previous_value
+		print '  New     :', value
+		print
+		if value != self.previous_value:
+			self.count += 1
+			sys.ps1 = '(%3d)> ' % self.count
+		self.previous_value = value
+		sys.__displayhook__(value)
+
+print 'installing'
+sys.displayhook = ExpressionCounter()
+
+    默认值（保存在 sys.__displayhook__ 中）将结果打印到标准输出（stdout），并把它保存到 .__builtin__._ 以便以后轻松引用。
+
+$ python
+Python 2.7.6 (default, Jun 22 2015, 18:00:18) 
+[GCC 4.8.2] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import sys_displayhook
+installing
+>>> 1+2
+
+  Previous: <sys_displayhook.ExpressionCounter object at 0xb72430ec>
+  New     : 3
+
+3
+(  1)> 'abc'
+
+  Previous: 3
+  New     : abc
+
+'abc'
+(  2)> 'abc'
+
+  Previous: abc
+  New     : abc
+
+'abc'
+(  2)> 'abc' * 3
+
+  Previous: abc
+  New     : abcabcabc
+
+'abcabcabc'
+(  3)> 
+
+    6. 安装位置
+    只要系统上有一个合理的解释器路径，就可以由 sys.executable 得到具体的解释器程序的路径。这对于确保使用了正确的解释器可能很有用，而且还能对基于解释器位置可能设置的路径给出线索。
+    sys.prefix 指示解释器安装的父目录。它通常包括 bin 和 lib 目录，分别存放可执行文件和已安装模块。
+
+import sys
+
+print 'Interpreter executable:', sys.executable
+print 'Installation prefix   :', sys.prefix
+
+运行时环境
+
+
