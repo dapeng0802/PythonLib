@@ -235,5 +235,70 @@ print 'Interpreter executable:', sys.executable
 print 'Installation prefix   :', sys.prefix
 
 运行时环境
+    sys 提供了一些底层 API 与应用的外部系统交互，可以接受命令行参数、访问用户输入，以及向用户传递消息和状态值。
+    1. 命令行参数
+    解释器捕获的参数会由解释器处理，不会传递到它运行的程序。其余的所有选项和参数，包括脚本名本身，都保存到 sys.argv，以备程序使用。
 
+import sys
 
+print 'Arguments:', sys.argv
+
+    在第 3 个例子中，-u 选项由解释器处理，不会传递到它运行的程序。
+
+$ python sys_argv.py 
+Arguments: ['sys_argv.py']
+$ python sys_argv.py -v foo blah
+Arguments: ['sys_argv.py', '-v', 'foo', 'blah']
+$ python -u sys_argv.py
+Arguments: ['sys_argv.py']
+
+    2. 输入和输出流
+    遵循 UNIX 编程范式，默认地 Python 程序可以访问 3 个文件描述符。
+
+import sys
+
+print >>sys.stderr, 'STATUS: Reading from stdin'
+
+data = sys.stdin.read()
+
+print >>sys.stderr, 'STATUS: Writing data to stdout'
+
+sys.stdout.write(data)
+sys.stdout.flush()
+
+print >>sys.stderr, 'STATUS: Done'
+
+    stdin 是读取输入的标准方式，通常从控制台读取，不过也可以通过管道从其他程序读取。stdout 是为用户写输出的标准方法（写至控制台），或者发送到管道线中的下一个程序。stderr 用于写警告或错误消息。
+
+$ cat sys_stdio.py | python sys_stdio.py 
+STATUS: Reading from stdin
+STATUS: Writing data to stdout
+import sys
+
+print >>sys.stderr, 'STATUS: Reading from stdin'
+
+data = sys.stdin.read()
+
+print >>sys.stderr, 'STATUS: Writing data to stdout'
+
+sys.stdout.write(data)
+sys.stdout.flush()
+
+print >>sys.stderr, 'STATUS: Done'STATUS: Done
+
+    3. 返回状态
+    要从一个程序返回一个退出码，需要向 sys.exit() 传递一个整数值。
+
+import sys
+
+exit_code = int(sys.argv[1])
+sys.exit(exit_code)
+
+    非 0 值表示程序退出时有一个错误。
+
+$ python sys_exit.py 0 ; echo "Exited $?"
+Exited 0
+$ python sys_exit.py 1 ; echo "Exited $?"
+Exited 1
+
+内存管理和限制
