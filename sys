@@ -302,3 +302,103 @@ $ python sys_exit.py 1 ; echo "Exited $?"
 Exited 1
 
 内存管理和限制
+    sys 包含一些函数来了解和控制内存使用。
+    1. 引用数
+    Python 使用引用计数（reference counting）和垃圾回收（garbage collection）来完成自动内存管理。一个对象的引用数降至 0 时，它会自动标志为回收。要查看一个现有对象的引用数，可以使用 getrefcount()。
+
+import sys
+
+one = []
+print 'At start         :', sys.getrefcount(one)
+
+two = one
+print 'Second reference :', sys.getrefcount(one)
+
+del two
+print 'After del        :', sys.getrefcount(one)
+
+    这个数实际上比期望的计数多 1，因为 getrefcount() 本身会维护对象的一个临时引用。
+
+$ python sys_getrefcount.py 
+At start         : 2
+Second reference : 3
+After del        : 2
+
+    2. 对象大小
+    了解一个对象有多少引用可以帮助发现环或内存泄露，不过还不足以确定哪些对象消耗的内存最多，这需要指定对象有多大。
+
+import sys
+
+class OldStyle:
+	pass
+
+class NewStyle(object):
+	pass
+
+for obj in [ [], (), {}, 'c', 'string', 1, 2.3,
+			 OldStyle, OldStyle(), NewStyle, NewStyle(),
+			 ]:
+	print '%10s : %s' % (type(obj).__name__, sys.getsizeof(obj))
+
+    getsizeof() 会报告一个对象的大小（单位为字节）。
+
+$ python sys_getsizeof.py 
+      list : 32
+     tuple : 24
+      dict : 136
+       str : 22
+       str : 27
+       int : 12
+     float : 16
+  classobj : 48
+  instance : 32
+      type : 448
+  NewStyle : 28
+
+    为定制类报告的大小不包括属性值的大小。
+
+import sys
+
+class WithoutAttributes(object):
+	pass
+
+class WithAttributes(object):
+	def __init__(self):
+		self.a = 'a'
+		self.b = 'b'
+		return
+
+without_attrs = WithoutAttributes()
+print 'WithoutAttributes:', sys.getsizeof(without_attrs)
+
+with_attrs = WithAttributes()
+print 'WithAttributes:', sys.getsizeof(with_attrs)
+
+    这可能会让人第消耗的内存量有一个错误的印象。
+
+$ python sys_getsizeof_object.py 
+WithoutAttributes: 28
+WithAttributes: 28
+
+    对于一个类所用的空间，要得到更全面的估计，模块提供了一个 __sizeof__() 方法来计算这个值，它会累计一个对象各个属性的大小。
+
+import sys
+
+class WithAttributes(object):
+	def __init__(self):
+		self.a = 'a'
+		self.b = 'b'
+		return
+	def __sizeof__(self):
+		return object.__sizeof__(self) + \
+			sum(sys.getsizeof(v) for v in self.__dict__.values())
+
+my_inst = WithAttributes()
+print sys.getsizeof(my_inst)
+
+    这个版本将对象的基本大小加上存储在内部 __dict__ 中的所有属性的大小来计算对象大小。
+
+$ python sys_getsizeof_custom.py 
+72
+
+    3. 递归
