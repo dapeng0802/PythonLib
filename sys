@@ -402,3 +402,38 @@ $ python sys_getsizeof_custom.py
 72
 
     3. 递归
+    Python 应用中允许无限递归，这可能会引入解释器本身的栈溢出，导致奔溃。为了消除这种情况，解释器提供了一种方法，可以使用 setrecursionlimit() 和 getrecursionlimit() 控制最大递归深度。
+
+import sys
+
+print 'Initial limit:', sys.getrecursionlimit()
+
+sys.setrecursionlimit(10)
+
+print 'Modified limit:', sys.getrecursionlimit()
+
+def generate_recursion_error(i):
+	print 'generate_recursion_error(%s)' % i
+	generate_recursion_error(i + 1)
+
+try:
+	generate_recursion_error(1)
+except RuntimeError, err:
+	print 'Caught exception:', err
+
+    一旦达到递归限制，解释器会产生一个 RuntimeError 异常，使程序有机会处理这种情况。
+
+$ python sys_recursionlimit.py 
+Initial limit: 1000
+Modified limit: 10
+generate_recursion_error(1)
+generate_recursion_error(2)
+generate_recursion_error(3)
+generate_recursion_error(4)
+generate_recursion_error(5)
+generate_recursion_error(6)
+generate_recursion_error(7)
+generate_recursion_error(8)
+Caught exception: maximum recursion depth exceeded while getting the str of an object
+
+    4. 最大值
