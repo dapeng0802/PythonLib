@@ -437,3 +437,74 @@ generate_recursion_error(8)
 Caught exception: maximum recursion depth exceeded while getting the str of an object
 
     4. 最大值
+    除了运行时可配置的值，sys 还包括一些变量，用来定义随系统不同而变化的一些类型的最大值。
+
+import sys
+
+print 'maxint    :', sys.maxint
+print 'maxsize   :', sys.maxsize
+print 'maxunicode:', sys.maxunicode
+
+    maxint 是最大的可表示的常规整数。maxsize 是列表、字典、串或 C 解释器中 size 类型指示的其他数据结构的最大大小。maxunicode 是当前配置的解释器支持的最大整数 Unicode 值。
+
+$ python sys_maximums.py 
+maxint    : 2147483647
+maxsize   : 2147483647
+maxunicode: 1114111
+
+    5. 浮点数
+    结构 float_info 包含解释器所用的浮点类型表示（基于底层系统的 float 实现）的有关信息。
+
+import sys
+
+print 'Smallest difference (epsilon):', sys.float_info.epsilon
+print
+print 'Digits (dig)              :', sys.float_info.dig
+print 'Mantissa digits (mant_dig):', sys.float_info.mant_dig
+print
+print 'Maximum (max):', sys.float_info.max
+print 'Minimum (min):', sys.float_info.min
+print
+print 'Radix of exponents (radix):', sys.float_info.radix
+print
+print 'Maximum expont for radix (max_exp):', sys.float_info.max_exp
+print 'Minimum expont for radix (min_exp):', sys.float_info.min_exp
+print
+print 'Max. exponent power of 10 (max_10_exp):', sys.float_info.max_10_exp
+print 'Min. exponent power of 10 (min_10_exp):', sys.float_info.min_10_exp
+print
+print 'Rounding for addition (rounds):', sys.float_info.rounds
+
+   这些值依赖于编译器和底层系统。
+
+$ python sys_float_info.py 
+Smallest difference (epsilon): 2.22044604925e-16
+
+Digits (dig)              : 15
+Mantissa digits (mant_dig): 53
+
+Maximum (max): 1.79769313486e+308
+Minimum (min): 2.22507385851e-308
+
+Radix of exponents (radix): 2
+
+Maximum expont for radix (max_exp): 1024
+Minimum expont for radix (min_exp): -1021
+
+Max. exponent power of 10 (max_10_exp): 308
+Min. exponent power of 10 (min_10_exp): -307
+
+Rounding for addition (rounds): 1
+
+    6. 字节序
+    byteorder 设置为内置字节序。
+
+import sys
+
+print sys.byteorder
+
+    这个 w 值可以是 big 表示大端（big endian），或者是 little 表示小端（little endian）。
+
+$ python sys_byteorder.py 
+little
+
