@@ -508,3 +508,67 @@ print sys.byteorder
 $ python sys_byteorder.py 
 little
 
+异常处理
+    sys 包含一些特性来捕获和处理异常。
+    1. 未处理异常
+    很多应用的结构都包括一个主循环，将执行包围在一个全局异常处理程序中，来捕获较低层次未处理的错误。要达到同样的目的，另一种方法是将 sys.excepthook 设置为一个函数，它有 3 个参数（错误类型、错误值和 traceback），由这个函数来处理未处理的错误。
+
+import sys
+
+def my_excepthook(type, value, traceback):
+	print 'Unhandled error:', type, value
+
+sys.excepthook = my_excepthook
+
+print 'Before exception'
+
+raise RuntimeError('This is the error message')
+
+print 'After exception'
+
+    由于产生异常的代码行未包围在 try:except 块中，所以不会运行后面的 print 语句，尽管这里设置了异常 hook（except hook）。
+
+$ python sys_excepthook.py 
+Before exception
+Unhandled error: <type 'exceptions.RuntimeError'> This is the error message
+
+    2. 当前异常
+    有些情况下，不论是处于代码简洁性考虑，还是为了避免与试图安装其自己的 excepthook 的库发生冲突，使用显式的异常处理程序更合适。在这些情况下，可以创建一个同样的处理函数，通过调用 exc_info() 来获取线程的当前异常，因此不需要显式地为它传递异常对象。
+    exc_info() 的返回值是一个包含 3 个成员的元组，其中包含异常类、异常实例和 traceback。使用 exc_info() 要优于原来的形式（使用 exc_type、exc_value 和 exc_traceback），因为它是线程安全的。
+
+import sys
+import threading
+import time
+
+def do_something_with_exception():
+	exc_type, exc_value = sys.exc_info()[:2]
+	print 'Handling %s exception with message "%s" in %s' % \
+		(exc_type.__name__, exc_value, threading.current_thread().name)
+
+def cause_exception(delay):
+	time.sleep(delay)
+	raise RuntimeError('This is the error message')
+
+def thread_target(delay):
+	try:
+		cause_exception(delay)
+	except:
+		do_something_with_exception()
+
+threads = [ threading.Thread(target=thread_target, args=(0.3,)),
+			threading.Thread(target=thread_target, args=(0.1,)),
+			]
+
+for t in threads:
+	t.start()
+
+for t in threads:
+	t.join()
+
+    这个例子通过忽略 exc_info() 的部分返回值，避免了在 traceback 对象和当前帧中一个局部变量之间引入循环引用。如果需要 traceback（例如，以便记入日志），可以显式地删除局部变量（使用 del）来避免循环。
+
+$ python sys_exc_info.py 
+Handling RuntimeError exception with message "This is the error message" in Thread-2
+Handling RuntimeError exception with message "This is the error message" in Thread-1
+
+    3. 之前的交互式异常
