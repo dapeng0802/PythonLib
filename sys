@@ -673,3 +673,134 @@ Custom T2
 Custom T2
 Custom T2
 
+    修改检查间隔并不像看上去那么有用。还有很多其他因素也会控制 Python 线程的上下文切换行为。例如，如果一个线程完成 I/O，它会释放 GIL，可能因此允许另一个线程接管执行。
+
+import sys
+import threading
+from Queue import Queue
+import time
+
+def show_thread(q, extraByteCodes):
+	for i in range(5):
+		for j in range(extraByteCodes):
+			pass
+		#q.put(threading.current_thread().name)
+		print threading.current_thread().name
+	return
+
+def run_threads(prefix, interval, extraByteCodes):
+	print '%s interval = %s with %s extra operations' % \
+		(prefix, interval, extraByteCodes)
+	sys.setcheckinterval(interval)
+	q = Queue()
+	threads = [ threading.Thread(target=show_thread,
+		name='%s T%s' % (prefix, i),
+		args=(q, extraByteCodes)
+		)
+	for i in range(3)
+	]
+	for t in threads:
+		t.start()
+	for t in threads:
+		t.join()
+	while not q.empty():
+		print q.get()
+	print 
+	return
+
+run_threads('Default', interval=100, extraByteCodes=1000)
+run_threads('Custom', interval=10, extraByteCodes=0)
+
+    这个例子由第一个例子修改得来，以展示线程可以直接打印到 sys.stdout，而不是追加到一个队列。输出更不可预测。
+
+$ python sys_checkinterval_io.py 
+Default interval = 100 with 1000 extra operations
+Default T0
+Default T0
+Default T0
+Default T1
+Default T1
+Default T2
+Default T1
+Default T2
+ Default T0
+Default T1
+Default T2
+Default T2
+Default T1
+ Default T2
+Default T0
+
+Custom interval = 10 with 0 extra operations
+Custom T0
+Custom T0
+Custom T0
+Custom T0
+Custom T0
+Custom T2
+Custom T2Custom T1
+
+Custom T2Custom T1
+
+Custom T2
+Custom T2
+ Custom T1
+Custom T1
+Custom T1
+
+    2. 调试
+    找出死锁可能是处理线程最困难的方面之一。sys._current_frames() 能有所帮助，它能准确地显示出线程在哪里停止。
+
+#!/usr/bin/env python
+# encoding: utf-8
+
+import sys
+import threading
+import time
+
+io_lock = threading.Lock()
+blocker = threading.Lock()
+
+def block(i):
+	t = threading.current_thread()
+	with io_lock:
+		print '%s with ident %s going to sleep' % (t.name, t.ident)
+	if i:
+		blocker.acquired() # acquired but never released
+		time.sleep(0.2)
+	with io_lock:
+		print t.name, 'finishing'
+	return
+
+# Create and start sereral threads that "block"
+threads = [ threading.Thread(target=block, args=(i,)) for i in range(3) ]
+for t in threads:
+	t.setDaemon(True)
+	t.start()
+
+# Map the threads from their identifier to the thread object
+threads_by_ident = dict((t.ident, t) for t in threads)
+
+# Show where each thread is "blocked"
+time.sleep(0.01)
+with io_lock:
+	for ident, frame in sys._current_frames().items():
+		t = threads_by_ident.get(ident)
+		if not t:
+			# Main thread
+			continue
+		print t.name, 'stopped in', frame.f_code.co_name,
+		print 'at line', frame.f_lineno, 'of', frame.f_code.co_filename
+		
+    sys._current_frames() 返回的字典以线程标识符为键，而不是线程名。需要稍做一点工作将这些标识符映射为线程对象。
+    由于 Thread-1 没有休眠，在检查其状态之前它就已经完成。由于它不再是活动的，所以不会出现在输出中。Thread-2 请求锁阻塞器（blocker），然后睡眠很短的一段时间。与此同时，Thread-3 尝试请求阻塞器，不过无法得到，因为已经被 Thread-2 占用。
+    
+$ python sys_current_frames.py 
+Thread-1 with ident -1222493376 going to sleep
+Thread-1 finishing
+Thread-2 with ident -1232078016 going to sleep
+Thread-3 with ident -1222493376 going to sleep
+Thread-3 stopped in updatecache at line 132 of /usr/lib/python2.7/linecache.py
+Thread-2 stopped in updatecache at line 132 of /usr/lib/python2.7/linecache.py
+
+模块和导入
