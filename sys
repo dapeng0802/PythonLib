@@ -804,3 +804,96 @@ Thread-3 stopped in updatecache at line 132 of /usr/lib/python2.7/linecache.py
 Thread-2 stopped in updatecache at line 132 of /usr/lib/python2.7/linecache.py
 
 模块和导入
+    大多数 Python 程序最后都会是一个组合，包括多个模块以及导入这些模块的一个主应用。无论是否使用标准库的特性，还是将定制代码组织到单独的文件中以便于维护，理解和管理程序的依赖关系都是开发的一个重要方面。sys 包含了应用可用模块的有关信息，这些模块可能作为内置模块，也可能是导入的模块。sys 还定义了一些 hook 为特殊情况覆盖标准导入行为。
+    1. 导入的模块
+    sys.modules 是一个字典，将所导入模块的名字映射为包含具体代码的模块对象。
+
+import sys
+import textwrap
+
+names = sorted(sys.modules.keys())
+name_text = ', '.join(names)
+
+print textwrap.fill(name_text, width=65)
+
+    随着新模块的导入，sys.modules 的内容会改变。
+
+$ python sys_modules.py 
+UserDict, __builtin__, __main__, _abcoll, _codecs, _locale, _sre,
+_sysconfigdata, _sysconfigdata_nd, _warnings, _weakref,
+_weakrefset, abc, codecs, copy_reg, encodings,
+encodings.__builtin__, encodings.aliases, encodings.codecs,
+encodings.encodings, encodings.utf_8, errno, exceptions,
+genericpath, linecache, os, os.path, posix, posixpath, re,
+signal, site, sitecustomize, sre_compile, sre_constants,
+sre_parse, stat, string, strop, sys, sysconfig, textwrap,
+traceback, types, warnings, zipimport
+
+    2. 内置模块
+    Python 解释器编译时可用内置一些 C 模块，因此这些 C 模块不需要作为单独的共享库发布。这些模块不会出现在 sys.modules 管理的导入模块列表中，因为从理论上讲它们并不是导入的模块。要查找这些可用的内置模块，唯一的方法就是通过 sys.builtin_module_names。
+
+import sys
+import textwrap
+
+names = sorted(sys.builtin_module_names)
+name_text = ', '.join(names)
+
+print textwrap.fill(name_text, width=65)
+
+    这个脚本的输出可能会有变化，特别是用一个定制构建版本的解释器运行时。
+
+$ python sys_builtins.py 
+__builtin__, __main__, _ast, _bisect, _codecs, _collections,
+_functools, _heapq, _io, _locale, _md5, _random, _sha, _sha256,
+_sha512, _socket, _sre, _struct, _symtable, _warnings, _weakref,
+array, binascii, cPickle, cStringIO, cmath, datetime, errno,
+exceptions, fcntl, gc, grp, imp, itertools, marshal, math,
+operator, posix, pwd, select, signal, spwd, strop, sys, syslog,
+thread, time, unicodedata, xxsubtype, zipimport, zlib
+
+    3. 导入路径
+    模块的搜索路径作为一个 Python 列表保存在 sys.path 中。这个路径的默认内容包括启动应用所用脚本的目录和当前工作目录。
+
+import sys
+
+for d in sys.path:
+	print d
+
+    搜索路径中的第一个目录是示例脚本本身的主目录。后面是一些列平台特定的路径，其中可能安装有已编译的扩展模块（用 C 编写）。最后列出全局 site-packages 目录。
+
+$ python sys_path_show.py 
+/home/rendp/workspace/py
+/usr/local/lib/python2.7/dist-packages/virtualenv-13.1.0-py2.7.egg
+/usr/local/lib/python2.7/dist-packages/python_memcached-1.54-py2.7.egg
+/usr/lib/python2.7/dist-packages
+/usr/lib/python2.7
+/usr/lib/python2.7/plat-i386-linux-gnu
+/usr/lib/python2.7/lib-tk
+/usr/lib/python2.7/lib-old
+/usr/lib/python2.7/lib-dynload
+/usr/local/lib/python2.7/dist-packages
+/usr/lib/python2.7/dist-packages/PILcompat
+/usr/lib/python2.7/dist-packages/gtk-2.0
+/usr/lib/python2.7/dist-packages/ubuntu-sso-client
+
+    通过将 shell 变量 PYTHONPATH 设置为一个用冒号分隔的目录列表，从而在启动解释器之前可以修改导入搜索路径列表。
+
+$ PYTHONPATH=/my/private/site-package:/my/shared/site-package python sys_path_show.py 
+/home/rendp/workspace/py
+/usr/local/lib/python2.7/dist-packages/virtualenv-13.1.0-py2.7.egg
+/usr/local/lib/python2.7/dist-packages/python_memcached-1.54-py2.7.egg
+/usr/lib/python2.7/dist-packages
+/my/private/site-package
+/my/shared/site-package
+/usr/lib/python2.7
+/usr/lib/python2.7/plat-i386-linux-gnu
+/usr/lib/python2.7/lib-tk
+/usr/lib/python2.7/lib-old
+/usr/lib/python2.7/lib-dynload
+/usr/local/lib/python2.7/dist-packages
+/usr/lib/python2.7/dist-packages/PILcompat
+/usr/lib/python2.7/dist-packages/gtk-2.0
+/usr/lib/python2.7/dist-packages/ubuntu-sso-client
+
+    程序还可以直接向 sys.path 添加元素来修改路径。
+
