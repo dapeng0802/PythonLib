@@ -897,3 +897,78 @@ $ PYTHONPATH=/my/private/site-package:/my/shared/site-package python sys_path_sh
 
     程序还可以直接向 sys.path 添加元素来修改路径。
 
+import sys
+import os
+
+base_dir = os.path.dirname(__file__) or '.'
+print 'Base directory:', base_dir
+
+# Insert the package_dir_a directory at the front of the path.
+package_dir_a = os.path.join(base_dir, 'package_dir_a')
+sys.path.insert(0, package_dir_a)
+
+# Import the example module
+import example
+print 'Imported example from:', example.__file__
+print '\t', example.DATA
+
+# Make package_dir_b the first directory in the search path
+package_dir_b = os.path.join(base_dir, 'package_dir_b')
+sys.path.insert(0, package_dir_b)
+
+# Reload the module to get the other version
+reload(example)
+print 'Reloaded example from:', example.__file__
+print '\t', example.DATA
+
+    重新加载一个已经导入的模块时，会重新导入这个文件，并使用相同的 module 对象来保存结果。如果在第一次导入和 reload() 调用之间改变了路径，这意味着第二次可能加载一个不同的模块。
+
+$ python sys_path_modify.py 
+Base directory: .
+Imported example from: ./package_dir_a/example.pyc
+	This is the example A
+Reloaded example from: ./package_dir_b/example.pyc
+	This is the example A
+
+    4. 定制导入工具
+    通过修改搜索路径，程序员可以控制如何找到标准 Python 模块。不过，如果一个程序需要导入其他地方的代码，而不是从文件系统上常规的 .py 或 .pyc 文件导入，又该怎么做呢？PEP302 解决了这个问题，引入了导入 hook（import hook）的思想，它会捕获到试图在搜索路径上查找一个模块，并采用候选策略从其他位置加载代码或者对其应用预处理。
+    可以通过两个不同阶段实现定制导入工具。查找工具（finder）负责找到一个模块，并提供一个加载工具（loader）来管理具体的导入。可以向 sys.path_hooks 列表追加一个工厂来添加定制模块查找工具。导入时，会把路径的各个部分提供给一个查找工具，直到一个部分声称支持（不产生 ImportError）。查找工具再负责搜索数据存储（由对应命名模块的路径入口表示）。
+
+import sys
+
+class NoisyImportFinder(object):
+	PATH_TRIGGER = 'NoisyImportFinder_PATH_TRIGGER'
+
+	def __init__(self, path_entry):
+		print 'Checking %s:' % path_entry
+		if path_entry != self.PATH_TRIGGER:
+			print 'wrong finder'
+			raise ImportError()
+		else:
+			print 'works'
+		return
+
+	def find_module(self, fullname, path=None):
+		print 'Looking for "%s"' % fullname
+		return None
+
+sys.path_hooks.append(NoisyImportFinder)
+
+sys.path.insert(0, NoisyImportFinder.PATH_TRIGGER)
+
+try:
+	import target_module
+except Exception, e:
+	print 'Import failed:', e
+
+    这个例子展示了如何实例化和查询查找工具。如果提供的路径入口与查找工具的特殊触发值不匹配，显然不是文件系统上的一个真正的路径，实例化时 Noisy-ImportFinder 会产生一个 ImportError。这个测试可以避免 NoisyImportFinder 破坏真正模块的导入。
+
+$ python sys_path_hooks_noisy.py 
+Checking NoisyImportFinder_PATH_TRIGGER:
+works
+Looking for "target_module"
+Checking /home/rendp/workspace/py:
+wrong finder
+Import failed: No module named target_module
+
+    5. 从 shelve 导入
