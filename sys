@@ -972,3 +972,223 @@ wrong finder
 Import failed: No module named target_module
 
     5. 从 shelve 导入
+    查找工具找到一个模块时，它要负责返回一个能够导入该模块的加载工具（loader）。下面这个例子展示了一个定制导入工具，它会将其模块内容保存到由 shelve 创建的一个数据库中。
+    首先，使用脚本来用一个包（其中包含一个子模块和子包）填充这个 shelf。
+
+import sys
+import shelve
+import os
+
+filename = '/tmp/pymotw_import_example.shelve'
+
+if os.path.exists(filename):
+	os.unlink(filename)
+db = shelve.open(filename)
+try:
+	db['data:README'] = """
+	==============
+	package README
+	==============
+
+	This is the README for ''package''.
+	"""
+	db['package.__init__'] = """
+	print 'package imported'
+	message = 'This message is in package.__init__'
+	"""
+	db['package.module1'] = """
+	print 'package.module1 imported'
+	message = 'This message is in package.module1'
+	"""
+	db['package.subpackage.__init__'] = """
+	print 'package.subpackage imported'
+	message = 'This message is in package.subpackage.__init__'
+	"""
+	db['package.subpackage.module2'] = """
+	print 'package.subpackage.module2 imported'
+	message = 'This message is in package.subpackage.module2'
+	"""
+	db['package.with_error'] = """
+	print 'package.with_error being imported'
+	raise ValueError('raising excaption to break import')
+	"""
+	print 'Created %s with:' % filename
+	for key in sorted(db.keys()):
+		print '\t', key
+finally:
+	db.close()
+
+    一个真正的打包脚本会从文件系统读取内容，不过对于像这样一个简单的例子来说，使用硬编码的值就足够了。
+
+$ python sys_shelve_importer_create.py 
+Created /tmp/pymotw_import_example.shelve with:
+	data:README
+	package.__init__
+	package.module1
+	package.subpackage.__init__
+	package.subpackage.module2
+	package.with_error
+
+    这个定制导入工具需要提供查找工具和加载工具，它们要知道如何在 shelf 中查找模块或包的源代码。
+
+import contextlib
+import imp
+import sys
+import shelve
+import os
+
+def _mk_init_name(fullname):
+	"""Return the name of the __init__ module
+	for a given package name.
+	"""
+	if fullname.endswith('.__init__'):
+		return fullname
+	return fullname + '.__init__'
+
+def _get_key_name(fullname, db):
+	"""Look in an open shelf for fullname or
+	fullname.__init__, return the name found.
+	"""
+	if fullname in db:
+		return fullname
+	init_name = _mk_init_name(fullname)
+	if init_name in db:
+		return init_name
+	return None
+
+class ShelveFinder(object):
+	"""Find modules collected in a shelve archive."""
+
+	def __init__(self, path_entry):
+		if not os.path.isfile(path_entry):
+			raise ImportError
+		try:
+			# Test the path_entry to see if it is a valid shelf
+			with contextlib.closing(shelve.open(path_entry, 'r')):
+				pass
+		except Exception, e:
+			raise ImportError(str(e))
+		else:
+			print 'shelf added to import path:', path_entry
+			self.path_entry = path_entry
+		return
+
+	def __str__(self):
+		return '<%s for "%s">' % (self.__class__.__name__, self.path_entry)
+
+	def find_module(self, fullname, path=None):
+		path = path or self.path_entry
+		print '\nlooking for "%s"\n  in %s' % (fullname, path)
+		with contextlib.closing(shelve.open(self.path_entry, 'r')) as db:
+			key_name = _get_key_name(fullname, db)
+			if key_name:
+				print '  found it as %s' % key_name
+				return ShelveLoader(path)
+		print '  not found'
+		return None
+
+class ShelveLoader(object):
+	"""Load source for modules from shelve databases."""
+	def __init__(self, path_entry):
+		self.path_entry = path_entry
+		return
+
+	def _get_filename(self, fullname):
+		# Make up a fake filename that starts with the path entry
+		# so pkgutil.get_data() works correctly.
+		return os.path.join(self.path_entry, fullname)
+
+	def get_source(self, fullname):
+		print 'loading source for "%s" from shelf' % fullname
+		try:
+			with contextlib.closing(shelve.open(self.path_entry, 'r')) as db:
+				key_name = _get_key_name(fullname, db)
+				if key_name:
+					return db[key_name]
+				raise ImportError('could not find source for %s' % fullname)
+		except Exception, e:
+			print 'could not load source:', e
+			raise ImportError(str(e))
+
+	def get_code(self, fullname):
+		source = self.get_source(fullname)
+		print 'compiling code for "%s"' % fullname
+		return compile(source, self._get_filename(fullname),
+			'exec', dont_inherit=True)
+
+	def get_data(self, path):
+		print 'looking for data\n  in %s\n  for "%s"' % (self.path_entry, path)
+		if not path.startswith(self.path_entry):
+			raise ImportError
+		path = path[len(self.path_entry)+1:]
+		key_name = 'data:' + path
+		try:
+			with contextlib.closing(shelve.open(self.path_entry, 'r')) as db:
+				return db[key_name]
+		except Exception, e:
+			# Convert all errors to IOError
+			raise IOError
+
+	def is_package(self, fullname):
+		init_name = _mk_init_name(fullname)
+		with contextlib.closing(shelve.open(self.path_entry, 'r')) as db:
+			return init_name in db
+
+	def load_module(self, fullname):
+		source = self.get_source(fullname)
+
+		if fullname in sys.modules:
+			print 'reusing existing module from import of "%s"' % fullname
+			mod = sys.modules[fullname]
+		else:
+			print 'creating a new module object for "%s"' % fullname
+			mod = sys.modules.setdefault(fullname, imp.new_module(fullname))
+
+		# Set a few properties required by PEP 302
+		mod.__file__ = self._get_filename(fullname)
+		mod.__name__ = fullname
+		mod.__path__ = self.path_entry
+		mod.__loader__ = self
+		mod.__package__ = '.'.join(fullname.split('.')[:-1])
+
+		if self.is_package(fullname):
+			print 'adding path for package'
+			# Set __path__ for packages
+			# so we can find the submodules.
+			mod.__path__ = [ self.path_entry ]
+		else:
+			print 'imported as regular module'
+
+		print 'execing source...'
+		exec source in mod.__dict__
+		print 'done'
+		return mod
+
+    现在可以用 ShelveFinder 和 ShelveLoader 从一个 shelf 导入代码。这个例子显示了如何导入刚创建的 package。
+
+import sys
+import sys_shelve_importer
+def show_module_details(module):
+	print '  message    :', module.message
+	print '  __name__   :', module.__name__
+	print '  __package__:', module.__package__
+	print '  __file__   :', module.__file__
+	print '  __path__   :', module.__path__
+	print '  __loader__ :', module.__loader__
+
+filename = '/tmp/pymotw_import_example.shelve'
+sys.path_hooks.append(sys_shelve_importer.ShelveFinder)
+sys.path.insert(0, filename)
+
+print 'Import of "package":'
+import package
+
+print
+print 'Examine package details:'
+show_module_details(package)
+
+print
+print 'Global settings:'
+print 'sys.modules entry:'
+print sys.modules['package']
+
