@@ -986,32 +986,32 @@ if os.path.exists(filename):
 db = shelve.open(filename)
 try:
 	db['data:README'] = """
-	==============
-	package README
-	==============
+==============
+package README
+==============
 
-	This is the README for ''package''.
-	"""
+This is the README for ''package''.
+"""
 	db['package.__init__'] = """
-	print 'package imported'
-	message = 'This message is in package.__init__'
-	"""
+print 'package imported'
+message = 'This message is in package.__init__'
+"""
 	db['package.module1'] = """
-	print 'package.module1 imported'
-	message = 'This message is in package.module1'
-	"""
+print 'package.module1 imported'
+message = 'This message is in package.module1'
+"""
 	db['package.subpackage.__init__'] = """
-	print 'package.subpackage imported'
-	message = 'This message is in package.subpackage.__init__'
-	"""
+print 'package.subpackage imported'
+message = 'This message is in package.subpackage.__init__'
+"""
 	db['package.subpackage.module2'] = """
-	print 'package.subpackage.module2 imported'
-	message = 'This message is in package.subpackage.module2'
-	"""
+print 'package.subpackage.module2 imported'
+message = 'This message is in package.subpackage.module2'
+"""
 	db['package.with_error'] = """
-	print 'package.with_error being imported'
-	raise ValueError('raising excaption to break import')
-	"""
+print 'package.with_error being imported'
+raise ValueError('raising excaption to break import')
+"""
 	print 'Created %s with:' % filename
 	for key in sorted(db.keys()):
 		print '\t', key
@@ -1192,3 +1192,33 @@ print 'Global settings:'
 print 'sys.modules entry:'
 print sys.modules['package']
 
+    修改路径之后，第一次出现导入时会把这个 shelf 添加到导入路径。查找工具找到这个 shelf，并返回一个加载工具，这个加载工具将用来完成从该 shelf 的所有导入。初始的包级导入会创建一个新的模块对象，然后使用 exec 运行从 shelf 加载的源代码。它将这个新模块用作为命名空间，所以源代码中定义的名字可以作为模块级属性保留。
+
+$ python sys_shelve_importer_package.py 
+Import of "package":
+shelf added to import path: /tmp/pymotw_import_example.shelve
+
+looking for "package"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.__init__
+loading source for "package" from shelf
+creating a new module object for "package"
+adding path for package
+execing source...
+package imported
+done
+
+Examine package details:
+  message    : This message is in package.__init__
+  __name__   : package
+  __package__: 
+  __file__   : /tmp/pymotw_import_example.shelve/package
+  __path__   : ['/tmp/pymotw_import_example.shelve']
+  __loader__ : <sys_shelve_importer.ShelveLoader object at 0xb6f73b4c>
+
+Global settings:
+sys.modules entry:
+<module 'package' from '/tmp/pymotw_import_example.shelve/package'>
+
+    6. 定制包导入
+    可以采用同样的方式加载其他模块和子包。
