@@ -1222,3 +1222,96 @@ sys.modules entry:
 
     6. 定制包导入
     可以采用同样的方式加载其他模块和子包。
+
+import sys
+import sys_shelve_importer
+
+def show_module_details(module):
+	print '  message    :', module.message
+	print '  __name__   :', module.__name__
+	print '  __package__:', module.__package__
+	print '  __file__   :', module.__file__
+	print '  __path__   :', module.__path__
+	print '  __loader__ :', module.__loader__
+
+filename = '/tmp/pymotw_import_example.shelve'
+sys.path_hooks.append(sys_shelve_importer.ShelveFinder)
+sys.path.insert(0, filename)
+
+print 'Import of "package.module1":'
+import package.module1
+
+print
+print 'Examine package.module1 details:'
+show_module_details(package.module1)
+
+print 'Import of "package.subpackage.module2":'
+import package.subpackage.module2
+
+print
+print 'Examine package.subpackage.module2 details:'
+show_module_details(package.subpackage.module2)
+
+    查找工具接收要加载的模块的完整加点名，并返回一个 ShelveLoader，它
+
+$python sys_shelve_importer_module.py 
+Import of "package.module1":
+shelf added to import path: /tmp/pymotw_import_example.shelve
+
+looking for "package"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.__init__
+loading source for "package" from shelf
+creating a new module object for "package"
+adding path for package
+execing source...
+package imported
+done
+
+looking for "package.module1"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.module1
+loading source for "package.module1" from shelf
+creating a new module object for "package.module1"
+imported as regular module
+execing source...
+package.module1 imported
+done
+
+Examine package.module1 details:
+  message    : This message is in package.module1
+  __name__   : package.module1
+  __package__: package
+  __file__   : /tmp/pymotw_import_example.shelve/package.module1
+  __path__   : /tmp/pymotw_import_example.shelve
+  __loader__ : <sys_shelve_importer.ShelveLoader object at 0xb6ff906c>
+Import of "package.subpackage.module2":
+
+looking for "package.subpackage"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.subpackage.__init__
+loading source for "package.subpackage" from shelf
+creating a new module object for "package.subpackage"
+adding path for package
+execing source...
+package.subpackage imported
+done
+
+looking for "package.subpackage.module2"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.subpackage.module2
+loading source for "package.subpackage.module2" from shelf
+creating a new module object for "package.subpackage.module2"
+imported as regular module
+execing source...
+package.subpackage.module2 imported
+done
+
+Examine package.subpackage.module2 details:
+  message    : This message is in package.subpackage.module2
+  __name__   : package.subpackage.module2
+  __package__: package.subpackage
+  __file__   : /tmp/pymotw_import_example.shelve/package.subpackage.module2
+  __path__   : /tmp/pymotw_import_example.shelve
+  __loader__ : <sys_shelve_importer.ShelveLoader object at 0xb6ff90cc>
+
