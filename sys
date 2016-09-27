@@ -1252,7 +1252,7 @@ print
 print 'Examine package.subpackage.module2 details:'
 show_module_details(package.subpackage.module2)
 
-    查找工具接收要加载的模块的完整加点名，并返回一个 ShelveLoader，它
+    查找工具接收要加载的模块的完整加点名，并返回一个 ShelveLoader，它配置为从指向这个 shelf 文件的路径入口加载模块。模块的完全限定名传递给加载工具的 load_module() 方法，它会构造并返回一个模块实例。
 
 $python sys_shelve_importer_module.py 
 Import of "package.module1":
@@ -1315,3 +1315,144 @@ Examine package.subpackage.module2 details:
   __path__   : /tmp/pymotw_import_example.shelve
   __loader__ : <sys_shelve_importer.ShelveLoader object at 0xb6ff90cc>
 
+    7. 在定制导入工具中重新加载模块
+    重新加载一个模块的处理稍有不同。不是创建一个新的模块对象，而会重用现有的模块。
+
+import sys
+import sys_shelve_importer
+
+filename = '/tmp/pymotw_import_example.shelve'
+sys.path_hooks.append(sys_shelve_importer.ShelveFinder)
+sys.path.insert(0, filename)
+
+print 'First import of "package":'
+import package
+
+print
+print 'Reloading "package":'
+reload(package)
+
+    通过重用相同的对象，会保留这个模块现有的引用，即使类或函数定义已经因重新加载而修改。
+
+$ python sys_shelve_importer_reload.py 
+First import of "package":
+shelf added to import path: /tmp/pymotw_import_example.shelve
+
+looking for "package"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.__init__
+loading source for "package" from shelf
+creating a new module object for "package"
+adding path for package
+execing source...
+package imported
+done
+
+Reloading "package":
+
+looking for "package"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.__init__
+loading source for "package" from shelf
+reusing existing module from import of "package"
+adding path for package
+execing source...
+package imported
+done
+
+    8. 处理导入错误
+    任何查找工具都无法找到一个模块时，主导入代码会产生一个 ImportError。
+
+import sys
+import sys_shelve_importer
+
+filename = '/tmp/pymotw_import_example.shelve'
+sys.path_hooks.append(sys_shelve_importer.ShelveFinder)
+sys.path.insert(0, filename)
+
+try:
+	import package.module3
+except ImportError, e:
+	print 'Failed to import:', e
+
+    导入期间的其他错误会传播。
+
+$ python sys_shelve_importer_missing.py 
+shelf added to import path: /tmp/pymotw_import_example.shelve
+
+looking for "package"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.__init__
+loading source for "package" from shelf
+creating a new module object for "package"
+adding path for package
+execing source...
+package imported
+done
+
+looking for "package.module3"
+  in /tmp/pymotw_import_example.shelve
+  not found
+Failed to import: No module named module3
+
+    9. 包数据
+    除了定义 API 来加载可执行的 Python 代码外，PEP 302 还定义了一个可选的 API 来获取包数据，用于发布数据文件、文档和包使用的其他非代码资源。通过实现 get_data()，加载工具允许调用应用获取与包关联的数据，而不用考虑这个包具体如何安装（特别是不用假设这个包作为文件存储在一个文件系统上）。
+
+import sys
+import sys_shelve_importer
+import os
+import pkgutil
+
+filename = '/tmp/pymotw_import_example.shelve'
+sys.path_hooks.append(sys_shelve_importer.ShelveFinder)
+sys.path.insert(0, filename)
+
+import package
+
+readme_path = os.path.join(package.__path__[0], 'README')
+
+readme = pkgutil.get_data('package', 'README')
+# Equivalent to:
+#   readme = package.__loader__.get_data(readme_path)
+print readme
+
+foo_path = os.path.join(package.__path__[0], 'foo')
+try:
+	foo = pkgutil.get_data('package', 'foo')
+	# Eqivalent to:
+	#   foo = package.__loader__.get_data(foo_path)
+except IOError as err:
+	print 'ERROR: Could not load "foo"', err
+else:
+	print foo
+
+    get_data() 根据拥有数据的模块或包取一个路径。它将资源“文件”的内容作为一个字符串返回，或者如果这个资源不存在，则产生一个 IOError。
+
+$ python sys_shelve_importer_get_data.py 
+shelf added to import path: /tmp/pymotw_import_example.shelve
+
+looking for "package"
+  in /tmp/pymotw_import_example.shelve
+  found it as package.__init__
+loading source for "package" from shelf
+creating a new module object for "package"
+adding path for package
+execing source...
+package imported
+done
+looking for data
+  in /tmp/pymotw_import_example.shelve
+  for "/tmp/pymotw_import_example.shelve/README"
+
+==============
+package README
+==============
+
+This is the README for ''package''.
+
+looking for data
+  in /tmp/pymotw_import_example.shelve
+  for "/tmp/pymotw_import_example.shelve/foo"
+ERROR: Could not load "foo" 
+
+    10. 导入工具缓存
