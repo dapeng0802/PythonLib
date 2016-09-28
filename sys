@@ -1456,3 +1456,60 @@ looking for data
 ERROR: Could not load "foo" 
 
     10. 导入工具缓存
+    每次导入一个模块时都要搜索所有 hook，这样开销可能会很大。为了节省时间，会维护一个 sys.path_importer_cache，作为路径入口与加载工具（可以使用值来查找模块）之间的一个映射。
+
+import sys
+
+print 'PATH:'
+for name in sys.path:
+	if name.startswith(sys.prefix):
+		name = '...' + name[len(sys.prefix):]
+	print ' ', name
+
+print 
+print 'IMPORTERS:'
+for name, cache_value in sys.path_importer_cache.items():
+	name = name.replace(sys.prefix, '...')
+	print '  %s: %r' % (name, cache_value)
+
+    缓存值 None 表示使用默认的文件系统加载工具。路径上不存在的目录与一个 imp.NullImporter 实例关联，因为它们不能用来导入模块。在示例输出中，使用了多个 zipimport.zipimporter 实例来管理路径上找到的 EGG 文件。
+
+$ python sys_path_importer_cache.py 
+PATH:
+  /home/rendp/workspace/py
+  .../local/lib/python2.7/dist-packages/virtualenv-13.1.0-py2.7.egg
+  .../local/lib/python2.7/dist-packages/python_memcached-1.54-py2.7.egg
+  .../lib/python2.7/dist-packages
+  .../lib/python2.7
+  .../lib/python2.7/plat-i386-linux-gnu
+  .../lib/python2.7/lib-tk
+  .../lib/python2.7/lib-old
+  .../lib/python2.7/lib-dynload
+  .../local/lib/python2.7/dist-packages
+  .../lib/python2.7/dist-packages/PILcompat
+  .../lib/python2.7/dist-packages/gtk-2.0
+  .../lib/python2.7/dist-packages/ubuntu-sso-client
+
+IMPORTERS:
+  .../lib/python2.7/lib-old: <imp.NullImporter object at 0xb746b498>
+  .../local/lib/python2.7/dist-packages: None
+  .../lib/python2.7/encodings: None
+  .../local/lib/python2.7/dist-packages/virtualenv-13.1.0-py2.7.egg: None
+  .../lib/python2.7/dist-packages/ubuntu-sso-client: None
+  .../lib/python2.7/lib-tk: None
+  .../lib/python2.7/lib-dynload: None
+  .../lib/python2.7/dist-packages/gtk-2.0: None
+  .../local/lib/python2.7/dist-packages/python_memcached-1.54-py2.7.egg: <zipimporter object "/usr/local/lib/python2.7/dist-packages/python_memcached-1.54-py2.7.egg">
+  .../lib/python2.7/dist-packages: None
+  .../lib/python2.7/plat-i386-linux-gnu: None
+  .../lib/python2.7: None
+  .../lib/python2.7/dist-packages/PILcompat: None
+  sys_path_importer_cache.py: <imp.NullImporter object at 0xb746b4a0>
+  .../lib/python2.7/: None
+
+    11. 元路径
+    sys.meta_path 进一步扩展了可能的导入来源，允许在扫描常规的 sys.path 之前先搜索查找工具。元路径上查找工具的 API 与常规路径上查找工具的 API 是一样的。区别在于元查找工具不限于 sys.path 中的一项，它可以搜索任何地方。
+
+
+
+    搜索 sys.path 之前，会询问元路径上的各个查找工具，所以总有机会让一个中心导入工具加载模块，而不必显示地修改 sys.path。一旦“找到”模块，加载工具 API 就会像常规加载工具一样正常工作（不过为简单起见，这个例子有所缩减）。
