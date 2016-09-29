@@ -1510,6 +1510,153 @@ IMPORTERS:
     11. 元路径
     sys.meta_path 进一步扩展了可能的导入来源，允许在扫描常规的 sys.path 之前先搜索查找工具。元路径上查找工具的 API 与常规路径上查找工具的 API 是一样的。区别在于元查找工具不限于 sys.path 中的一项，它可以搜索任何地方。
 
+import sys
+import sys_shelve_importer
+import imp
 
+class NoisyMetaImportFinder(object):
+
+	def __init__(self, prefix):
+		print 'Creating NoisyMetaImportFinder for %s' % prefix
+		self.prefix = prefix
+		return
+
+	def find_module(self, fullname, path=None):
+		print 'looking for "%s" with path "%s"' % (fullname, path)
+		name_parts = fullname.split('.')
+		if name_parts and name_parts[0] == self.prefix:
+			print ' ... found prefix, returning loader'
+			return NoisyMetaImportLoader(path)
+		else:
+			print ' ... not the right prefix, cannot load'
+		return
+
+class NoisyMetaImportLoader(object):
+
+	def __init__(self, path_entry):
+		self.path_entry = path_entry
+		return
+
+	def load_module(self, fullname):
+		print 'loading %s' % fullname
+		if fullname in sys.modules:
+			mod = sys.modules[fullname]
+		else:
+			mod = sys.modules.setdefault(fullname, imp.new_module(fullname))
+
+		# Set a few properties required by PEP 302
+		mod.__file__ = fullname
+		mod.__name__ = fullname
+		# always looks like a package
+		mod.__path__ = [ 'path-entry-goes-here' ]
+		mod.__loader__ = self
+		mod.__package__ = '.'.join(fullname.split('.')[:-1])
+
+		return mod
+
+# Install the meta-path finder
+sys.meta_path.append(NoisyMetaImportFinder('foo'))
+
+# Import some modules that are "found" by the meta-path finder
+print
+import foo
+
+print 
+import foo.bar
+
+# Import a module that is not found
+print
+try:
+	import bar
+except ImportError, e:
+	pass
 
     搜索 sys.path 之前，会询问元路径上的各个查找工具，所以总有机会让一个中心导入工具加载模块，而不必显示地修改 sys.path。一旦“找到”模块，加载工具 API 就会像常规加载工具一样正常工作（不过为简单起见，这个例子有所缩减）。
+
+$ python sys_meta_path.py 
+Creating NoisyMetaImportFinder for foo
+
+looking for "foo" with path "None"
+ ... found prefix, returning loader
+loading foo
+
+looking for "foo.bar" with path "['path-entry-goes-here']"
+ ... found prefix, returning loader
+loading foo.bar
+
+looking for "bar" with path "None"
+ ... not the right prefix, cannot load
+
+跟踪程序运行情况
+    有两种方法注入代码，来监视一个程序的运行，包括跟踪（tracing）和性能分析（profiling）。它们很类似，不过分别有不同的用途，所以也有不同的约束。监视一个程序最容易也最低效的方法是通过一个跟踪 hook（trace hook），可以用它来编写一个调试工具、监视代码覆盖，或者达到其他目的。
+    可以向 sys.settrace() 传递一个回调函数修改跟踪 hook。这个回调接收 3 个参数：所运行代码的栈帧、命名通知类型的串，以及一个事件特定的参数值。下表列出了程序执行时出现的不同层次信息所对应的 7 个不同事件类型。
+    -----------------------------------------------------------------------------------
+            事件	|           何时出现		|            参数值    
+    -----------------------------------------------------------------------------------
+            call	|    执行函数之前		|    None
+    -----------------------------------------------------------------------------------
+            line	|    执行一行代码之前		|    None
+    -----------------------------------------------------------------------------------
+            return	|    函数返回之前		|    返回的值
+    -----------------------------------------------------------------------------------
+            exception	|    出现一个异常之后		|    (异常,值,traceback)元组
+    -----------------------------------------------------------------------------------
+            c_call	|    调用一个 C 函数之前		|    C 函数对象
+    -----------------------------------------------------------------------------------
+            c_return	|    C 函数返回之后		|    None
+    -----------------------------------------------------------------------------------
+            c_exception	|    C 函数抛出一个错误之后	|    None
+    -----------------------------------------------------------------------------------
+    1. 跟踪函数调用
+    每个函数调用之前会生成一个 call 事件。传入回调的帧可以用来查找正在调用哪个函数，以及从哪里调用。
+
+#!/usr/bin/env python
+# encoding: utf-8
+
+import sys
+
+def trace_calls(frame, event, arg):
+	if event != 'call':
+		return
+	co = frame.f_code
+	func_name = co.co_name
+	if func_name == 'write':
+		# Ignore write() calls from print statements
+		return
+	func_line_no = frame.f_lineno
+	func_filename = co.co_filename
+	caller = frame.f_back
+	caller_line_no = caller.f_lineno
+	caller_filename = caller.f_code.co_filename
+	print 'Call to %s\n  on line %s of %s\n  from line %s of %s\n' % \
+		(func_name, func_line_no, func_filename,
+		caller_line_no, caller_filename)
+	return
+
+def  b():
+	print 'in b()\n'
+
+def a():
+	print 'in a()\n'
+	b()
+
+sys.settrace(trace_calls)
+a()
+
+    这个例子忽略了 write() 调用，因为 print 会使用 write() 写至 sys.stdout。
+
+$ python sys_settrace_call.py 
+Call to a
+  on line 27 of sys_settrace_call.py
+  from line 32 of sys_settrace_call.py
+
+in a()
+
+Call to b
+  on line 24 of sys_settrace_call.py
+  from line 29 of sys_settrace_call.py
+
+in b()
+
+    2. 函数内部跟踪
+
