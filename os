@@ -78,4 +78,56 @@ Actual Groups  : [0]
 
     在这种情况下，由于它作为 root 启动，脚本可以改变进程的有效用户和组。一旦改变了有效 UID，进程则限于该用户的权限。由于非根用户不能改变其有效组，程序在改变用户之前需要先改变组。
 进程环境
+    操作系统通过 os 模块为程序提供的另一个特性是环境。环境中设置的变量作为字符串可见，这些字符串可以通过 os.environ 或 getenv() 读取。环境变量通常用于配置值，如搜索路径、文件位置和调试标志。下面这个例子显示了如何获取一个环境变量，并将一个值传递到一个子进程。
+
+import os
+
+print 'Initial value:', os.environ.get('TESTVAR', None)
+print 'Child process:'
+os.system('echo $TESTVAR')
+
+os.environ['TESTVAR'] = 'THIS VALUE WAS CHANGED'
+
+print
+print 'Changed value:', os.environ['TESTVAR']
+print 'Child process:'
+os.system('echo $TESTVAR')
+
+del os.environ['TESTVAR']
+
+print 'Removed value:', os.environ.get('TESTVAR', None)
+print 'Child process:'
+os.system('echo $TESTVAR')
+
+    os.environ 对象采用标准 Python 映射 API 来获取和设置值。对 os.environ 的改变会导出到子进程。
+
+$ python -u os_environ_example.py 
+Initial value: None
+Child process:
+
+
+Changed value: THIS VALUE WAS CHANGED
+Child process:
+THIS VALUE WAS CHANGED
+Removed value: None
+Child process:
+
+进程目录工作
+    如果操作系统有层次结构的文件系统，会有一个“当前工作目录”（current working directory）的概念：使用相同路径访问文件时，进程将使用文件系统上的这个目录作为起始位置。当前工作目录可以用 getcwd() 获取，用 chdir() 改变。
+
+import os
+
+print 'Starting:', os.getcwd()
+
+print 'Moving up one:', os.pardir
+os.chdir(os.pardir)
+
+print 'After move:', os.getcwd()
+
+    利用 os.curdir 和 os.pardir 可以采用一种可移植的方式指示当前目录和父目录。
+
+$ python os_cwd_example.py 
+Starting: /home/rendp/workspace/py
+Moving up one: ..
+After move: /home/rendp/workspace
 
